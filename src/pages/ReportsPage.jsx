@@ -74,7 +74,9 @@ export const ReportsPage = () => {
     setDownloadingId(shiftId);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3001/api/reports/shifts/${shiftId}/excel`, {
+      const API_BASE = (import.meta.env.VITE_API_URL || 'https://backendweb-ca9k.onrender.com').replace(/\/$/, '');
+      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+      const response = await fetch(`${baseUrl}/reports/shifts/${shiftId}/excel`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

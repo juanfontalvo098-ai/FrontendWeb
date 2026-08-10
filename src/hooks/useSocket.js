@@ -11,7 +11,9 @@ export const useSocket = () => {
   useEffect(() => {
     if (!token) return;
 
-    socketRef.current = io('http://localhost:3001', {
+    const SOCKET_URL = (import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://backendweb-ca9k.onrender.com').replace(/\/api$/, '');
+
+    socketRef.current = io(SOCKET_URL, {
       auth: { token },
       reconnection: true,
       reconnectionAttempts: 5,
