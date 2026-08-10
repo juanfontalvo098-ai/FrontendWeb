@@ -12,7 +12,9 @@ export const initSocket = () => {
     socket = null;
   }
 
-  socket = io('http://localhost:3001', {
+  const SOCKET_URL = (import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'http://localhost:3001').replace(/\/api$/, '');
+
+  socket = io(SOCKET_URL, {
     auth: { token },
     autoConnect: true,
     reconnectionAttempts: 5,

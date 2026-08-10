@@ -1,5 +1,5 @@
-// src/api/client.js
-const BASE_URL = 'http://localhost:3001/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const BASE_URL = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE.replace(/\/$/, '')}/api`;
 
 const getHeaders = () => {
   const token = localStorage.getItem('token');
