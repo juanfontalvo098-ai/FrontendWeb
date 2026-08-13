@@ -3,9 +3,10 @@ node_modules
 .pnpm-store
 
 # Build output
-dist
+# dist
 dist-ssr
 *.local
+
 
 # Logs
 npm-debug.log*
