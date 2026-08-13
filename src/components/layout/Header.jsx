@@ -151,51 +151,67 @@ export const Header = ({ title = '' }) => {
   const showBranchSelector = branches.length > 1 || isGlobalAdmin();
 
   return (
-    <header className="header" style={{ position: 'relative', minHeight: '64px', height: 'auto', padding: '8px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '12px' }}>
-      {/* Bloque Izquierdo: Hamburguesa + Nombre + Selector de Sucursal */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+    <header className="header" style={{ position: 'relative', minHeight: '60px', height: 'auto', padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '8px' }}>
+      {/* Bloque Izquierdo: Hamburguesa + Nombre + Subtítulo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexShrink: 1 }}>
         <button 
           onClick={toggleSidebar}
           style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px', flexShrink: 0 }}
+          aria-label="Toggle Menu"
         >
-          <Menu size={24} />
+          <Menu size={22} />
         </button>
         
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <h2 style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: '18px', margin: 0, fontWeight: 800, lineHeight: '1.2', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Store size={18} color="var(--accent-secondary)" /> {displayName}
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+          <h2 style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: '15px', margin: 0, fontWeight: 800, lineHeight: '1.2', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Store size={16} color="var(--accent-secondary)" style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
           </h2>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 500, marginTop: '2px', whiteSpace: 'nowrap' }}>
+          <div className="header-subtitle" style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 500, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {formatDate(currentTime)} {title ? ` • ${title}` : ''}
           </div>
         </div>
       </div>
 
       {/* Bloque Centro / Derecho: Selector de Sucursal + Estado de Caja + Notificaciones */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
         
         {/* SELECTOR DE SUCURSAL MULTI-TENANT */}
         {showBranchSelector && (
           <div style={{ position: 'relative' }} ref={branchRef}>
             <button
               onClick={() => setBranchDropdownOpen(!branchDropdownOpen)}
+              title={`Sucursal activa: ${activeBranch ? activeBranch.name : 'Todas las sucursales'}`}
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '6px 12px',
+                gap: '4px',
+                padding: '6px 8px',
                 borderRadius: 'var(--radius-md)',
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border-color)',
                 color: 'var(--text-primary)',
                 cursor: 'pointer',
                 fontSize: '12px',
-                fontWeight: 600
+                fontWeight: 600,
+                maxWidth: '140px',
+                whiteSpace: 'nowrap'
               }}
             >
-              <MapPin size={14} color="var(--accent-primary)" />
-              <span>{activeBranch ? activeBranch.name : 'Todas las sucursales'}</span>
-              <ChevronDown size={14} />
+              <MapPin size={14} color="var(--accent-primary)" style={{ flexShrink: 0 }} />
+              <span 
+                className="branch-name-text"
+                style={{ 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis', 
+                  whiteSpace: 'nowrap', 
+                  maxWidth: '85px',
+                  display: 'inline-block'
+                }}
+              >
+                {activeBranch ? activeBranch.name : 'Todas'}
+              </span>
+              <ChevronDown size={14} style={{ flexShrink: 0 }} />
             </button>
 
             {branchDropdownOpen && (
@@ -204,6 +220,7 @@ export const Header = ({ title = '' }) => {
                 top: '38px',
                 right: 0,
                 minWidth: '200px',
+                maxWidth: 'calc(100vw - 24px)',
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border-color)',
                 borderRadius: 'var(--radius-md)',
@@ -233,11 +250,12 @@ export const Header = ({ title = '' }) => {
                       fontWeight: b.id === activeBranchId ? 700 : 500,
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between'
+                      justifyContent: 'space-between',
+                      gap: '8px'
                     }}
                   >
-                    <span>{b.name}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{b.code}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0 }}>{b.code}</span>
                   </button>
                 ))}
               </div>
@@ -246,7 +264,7 @@ export const Header = ({ title = '' }) => {
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Caja:</span>
+          <span className="cash-label" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Caja:</span>
           <Badge variant={cashOpen ? 'success' : 'danger'}>{cashOpen ? 'Abierta' : 'Cerrada'}</Badge>
         </div>
 

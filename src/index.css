@@ -307,3 +307,23 @@ a {
     width: 100%;
   }
 }
+
+/* Responsive Header Utilities */
+@media (max-width: 640px) {
+  .header-subtitle {
+    display: none !important;
+  }
+  .cash-label {
+    display: none !important;
+  }
+  .branch-name-text {
+    max-width: 70px !important;
+  }
+}
+
+@media (max-width: 400px) {
+  .branch-name-text {
+    max-width: 55px !important;
+  }
+}
+
