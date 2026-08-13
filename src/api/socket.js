@@ -5,9 +5,23 @@ let socket = null;
 
 export const initSocket = () => {
   const token = localStorage.getItem('token');
-  if (!token) return null;
+  if (!token) {
+    if (socket) {
+      socket.disconnect();
+      socket = null;
+    }
+    return null;
+  }
 
+  // Si ya existe un socket activo con el mismo token, lo reutilizamos
   if (socket) {
+    if (socket.auth && socket.auth.token === token) {
+      if (!socket.connected && !socket.active) {
+        socket.connect();
+      }
+      return socket;
+    }
+    // Si el token cambió, cerramos la conexión previa
     socket.disconnect();
     socket = null;
   }
@@ -17,7 +31,9 @@ export const initSocket = () => {
   socket = io(SOCKET_URL, {
     auth: { token },
     autoConnect: true,
+    reconnection: true,
     reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
   });
 
   socket.on('connect', () => {
@@ -44,3 +60,4 @@ export const disconnectSocket = () => {
     socket = null;
   }
 };
+

@@ -1,21 +1,22 @@
 // src/components/layout/Sidebar.jsx
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, UtensilsCrossed, ChefHat, Wallet, FileText, Package, Users, Settings, LogOut, X, FileSpreadsheet } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ChefHat, Wallet, FileText, Package, Users, Settings, LogOut, X, FileSpreadsheet, Building2 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useUiStore } from '../../store/uiStore';
 import { Badge } from '../ui/Badge';
 
 const MENU_ITEMS = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard, defaultRoles: ['admin', 'cajero', 'mesero'] },
-  { path: '/mesas', label: 'Mesas', icon: UtensilsCrossed, defaultRoles: ['admin', 'cajero', 'mesero'] },
-  { path: '/cocina', label: 'Cocina', icon: ChefHat, defaultRoles: ['admin', 'cocinero'] },
-  { path: '/caja', label: 'Caja', icon: Wallet, defaultRoles: ['admin', 'cajero'] },
-  { path: '/facturacion', label: 'Facturación', icon: FileText, defaultRoles: ['admin', 'cajero'] },
-  { path: '/reportes', label: 'Reportes Z & Excel', icon: FileSpreadsheet, defaultRoles: ['admin', 'cajero'] },
-  { path: '/productos', label: 'Productos', icon: Package, defaultRoles: ['admin'] },
-  { path: '/usuarios', label: 'Usuarios / Personal', icon: Users, defaultRoles: ['admin'] },
-  { path: '/configuracion', label: 'Configuración', icon: Settings, defaultRoles: ['admin'] },
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero', 'mesero'] },
+  { path: '/negocios', label: 'Clientes & Negocios', icon: Building2, defaultRoles: ['super_admin'] },
+  { path: '/mesas', label: 'Mesas', icon: UtensilsCrossed, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero', 'mesero'] },
+  { path: '/cocina', label: 'Cocina', icon: ChefHat, defaultRoles: ['super_admin', 'admin', 'gerente', 'cocinero'] },
+  { path: '/caja', label: 'Caja', icon: Wallet, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero'] },
+  { path: '/facturacion', label: 'Facturación', icon: FileText, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero'] },
+  { path: '/reportes', label: 'Reportes & Excel', icon: FileSpreadsheet, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero'] },
+  { path: '/productos', label: 'Productos', icon: Package, defaultRoles: ['super_admin', 'admin', 'gerente'] },
+  { path: '/usuarios', label: 'Usuarios / Personal', icon: Users, defaultRoles: ['super_admin', 'admin'] },
+  { path: '/configuracion', label: 'Configuración', icon: Settings, defaultRoles: ['super_admin', 'admin', 'gerente'] },
 ];
 
 export const Sidebar = () => {
@@ -26,7 +27,8 @@ export const Sidebar = () => {
   if (!user) return null;
 
   const allowedItems = MENU_ITEMS.filter(item => {
-    if (user.role === 'admin') return true;
+    if (item.path === '/negocios') return user.role === 'super_admin';
+    if (['super_admin', 'admin'].includes(user.role)) return true;
     if (Array.isArray(user.permissions) && user.permissions.length > 0) {
       return user.permissions.includes(item.path);
     }
@@ -37,6 +39,13 @@ export const Sidebar = () => {
     if (window.innerWidth <= 768) {
       toggleSidebar();
     }
+  };
+
+  const getRoleBadgeVariant = (role) => {
+    if (role === 'super_admin') return 'danger';
+    if (role === 'admin') return 'danger';
+    if (role === 'gerente') return 'warning';
+    return 'info';
   };
 
   return (
@@ -79,7 +88,7 @@ export const Sidebar = () => {
             </button>
           </div>
           <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontStyle: 'italic', paddingLeft: '44px' }}>
-            Control total. Operación impecable.
+            {user.role === 'super_admin' ? 'Modo Plataforma SaaS' : 'Control total multi-tenant.'}
           </div>
         </div>
 
@@ -100,7 +109,7 @@ export const Sidebar = () => {
                     fontWeight: isActive ? 700 : 400
                   })}
                 >
-                  <item.icon size={20} color={undefined} />
+                  <item.icon size={20} />
                   {item.label}
                 </NavLink>
               </li>
@@ -111,11 +120,11 @@ export const Sidebar = () => {
         <div style={{ padding: 'var(--space-4)', borderTop: '1px solid var(--border-color)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
             <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-              {(user.full_name || user.name || user.username)?.charAt(0).toUpperCase() || 'U'}
+              {(user.full_name || user.username)?.charAt(0).toUpperCase() || 'U'}
             </div>
             <div style={{ flex: 1, overflow: 'hidden' }}>
-              <div style={{ fontSize: 'var(--font-sm)', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.full_name || user.name || user.username}</div>
-              <Badge variant={user.role === 'admin' ? 'danger' : 'info'} className="mt-1">{user.role}</Badge>
+              <div style={{ fontSize: 'var(--font-sm)', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.full_name || user.username}</div>
+              <Badge variant={getRoleBadgeVariant(user.role)} className="mt-1">{user.role}</Badge>
             </div>
           </div>
           <button 

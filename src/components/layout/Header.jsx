@@ -1,17 +1,22 @@
 // src/components/layout/Header.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Bell, Check, Trash2, Info, AlertTriangle, CheckCircle, Clock, Store } from 'lucide-react';
+import { Menu, Bell, Check, Trash2, Store, MapPin, ChevronDown } from 'lucide-react';
 import { useUiStore } from '../../store/uiStore';
 import { Badge } from '../ui/Badge';
 import { api } from '../../api/client';
 import { getSocket } from '../../api/socket';
+import { useAuth } from '../../hooks/useAuth';
 
 export const Header = ({ title = '' }) => {
   const toggleSidebar = useUiStore(state => state.toggleSidebar);
+  const addToast = useUiStore(state => state.addToast);
+  const { user, branches, activeBranchId, activeBranch, switchBranch, isGlobalAdmin } = useAuth();
+
   const [currentTime, setCurrentTime] = useState(new Date());
   const [cashOpen, setCashOpen] = useState(false);
   const [businessName, setBusinessName] = useState('');
-  
+  const [branchDropdownOpen, setBranchDropdownOpen] = useState(false);
+
   // Sistema de Notificaciones
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [notifications, setNotifications] = useState([
@@ -19,6 +24,7 @@ export const Header = ({ title = '' }) => {
   ]);
 
   const popoverRef = useRef(null);
+  const branchRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -37,6 +43,31 @@ export const Header = ({ title = '' }) => {
     api.get('/cash/current')
       .then(res => setCashOpen(!!res))
       .catch(() => setCashOpen(false));
+  };
+
+  const playBellSound = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const frequencies = [830, 1050, 830];
+      const duration = 0.15;
+      const gap = 0.08;
+
+      frequencies.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+
+        const start = ctx.currentTime + i * (duration + gap);
+        gain.gain.setValueAtTime(0.35, start);
+        gain.gain.exponentialRampToValueAtTime(0.01, start + duration);
+
+        osc.start(start);
+        osc.stop(start + duration);
+      });
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -62,26 +93,43 @@ export const Header = ({ title = '' }) => {
         }
       };
 
+      const handleTicketReady = (data) => {
+        const table = data.table_number || `Orden #${data.orderId}`;
+        const summary = data.summary || '';
+        addNotification({
+          title: `🔔 ¡Comanda Lista! — ${table}`,
+          message: summary ? `Pedido: ${summary}` : 'La comanda está lista para servir',
+          type: 'success'
+        });
+        addToast(`🔔 ¡Comanda Lista! — ${table}${summary ? ': ' + summary : ''}`, 'success', 8000);
+        playBellSound();
+      };
+
       socket.on('kitchen:new-ticket', handleTicket);
       socket.on('table:status-changed', handleTableChange);
+      socket.on('kitchen:ticket-ready', handleTicketReady);
 
       return () => {
         socket.off('kitchen:new-ticket', handleTicket);
         socket.off('table:status-changed', handleTableChange);
+        socket.off('kitchen:ticket-ready', handleTicketReady);
       };
     }
-  }, []);
+  }, [activeBranchId]);
 
-  // Cerrar emergente si se hace clic afuera
+  // Cerrar emergentes al hacer clic afuera
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target)) {
         setPopoverOpen(false);
       }
+      if (branchRef.current && !branchRef.current.contains(e.target)) {
+        setBranchDropdownOpen(false);
+      }
     };
-    if (popoverOpen) document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [popoverOpen]);
+  }, []);
 
   const addNotification = (notif) => {
     const timeStr = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
@@ -93,25 +141,18 @@ export const Header = ({ title = '' }) => {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const handleMarkAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  };
-
-  const handleClearNotifications = () => {
-    setNotifications([]);
-  };
-
   const formatDate = (date) => {
     return new Intl.DateTimeFormat('es-CO', {
       weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
     }).format(date);
   };
 
-  const displayName = businessName || 'JF POS Enterprise';
+  const displayName = businessName || user?.businessName || 'GastrosPOS Enterprise';
+  const showBranchSelector = branches.length > 1 || isGlobalAdmin();
 
   return (
     <header className="header" style={{ position: 'relative', minHeight: '64px', height: 'auto', padding: '8px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: '12px' }}>
-      {/* Bloque Izquierdo: Menú Hamburguesa + Nombre del Negocio + Módulo y Hora en Segunda Línea */}
+      {/* Bloque Izquierdo: Hamburguesa + Nombre + Selector de Sucursal */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         <button 
           onClick={toggleSidebar}
@@ -130,14 +171,86 @@ export const Header = ({ title = '' }) => {
         </div>
       </div>
 
-      {/* Bloque Derecho: Estado de Caja + Notificaciones */}
+      {/* Bloque Centro / Derecho: Selector de Sucursal + Estado de Caja + Notificaciones */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+        
+        {/* SELECTOR DE SUCURSAL MULTI-TENANT */}
+        {showBranchSelector && (
+          <div style={{ position: 'relative' }} ref={branchRef}>
+            <button
+              onClick={() => setBranchDropdownOpen(!branchDropdownOpen)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 600
+              }}
+            >
+              <MapPin size={14} color="var(--accent-primary)" />
+              <span>{activeBranch ? activeBranch.name : 'Todas las sucursales'}</span>
+              <ChevronDown size={14} />
+            </button>
+
+            {branchDropdownOpen && (
+              <div style={{
+                position: 'absolute',
+                top: '38px',
+                right: 0,
+                minWidth: '200px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.3)',
+                zIndex: 9999,
+                overflow: 'hidden'
+              }}>
+                <div style={{ padding: '8px 12px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)' }}>
+                  SUCURSALES DISPONIBLES
+                </div>
+                {branches.map(b => (
+                  <button
+                    key={b.id}
+                    onClick={() => {
+                      setBranchDropdownOpen(false);
+                      switchBranch(b.id);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: 'none',
+                      background: b.id === activeBranchId ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                      color: b.id === activeBranchId ? 'var(--accent-primary)' : 'var(--text-primary)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      fontWeight: b.id === activeBranchId ? 700 : 500,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <span>{b.name}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{b.code}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Caja:</span>
           <Badge variant={cashOpen ? 'success' : 'danger'}>{cashOpen ? 'Abierta' : 'Cerrada'}</Badge>
         </div>
 
-        {/* BOTÓN E INTERFAZ DE NOTIFICACIONES */}
+        {/* NOTIFICACIONES */}
         <div style={{ position: 'relative' }} ref={popoverRef}>
           <button 
             onClick={() => setPopoverOpen(!popoverOpen)}
@@ -152,8 +265,7 @@ export const Header = ({ title = '' }) => {
               alignItems: 'center', 
               justifyContent: 'center', 
               color: 'var(--text-primary)', 
-              cursor: 'pointer',
-              transition: 'transform 0.15s ease'
+              cursor: 'pointer'
             }}
             title="Centro de Notificaciones"
           >
@@ -169,15 +281,13 @@ export const Header = ({ title = '' }) => {
                 fontWeight: 800, 
                 borderRadius: '999px', 
                 padding: '2px 5px',
-                lineHeight: 1,
-                boxShadow: '0 0 6px rgba(225, 29, 72, 0.5)'
+                lineHeight: 1
               }}>
                 {unreadCount}
               </span>
             )}
           </button>
 
-          {/* POPOVER PANEL DE NOTIFICACIONES */}
           {popoverOpen && (
             <div style={{
               position: 'absolute',
@@ -199,10 +309,10 @@ export const Header = ({ title = '' }) => {
                   <Bell size={15} color="var(--accent-primary)" /> Notificaciones ({notifications.length})
                 </span>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={handleMarkAllRead} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px' }} title="Marcar leídas">
+                  <button onClick={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                     <Check size={16} />
                   </button>
-                  <button onClick={handleClearNotifications} style={{ background: 'none', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '12px' }} title="Limpiar">
+                  <button onClick={() => setNotifications([])} style={{ background: 'none', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer' }}>
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -221,14 +331,14 @@ export const Header = ({ title = '' }) => {
                         padding: '10px 12px',
                         marginBottom: '6px',
                         borderRadius: 'var(--radius-md)',
-                        background: n.read ? 'var(--bg-secondary)' : 'rgba(99, 102, 241, 0.12)',
-                        borderLeft: `4px solid ${n.type === 'warning' ? 'var(--accent-warning)' : 'var(--accent-primary)'}`,
+                        background: n.read ? 'var(--bg-secondary)' : n.type === 'success' ? 'rgba(34, 197, 94, 0.12)' : 'rgba(99, 102, 241, 0.12)',
+                        borderLeft: `4px solid ${n.type === 'warning' ? 'var(--accent-warning)' : n.type === 'success' ? '#22c55e' : 'var(--accent-primary)'}`,
                         fontSize: '12px'
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginBottom: '2px' }}>
                         <span>{n.title}</span>
-                        <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500 }}>{n.time}</span>
+                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{n.time}</span>
                       </div>
                       <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{n.message}</div>
                     </div>

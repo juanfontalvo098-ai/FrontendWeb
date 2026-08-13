@@ -3,9 +3,11 @@ const BASE_URL = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE.replace(/\/$
 
 const getHeaders = () => {
   const token = localStorage.getItem('token');
+  const activeBranchId = localStorage.getItem('activeBranchId');
   return {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(activeBranchId ? { 'X-Branch-Id': activeBranchId } : {})
   };
 };
 
@@ -14,15 +16,24 @@ const handleResponse = async (response) => {
     if (window.location.pathname !== '/login') {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('activeBranchId');
       window.location.href = '/login';
     }
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || errorData.message || 'Sesión expirada o credenciales inválidas');
   }
-  
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     const errMsg = typeof errorData.error === 'string' ? errorData.error : (errorData.message || 'Error en la petición');
+    
+    if (errMsg.includes('negocio asignado') && window.location.pathname !== '/login') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('activeBranchId');
+      window.location.href = '/login';
+    }
+
     throw new Error(errMsg);
   }
   
@@ -65,21 +76,23 @@ export const api = {
 };
 
 export const formatCOP = (amount) => {
+  const num = parseFloat(amount);
+  const safeNum = isNaN(num) ? 0 : num;
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
     currency: 'COP',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
-  }).format(amount || 0).replace('COP', '$').trim();
+  }).format(safeNum).replace('COP', '$').trim();
 };
 
-// Unified Strict Currency Formatter with $ symbol, thousands separator & 2 decimal places
 export const formatCurrency = (amount) => {
-  const num = parseFloat(amount || 0);
+  const num = parseFloat(amount);
+  const safeNum = isNaN(num) ? 0 : num;
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
     currency: 'COP',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  }).format(num);
+  }).format(safeNum);
 };

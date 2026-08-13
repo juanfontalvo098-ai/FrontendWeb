@@ -1,4 +1,4 @@
-// src/pages/OrderPage.jsx
+// src/pages/OrderPage.jsx — Restored from Desktop Backup with Table Number & RBAC updates
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Plus, Minus, Trash2, Send, Receipt, Printer, FileText, Edit3, Image as ImageIcon, ShoppingCart, Grid, XCircle, Save, ArrowLeft } from 'lucide-react';
@@ -22,6 +22,7 @@ export const OrderPage = () => {
   const [activeCategory, setActiveCategory] = useState('Todos');
   const [searchTerm, setSearchTerm] = useState('');
   
+  const [tableDetails, setTableDetails] = useState(null);
   const [currentOrder, setCurrentOrder] = useState(null);
   const [orderItems, setOrderItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +41,7 @@ export const OrderPage = () => {
   // Verificar permisos para Facturación
   const canAccessBilling = () => {
     if (!user) return false;
-    if (user.role === 'admin' || user.role === 'cajero') return true;
+    if (['super_admin', 'admin', 'gerente', 'cajero'].includes(user.role)) return true;
     if (Array.isArray(user.permissions) && user.permissions.includes('/facturacion')) return true;
     return false;
   };
@@ -48,16 +49,18 @@ export const OrderPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [catsData, prodsData, ordersData, settingsData] = await Promise.all([
+      const [catsData, prodsData, ordersData, settingsData, tableData] = await Promise.all([
         api.get('/categories'),
         api.get('/products'),
         api.get(`/orders?table_id=${tableId}`),
-        api.get('/settings').catch(() => null)
+        api.get('/settings').catch(() => null),
+        api.get(`/tables/${tableId}`).catch(() => null)
       ]);
 
       setCategories(catsData);
       setProducts(prodsData);
       setSettings(settingsData);
+      if (tableData) setTableDetails(tableData);
 
       const activeOrder = ordersData.find(o => ['abierta', 'enviado_cocina', 'en_preparacion', 'lista', 'pendiente_pago'].includes(o.status));
       if (activeOrder) {
@@ -100,6 +103,11 @@ export const OrderPage = () => {
     }
   }, [tableId]);
 
+  const rawTableNum = tableDetails?.table_number || currentOrder?.table_number;
+  const displayTableNumber = rawTableNum
+    ? (rawTableNum.toString().toLowerCase().startsWith('mesa') ? rawTableNum : `Mesa ${rawTableNum}`)
+    : `Mesa ${tableId}`;
+
   const filteredProducts = products.filter(p => {
     const matchCategory = activeCategory === 'Todos' || 
       categories.find(c => c.id === p.category_id)?.name === activeCategory;
@@ -115,7 +123,7 @@ export const OrderPage = () => {
       setOrderItems(updated);
     } else {
       setOrderItems([...orderItems, {
-        product: { id: product.id, name: product.name, price: product.price, tax_rate: product.tax_rate, tax_included: product.tax_included, image_url: product.image_url },
+        product: { id: product.id, name: product.name, price: parseFloat(product.price), tax_rate: product.tax_rate, tax_included: product.tax_included, image_url: product.image_url },
         qty: 1,
         note: '',
         status: 'pendiente'
@@ -195,7 +203,7 @@ export const OrderPage = () => {
   };
 
   const calculateSubtotal = () => {
-    return orderItems.reduce((acc, item) => acc + (item.product.price * item.qty), 0);
+    return orderItems.reduce((acc, item) => acc + (parseFloat(item.product?.price || 0) * parseFloat(item.qty || 1)), 0);
   };
 
   const subtotal = calculateSubtotal();
@@ -211,7 +219,7 @@ export const OrderPage = () => {
         const payload = unsavedItems.map(i => ({
           product_id: i.product.id,
           quantity: i.qty,
-          unit_price: i.product.price,
+          unit_price: parseFloat(i.product.price),
           notes: i.note || null
         }));
         await api.post(`/orders/${currentOrder.id}/items`, { items: payload });
@@ -237,7 +245,7 @@ export const OrderPage = () => {
         const payload = unsavedItems.map(i => ({
           product_id: i.product.id,
           quantity: i.qty,
-          unit_price: i.product.price,
+          unit_price: parseFloat(i.product.price),
           notes: i.note || null
         }));
         await api.post(`/orders/${currentOrder.id}/items`, { items: payload });
@@ -271,7 +279,7 @@ export const OrderPage = () => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Comanda Cocina - Mesa ${tableId}</title>
+          <title>Comanda Cocina - ${displayTableNumber}</title>
           <style>
             @page { size: 80mm auto; margin: 0mm; }
             body {
@@ -286,7 +294,7 @@ export const OrderPage = () => {
         </head>
         <body>
           <div class="center bold" style="font-size: 16px;">*** COMANDA DE COCINA ***</div>
-          <div class="center bold" style="font-size: 15px;">MESA ${tableId}</div>
+          <div class="center bold" style="font-size: 15px;">${displayTableNumber.toUpperCase()}</div>
           <div class="dashed"></div>
           <div>Orden #: ${currentOrder?.id || '---'}</div>
           <div>Atendido por: ${currentOrder?.waiter_name || 'Mesero'}</div>
@@ -340,7 +348,7 @@ export const OrderPage = () => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Pre-Factura Mesa ${tableId}</title>
+          <title>Pre-Factura ${displayTableNumber}</title>
           <style>
             @page { size: 80mm auto; margin: 0mm; }
             body {
@@ -355,12 +363,12 @@ export const OrderPage = () => {
           </style>
         </head>
         <body>
-          <div class="center bold" style="font-size: 16px;">${settings?.business_name || 'JF POS'}</div>
+          <div class="center bold" style="font-size: 16px;">${settings?.business_name || 'GastrosPOS'}</div>
           <div class="center">NIT: ${settings?.nit || '900.123.456-7'}</div>
           <div class="center bold" style="margin-top:4px;">*** PRE-CUENTA / PRE-FACTURA ***</div>
           <div class="center">(Documento no fiscal)</div>
           <div class="dashed"></div>
-          <div>Mesa: Mesa ${tableId}</div>
+          <div>Mesa: ${displayTableNumber}</div>
           <div>Atendido por: ${currentOrder?.waiter_name || 'Mesero'}</div>
           <div>Fecha: ${new Date().toLocaleString('es-CO')}</div>
           <div class="dashed"></div>
@@ -423,6 +431,17 @@ export const OrderPage = () => {
     }
   };
 
+  const handleBackToTables = async () => {
+    if (currentOrder && currentOrder.status === 'abierta' && !orderItems.some(i => i.dbId)) {
+      try {
+        await api.delete(`/orders/${currentOrder.id}/cleanup`);
+      } catch (e) {
+        console.error('Error al limpiar orden vacía:', e);
+      }
+    }
+    navigate('/mesas');
+  };
+
   if (loading) {
     return <div style={{ padding: 'var(--space-6)', textAlign: 'center' }}>Cargando orden...</div>;
   }
@@ -449,11 +468,11 @@ export const OrderPage = () => {
 
       {/* BARRA SUPERIOR CON MARGEN RESPONSIVO EN MÓVILES */}
       <div className="order-header-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '16px', flexShrink: 0 }}>
-        <Button variant="secondary" size="md" icon={<ArrowLeft size={20} />} onClick={() => navigate('/mesas')} style={{ padding: '10px 18px', fontSize: '15px', fontWeight: 700, borderRadius: '8px' }}>
+        <Button variant="secondary" size="md" icon={<ArrowLeft size={20} />} onClick={handleBackToTables} style={{ padding: '10px 18px', fontSize: '15px', fontWeight: 700, borderRadius: '8px' }}>
           Volver a Mesas
         </Button>
         <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)', marginLeft: '4px' }}>
-          Mesa {tableId} {currentOrder?.waiter_name ? `| Mesero: ${currentOrder.waiter_name}` : ''}
+          {displayTableNumber} {currentOrder?.waiter_name ? `| Mesero: ${currentOrder.waiter_name}` : ''}
         </div>
       </div>
 
@@ -602,7 +621,7 @@ export const OrderPage = () => {
           {/* Header Comanda (Estático) */}
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)', fontWeight: 600, flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <span style={{ fontWeight: 800, fontSize: '16px' }}>Comanda Mesa {tableId}</span>
+              <span style={{ fontWeight: 800, fontSize: '16px' }}>Comanda {displayTableNumber}</span>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Atendido por: {currentOrder?.waiter_name || 'Mesero'}</div>
             </div>
             <button onClick={() => setCancelModalOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 700 }} title="Anular Comanda">
@@ -776,7 +795,7 @@ export const OrderPage = () => {
             label="Motivo de la Anulación (opcional)" 
             placeholder="Ej. Cliente cambió de opinión, error de tipeo" 
             value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
+            onChange={(e) => setSearchTerm(e.target.value)}
             style={{ fontSize: '14px' }}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>

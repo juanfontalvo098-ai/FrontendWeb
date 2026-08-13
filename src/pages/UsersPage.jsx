@@ -15,7 +15,7 @@ const MODULES_LIST = [
   { path: '/cocina', name: 'Cocina' },
   { path: '/caja', name: 'Caja' },
   { path: '/facturacion', name: 'Facturación' },
-  { path: '/reportes', name: 'Reportes Z & Excel' },
+  { path: '/reportes', name: 'Reportes & Excel' },
   { path: '/productos', name: 'Productos' },
   { path: '/usuarios', name: 'Usuarios / Personal' },
   { path: '/configuracion', name: 'Configuración' }

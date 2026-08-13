@@ -16,6 +16,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { UsersPage } from './pages/UsersPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { BusinessesPage } from './pages/BusinessesPage';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
         {/* Rutas con Layout (Sidebar + Header) */}
         <Route element={<ProtectedRoute layout={true} />}>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/negocios" element={<BusinessesPage />} />
           <Route path="/mesas" element={<TablesPage />} />
           <Route path="/mesas/:id/orden" element={<OrderPage />} />
           <Route path="/caja" element={<CashPage />} />

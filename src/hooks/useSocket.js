@@ -1,47 +1,39 @@
 // src/hooks/useSocket.js
-import { useEffect, useRef, useState } from 'react';
-import { io } from 'socket.io-client';
+import { useEffect, useState } from 'react';
+import { getSocket, initSocket } from '../api/socket';
 import { useAuthStore } from '../store/authStore';
 
 export const useSocket = () => {
-  const [isConnected, setIsConnected] = useState(false);
-  const socketRef = useRef(null);
   const token = useAuthStore(state => state.token);
+  const [isConnected, setIsConnected] = useState(false);
+  const socket = getSocket();
 
   useEffect(() => {
     if (!token) return;
 
-    const SOCKET_URL = (import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://backendweb-ca9k.onrender.com').replace(/\/api$/, '');
+    const currentSocket = initSocket();
+    if (!currentSocket) return;
 
-    socketRef.current = io(SOCKET_URL, {
-      auth: { token },
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    setIsConnected(currentSocket.connected);
 
-    socketRef.current.on('connect', () => {
-      setIsConnected(true);
-      console.log('Socket conectado');
-    });
+    const onConnect = () => setIsConnected(true);
+    const onDisconnect = () => setIsConnected(false);
 
-    socketRef.current.on('disconnect', () => {
-      setIsConnected(false);
-      console.log('Socket desconectado');
-    });
+    currentSocket.on('connect', onConnect);
+    currentSocket.on('disconnect', onDisconnect);
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      currentSocket.off('connect', onConnect);
+      currentSocket.off('disconnect', onDisconnect);
     };
   }, [token]);
 
   const emit = (event, data) => {
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit(event, data);
+    if (socket && socket.connected) {
+      socket.emit(event, data);
     }
   };
 
-  return { socket: socketRef.current, isConnected, emit };
+  return { socket, isConnected, emit };
 };
+

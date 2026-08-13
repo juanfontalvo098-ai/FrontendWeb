@@ -1,5 +1,5 @@
 // src/pages/KitchenPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock, CheckCircle, ArrowLeft, Utensils } from 'lucide-react';
 import { Card } from '../components/ui/Card';
@@ -8,6 +8,34 @@ import { api } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useUiStore } from '../store/uiStore';
 
+// Sonido de timbre usando Web Audio API (no requiere archivo externo)
+const playBellSound = () => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const frequencies = [830, 1050, 830];
+    const duration = 0.15;
+    const gap = 0.08;
+
+    frequencies.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+
+      const start = ctx.currentTime + i * (duration + gap);
+      gain.gain.setValueAtTime(0.35, start);
+      gain.gain.exponentialRampToValueAtTime(0.01, start + duration);
+
+      osc.start(start);
+      osc.stop(start + duration);
+    });
+  } catch (e) {
+    // Audio no disponible
+  }
+};
+
 export const KitchenPage = () => {
   const navigate = useNavigate();
   const addToast = useUiStore((state) => state.addToast);
@@ -15,6 +43,8 @@ export const KitchenPage = () => {
   const [orders, setOrders] = useState([]);
   const [now, setNow] = useState(new Date());
   const [loading, setLoading] = useState(true);
+  // Banner de última comanda lista
+  const [readyBanner, setReadyBanner] = useState(null);
 
   const fetchOrders = async () => {
     try {
@@ -43,12 +73,23 @@ export const KitchenPage = () => {
       };
       const handleUpdate = () => fetchOrders();
 
+      const handleTicketReady = (data) => {
+        const table = data.table_number || `Orden #${data.orderId}`;
+        const summary = data.summary || '';
+        addToast(`🔔 ¡Comanda Lista! — ${table}${summary ? ': ' + summary : ''}`, 'success', 8000);
+        playBellSound();
+        fetchOrders();
+      };
+
       socket.on('kitchen:new-ticket', handleNewTicket);
       socket.on('order:updated', handleUpdate);
+      socket.on('kitchen:ticket-ready', handleTicketReady);
 
       return () => {
+        clearInterval(timer);
         socket.off('kitchen:new-ticket', handleNewTicket);
         socket.off('order:updated', handleUpdate);
+        socket.off('kitchen:ticket-ready', handleTicketReady);
       };
     }
 
@@ -88,14 +129,10 @@ export const KitchenPage = () => {
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
       await api.put(`/orders/${orderId}/status`, { status: newStatus });
-      const socket = getSocket();
-      if (socket) {
-        socket.emit('kitchen:update-status', { orderId, status: newStatus });
-        if (newStatus === 'lista') {
-          socket.emit('kitchen:ticket-ready', { orderId });
-        }
+      // El backend se encarga de emitir kitchen:ticket-ready con datos enriquecidos
+      if (newStatus !== 'lista') {
+        addToast('Comanda en preparación', 'success');
       }
-      addToast(newStatus === 'lista' ? 'Comanda marcada como lista' : 'Comanda en preparación', 'success');
       await fetchOrders();
     } catch (err) {
       addToast('Error al actualizar comanda', 'danger');

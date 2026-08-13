@@ -1,6 +1,6 @@
 // src/pages/ReportsPage.jsx
 import React, { useState, useEffect } from 'react';
-import { Calendar, Download, Eye, FileSpreadsheet, RefreshCw, User, DollarSign, AlertCircle, ShoppingBag, Clock, FileText, Package, Receipt, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { Calendar, Download, Eye, FileSpreadsheet, RefreshCw, User, DollarSign, AlertCircle, ShoppingBag, Clock, FileText, Package, Receipt, ArrowDownRight, ArrowUpRight, Printer } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
@@ -14,6 +14,7 @@ export const ReportsPage = () => {
 
   const [shifts, setShifts] = useState([]);
   const [cashiers, setCashiers] = useState([]);
+  const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Filtros
@@ -35,19 +36,116 @@ export const ReportsPage = () => {
       if (startDate && endDate) url += `startDate=${startDate}&endDate=${endDate}&`;
       if (selectedUser) url += `user_id=${selectedUser}&`;
 
-      const [shiftsData, usersData] = await Promise.all([
+      const [shiftsData, usersData, settingsData] = await Promise.all([
         api.get(url),
-        cashiers.length === 0 ? api.get('/users') : Promise.resolve(cashiers)
+        cashiers.length === 0 ? api.get('/users').catch(() => []) : Promise.resolve(cashiers),
+        api.get('/settings').catch(() => null)
       ]);
 
       setShifts(shiftsData);
       if (usersData) setCashiers(usersData);
+      if (settingsData) setSettings(settingsData);
     } catch (err) {
       console.error('Error al cargar informes de turnos:', err);
-      addToast('Error al cargar historial de turnos Z', 'danger');
+      addToast('Error al cargar historial de turnos', 'danger');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePrintShiftTicket = (shift) => {
+    if (!shift) return;
+
+    const snapshot = shift.snapshot || {};
+    const audit = snapshot.audit || { canceledOrdersCount: 0, canceledAmount: 0 };
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Ticket Cierre Z - Turno #${shift.id}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0mm; }
+            body {
+              margin: 0; padding: 6px;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 12px; color: black; background: white; width: 80mm;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .dashed { border-top: 1px dashed #000; margin: 6px 0; }
+            .flex-between { display: flex; justify-content: space-between; margin: 2px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="center bold" style="font-size: 16px;">${settings?.business_name || 'GastrosPOS'}</div>
+          <div class="center">NIT: ${settings?.nit || '900.123.456-7'}</div>
+          ${settings?.address ? `<div class="center">${settings.address}</div>` : ''}
+          ${settings?.phone ? `<div class="center">Tel: ${settings.phone}</div>` : ''}
+          <div class="center bold" style="margin-top:6px; font-size:13px;">*** INFORME DE CIERRE DE TURNO (Z) ***</div>
+          <div class="dashed"></div>
+
+          <div class="flex-between"><span>Turno N°:</span><span class="bold">#${shift.id}</span></div>
+          <div class="flex-between"><span>Jornada:</span><span>${shift.shift_name}</span></div>
+          <div class="flex-between"><span>Responsable:</span><span>${shift.user_name}</span></div>
+          <div class="flex-between"><span>Apertura:</span><span>${shift.opened_at || '---'}</span></div>
+          <div class="flex-between"><span>Cierre:</span><span>${shift.closed_at}</span></div>
+          <div class="dashed"></div>
+
+          <div class="center bold">-- RESUMEN ARQUEO EFECTIVO --</div>
+          <div class="flex-between"><span>(+) Base Inicial Float:</span><span>${formatCOP(parseFloat(shift.opening_amount ?? snapshot.initialFloat ?? snapshot.openingAmount ?? 0))}</span></div>
+          <div class="flex-between"><span>(+) Ventas Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
+          <div class="flex-between"><span>(+) Ingresos Manuales:</span><span>${formatCOP(snapshot.cashInflows || snapshot.manualIncomes || 0)}</span></div>
+          <div class="flex-between"><span>(-) Egresos Manuales:</span><span>${formatCOP(snapshot.cashOutflows || snapshot.manualExpenses || 0)}</span></div>
+          <div class="dashed"></div>
+          <div class="flex-between bold" style="font-size: 13px;"><span>EFECTIVO ESPERADO:</span><span>${formatCOP(snapshot.expectedCash || 0)}</span></div>
+          <div class="flex-between bold" style="font-size: 13px;"><span>EFECTIVO CONTADO:</span><span>${formatCOP(shift.declared_amount || 0)}</span></div>
+          <div class="flex-between bold" style="font-size: 14px; margin-top:2px;">
+            <span>DIFERENCIA EFECTIVO:</span>
+            <span>${formatCOP(shift.difference || 0)}</span>
+          </div>
+          <div class="dashed"></div>
+
+          <div class="center bold">-- DESGLOSE DE VENTAS --</div>
+          <div class="flex-between"><span>Ventas en Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas con Tarjeta:</span><span>${formatCOP(snapshot.cardSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas Transferencia:</span><span>${formatCOP(snapshot.transferSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas a Crédito:</span><span>${formatCOP(snapshot.creditSales || 0)}</span></div>
+          <div class="dashed"></div>
+          <div class="flex-between bold" style="font-size: 14px;"><span>VENTAS BRUTAS:</span><span>${formatCOP(shift.gross_revenue || 0)}</span></div>
+          <div class="dashed"></div>
+
+          <div class="center bold">-- OTROS CONCEPTOS --</div>
+          <div class="flex-between"><span>Propinas Recaudadas:</span><span>${formatCOP(snapshot.totalTips || 0)}</span></div>
+          <div class="flex-between"><span>Devoluciones Pagadas:</span><span>${formatCOP(snapshot.cashRefunds || 0)}</span></div>
+          <div class="flex-between"><span>Anulaciones (${audit.canceledOrdersCount || 0}):</span><span>${formatCOP(audit.canceledAmount || 0)}</span></div>
+          <div class="dashed"></div>
+
+          <br/><br/>
+          <div class="center">_______________________________</div>
+          <div class="center" style="margin-top:4px;">Firma Cajero / Responsable</div>
+          <br/>
+          <div class="center" style="font-size: 10px;">Ticket de Cierre Z Histórico Térmico</div>
+        </body>
+      </html>
+    `);
+    doc.close();
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+      iframe.contentWindow.print();
+      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 1000);
+    }, 300);
   };
 
   useEffect(() => {
@@ -62,7 +160,7 @@ export const ReportsPage = () => {
       const data = await api.get(`/reports/shifts/${shiftId}`);
       setSelectedShift(data);
     } catch (err) {
-      addToast('Error al cargar detalle del turno Z', 'danger');
+      addToast('Error al cargar detalle del turno', 'danger');
       setDetailModalOpen(false);
     } finally {
       setLoadingDetail(false);
@@ -90,7 +188,7 @@ export const ReportsPage = () => {
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `Reporte_Z_Turno_${shiftId}.xlsx`;
+      link.download = `Reporte_Turno_${shiftId}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -105,7 +203,7 @@ export const ReportsPage = () => {
   };
 
   if (loading) {
-    return <div style={{ padding: 'var(--space-6)', textAlign: 'center' }}>Cargando informes de turnos Z...</div>;
+    return <div style={{ padding: 'var(--space-6)', textAlign: 'center' }}>Cargando informes de turnos...</div>;
   }
 
   const snapshot = selectedShift?.snapshot || { invoices: [], itemizedSales: [], movements: [] };
@@ -134,10 +232,8 @@ export const ReportsPage = () => {
         </div>
 
         <Button size="sm" variant="ghost" icon={<RefreshCw size={16} />} onClick={fetchShifts}>Refrescar</Button>
-      </div>
-
-      {/* Tabla de Historial de Turnos */}
-      <Card header="Historial de Reportes Z de Cierre de Caja">
+      </div>      {/* Tabla de Historial de Turnos */}
+      <Card header="Historial de Reportes de Cierre de Caja">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)', fontSize: '12px' }}>
@@ -153,11 +249,11 @@ export const ReportsPage = () => {
           </thead>
           <tbody>
             {shifts.length === 0 ? (
-              <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>No hay reportes de turnos Z registrados en este período</td></tr>
+              <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>No hay reportes de turnos registrados en este período</td></tr>
             ) : (
               shifts.map(shift => (
                 <tr key={shift.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '13px' }}>
-                  <td style={{ padding: '12px 8px', fontWeight: 700 }}>#Z-{shift.id}</td>
+                  <td style={{ padding: '12px 8px', fontWeight: 700 }}>#{shift.id}</td>
                   <td style={{ padding: '12px 8px' }}>{shift.shift_name}</td>
                   <td style={{ padding: '12px 8px', fontWeight: 600 }}>{shift.user_name}</td>
                   <td style={{ padding: '12px 8px', color: 'var(--text-secondary)', fontSize: '12px' }}>{shift.closed_at}</td>
@@ -169,7 +265,7 @@ export const ReportsPage = () => {
                   <td style={{ padding: '12px 8px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
                       <Button size="sm" variant="secondary" icon={<Eye size={14} />} onClick={() => handleOpenDetail(shift.id)}>
-                        Ver Reporte Z Completo
+                        Ver Reporte Completo
                       </Button>
                       <Button 
                         size="sm" 
@@ -189,8 +285,8 @@ export const ReportsPage = () => {
         </table>
       </Card>
 
-      {/* Modal Detalle Z-Report con Auditoría Ítegra */}
-      <Modal isOpen={detailModalOpen} onClose={() => setDetailModalOpen(false)} title={`Reporte Z Exhaustivo - Turno N° ${selectedShift?.id || ''}`} maxWidth="740px">
+      {/* Modal Detalle Reporte con Auditoría Íntegra */}
+      <Modal isOpen={detailModalOpen} onClose={() => setDetailModalOpen(false)} title={`Reporte Exhaustivo - Turno N° ${selectedShift?.id || ''}`} maxWidth="740px">
         {loadingDetail || !selectedShift ? (
           <div style={{ padding: '20px', textAlign: 'center' }}>Cargando resumen de cierre exhaustivo...</div>
         ) : (
@@ -395,6 +491,9 @@ export const ReportsPage = () => {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
               <Button variant="ghost" onClick={() => setDetailModalOpen(false)}>Cerrar</Button>
+              <Button icon={<Printer size={16} />} onClick={() => handlePrintShiftTicket(selectedShift)}>
+                Imprimir Ticket Térmico (Z)
+              </Button>
               <Button icon={<FileSpreadsheet size={16} />} loading={downloadingId === selectedShift.id} onClick={() => handleDownloadExcel(selectedShift.id)}>
                 Exportar Excel Exhaustivo (.xlsx)
               </Button>

@@ -70,8 +70,8 @@ export const ProductsPage = () => {
   const handleOpenEditProduct = (prod) => {
     setEditingItem(prod);
     setName(prod.name);
-    setPrice(prod.price.toString());
-    setTaxRate((prod.tax_rate ?? 0).toString());
+    setPrice(Math.round(parseFloat(prod.price || 0)).toString());
+    setTaxRate(parseFloat(prod.tax_rate ?? 0).toString());
     setTaxIncluded(prod.tax_included ?? 1);
     setDescription(prod.description || '');
     setImageUrl(prod.image_url || '');
@@ -112,7 +112,7 @@ export const ProductsPage = () => {
         name,
         price: parseFloat(price),
         tax_rate: parseFloat(taxRate),
-        tax_included: parseInt(taxIncluded, 10),
+        tax_included: Boolean(parseInt(taxIncluded, 10)),
         category_id: parseInt(categoryId, 10),
         description: description || undefined,
         image_url: imageUrl || undefined

@@ -57,7 +57,7 @@ export const BillingPage = () => {
         setPaperWidth(settingsData.default_paper_width);
       }
 
-      const active = orders.filter(o => ['abierta', 'enviado_cocina', 'en_preparacion', 'lista'].includes(o.status));
+      const active = orders.filter(o => ['abierta', 'enviado_cocina', 'en_preparacion', 'lista'].includes(o.status) && (Array.isArray(o.items) && o.items.length > 0));
       setPendingOrders(active);
       setInvoicesHistory(invoices);
 
@@ -126,13 +126,17 @@ export const BillingPage = () => {
     let subtotal = 0;
     let taxTotal = 0;
     items.forEach(item => {
-      const rate = item.tax_rate || 0;
-      const lineTotal = item.quantity * item.unit_price;
-      if (item.tax_included && rate > 0) {
+      const rate = parseFloat(item.tax_rate || 0);
+      const unitPrice = parseFloat(item.unit_price || 0);
+      const quantity = parseFloat(item.quantity || 0);
+      const lineTotal = quantity * unitPrice;
+      const taxIncluded = Boolean(item.tax_included);
+
+      if (taxIncluded && rate > 0) {
         const base = lineTotal / (1 + rate);
         subtotal += base;
         taxTotal += (lineTotal - base);
-      } else if (!item.tax_included && rate > 0) {
+      } else if (!taxIncluded && rate > 0) {
         subtotal += lineTotal;
         taxTotal += (lineTotal * rate);
       } else {
@@ -657,7 +661,7 @@ export const BillingPage = () => {
                 <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>{formatCOP(selectedInvoiceDetail.total)}</span>
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                <div>Mesa: {selectedInvoiceDetail.table_number || `Mesa ${selectedInvoiceDetail.order_id}`}</div>
+                <div>Mesa: {selectedInvoiceDetail.table_number ? (selectedInvoiceDetail.table_number.toLowerCase().startsWith('mesa') ? selectedInvoiceDetail.table_number : `Mesa ${selectedInvoiceDetail.table_number}`) : 'Mesa N/A'}</div>
                 <div>Atendido por Mesero: <strong>{selectedInvoiceDetail.waiter_name || 'Mesero'}</strong></div>
                 <div>Cajero: {selectedInvoiceDetail.cashier_name || 'Cajero'}</div>
                 <div>Fecha y Hora: {selectedInvoiceDetail.created_at}</div>
@@ -740,7 +744,7 @@ export const BillingPage = () => {
                 
                 <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '8px 0' }}>
                   <div>Factura N°: <strong>{generatedInvoice.invoice_number}</strong></div>
-                  <div>Mesa: {generatedInvoice.table_number || `Mesa ${generatedInvoice.order_id}`}</div>
+                  <div>Mesa: {generatedInvoice.table_number ? (generatedInvoice.table_number.toLowerCase().startsWith('mesa') ? generatedInvoice.table_number : `Mesa ${generatedInvoice.table_number}`) : 'Mesa N/A'}</div>
                   <div>Atendido por: <strong>{generatedInvoice.waiter_name || 'Mesero'}</strong></div>
                   <div>Cajero: {generatedInvoice.cashier_name || 'Cajero'}</div>
                   <div>Fecha: {generatedInvoice.created_at}</div>

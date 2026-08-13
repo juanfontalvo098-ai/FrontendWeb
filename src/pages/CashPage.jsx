@@ -9,11 +9,15 @@ import { Badge } from '../components/ui/Badge';
 import { api, formatCurrency, formatCOP } from '../api/client';
 import { useUiStore } from '../store/uiStore';
 
+import { useAuth } from '../hooks/useAuth';
+
 export const CashPage = () => {
+  const { user } = useAuth();
   const addToast = useUiStore((state) => state.addToast);
 
   const [currentCash, setCurrentCash] = useState(null);
   const [report, setReport] = useState(null);
+  const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   
   const [modalType, setModalType] = useState(null); // 'open', 'income', 'expense', 'close', 'zreport'
@@ -31,8 +35,12 @@ export const CashPage = () => {
   const fetchCashState = async () => {
     try {
       setLoading(true);
-      const cash = await api.get('/cash/current');
+      const [cash, settingsData] = await Promise.all([
+        api.get('/cash/current').catch(() => null),
+        api.get('/settings').catch(() => null)
+      ]);
       setCurrentCash(cash);
+      setSettings(settingsData);
       if (cash && cash.id) {
         const rep = await api.get(`/cash/report/${cash.id}`);
         setReport(rep);
@@ -48,6 +56,108 @@ export const CashPage = () => {
   useEffect(() => {
     fetchCashState();
   }, []);
+
+  const handlePrintZTicket = (zData) => {
+    if (!zData) return;
+
+    const cashId = zData.cashId || currentCash?.id || '---';
+    const openedAt = zData.openedAt || currentCash?.opened_at || '---';
+    const closedAt = new Date().toLocaleString('es-CO');
+    const summary = zData.summary || summaryData || {};
+    const audit = summary.audit || { canceledOrdersCount: 0, canceledAmount: 0 };
+
+    const openingBase = parseFloat(zData.opening_amount ?? zData.openingAmount ?? summary.initialFloat ?? summary.openingAmount ?? summary.opening_amount ?? currentCash?.opening_amount ?? 0);
+    const expectedCash = zData.expected ?? summary.expectedCash ?? 0;
+    const declaredCash = zData.declaredCash ?? zData.closing_amount ?? 0;
+    const diff = zData.difference ?? (declaredCash - expectedCash);
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Informe Cierre de Caja Z - #${cashId}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0mm; }
+            body {
+              margin: 0; padding: 6px;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 12px; color: black; background: white; width: 80mm;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .dashed { border-top: 1px dashed #000; margin: 6px 0; }
+            .flex-between { display: flex; justify-content: space-between; margin: 2px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="center bold" style="font-size: 16px;">${settings?.business_name || 'GastrosPOS'}</div>
+          <div class="center">NIT: ${settings?.nit || '900.123.456-7'}</div>
+          ${settings?.address ? `<div class="center">${settings.address}</div>` : ''}
+          ${settings?.phone ? `<div class="center">Tel: ${settings.phone}</div>` : ''}
+          <div class="center bold" style="margin-top:6px; font-size:13px;">*** ARQUEO Y CIERRE DE CAJA (Z) ***</div>
+          <div class="dashed"></div>
+
+          <div class="flex-between"><span>Caja / Turno N°:</span><span class="bold">#${cashId}</span></div>
+          <div class="flex-between"><span>Responsable:</span><span>${user?.full_name || 'Cajero'}</span></div>
+          <div class="flex-between"><span>Fecha Apertura:</span><span>${openedAt}</span></div>
+          <div class="flex-between"><span>Fecha Cierre:</span><span>${closedAt}</span></div>
+          <div class="dashed"></div>
+
+          <div class="center bold">-- RESUMEN ARQUEO EFECTIVO --</div>
+          <div class="flex-between"><span>(+) Base Inicial Float:</span><span>${formatCOP(openingBase)}</span></div>
+          <div class="flex-between"><span>(+) Ventas Efectivo:</span><span>${formatCOP(summary.cashSales || 0)}</span></div>
+          <div class="flex-between"><span>(+) Ingresos Manuales:</span><span>${formatCOP(summary.cashInflows || summary.manualIncomes || 0)}</span></div>
+          <div class="flex-between"><span>(-) Egresos Manuales:</span><span>${formatCOP(summary.cashOutflows || summary.manualExpenses || 0)}</span></div>
+          <div class="dashed"></div>
+          <div class="flex-between bold" style="font-size: 13px;"><span>EFECTIVO ESPERADO:</span><span>${formatCOP(expectedCash)}</span></div>
+          <div class="flex-between bold" style="font-size: 13px;"><span>EFECTIVO CONTADO:</span><span>${formatCOP(declaredCash)}</span></div>
+          <div class="flex-between bold" style="font-size: 14px; margin-top:2px;">
+            <span>DIFERENCIA EFECTIVO:</span>
+            <span>${formatCOP(diff)}</span>
+          </div>
+          <div class="dashed"></div>
+
+          <div class="center bold">-- DESGLOSE DE INGRESOS --</div>
+          <div class="flex-between"><span>Ventas en Efectivo:</span><span>${formatCOP(summary.cashSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas con Tarjeta:</span><span>${formatCOP(summary.cardSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas Transferencia/Nequi:</span><span>${formatCOP(summary.transferSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas a Crédito (Fiado):</span><span>${formatCOP(summary.creditSales || 0)}</span></div>
+          <div class="dashed"></div>
+          <div class="flex-between bold" style="font-size: 14px;"><span>TOTAL VENTAS BRUTAS:</span><span>${formatCOP(summary.grossRevenue || 0)}</span></div>
+          <div class="dashed"></div>
+
+          <div class="center bold">-- OTROS CONCEPTOS --</div>
+          <div class="flex-between"><span>Propinas Recaudadas:</span><span>${formatCOP(summary.totalTips || 0)}</span></div>
+          <div class="flex-between"><span>Devoluciones Pagadas:</span><span>${formatCOP(summary.cashRefunds || 0)}</span></div>
+          <div class="flex-between"><span>Anulaciones (${audit.canceledOrdersCount || 0}):</span><span>${formatCOP(audit.canceledAmount || 0)}</span></div>
+          <div class="dashed"></div>
+
+          <br/><br/>
+          <div class="center">_______________________________</div>
+          <div class="center" style="margin-top:4px;">Firma Cajero / Responsable</div>
+          <br/>
+          <div class="center" style="font-size: 10px;">Comprobante de Cierre de Caja Térmico</div>
+        </body>
+      </html>
+    `);
+    doc.close();
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+      iframe.contentWindow.print();
+      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 1000);
+    }, 300);
+  };
 
   const handleOpenCash = async () => {
     if (!amount || parseFloat(amount) < 0) {
@@ -132,6 +242,8 @@ export const CashPage = () => {
         declaredTransfers: declaredTransfersVal,
         cashId: currentCash.id,
         openedAt: currentCash.opened_at,
+        opening_amount: res.opening_amount || currentCash.opening_amount || summaryData?.initialFloat,
+        openingAmount: res.openingAmount || currentCash.opening_amount || summaryData?.initialFloat,
         summary: summaryData
       });
 
@@ -177,12 +289,12 @@ export const CashPage = () => {
           </div>
         </Modal>
 
-        {/* Modal Resumen Z Recién Cerrado */}
-        <Modal isOpen={modalType === 'zreport'} onClose={() => setModalType(null)} title="Informe Z de Cierre Final" maxWidth="600px">
+        {/* Modal Resumen Recién Cerrado */}
+        <Modal isOpen={modalType === 'zreport'} onClose={() => setModalType(null)} title="Informe de Cierre Final" maxWidth="600px">
           {zReportFinal && (
             <div style={{ padding: '8px 0' }}>
               <div style={{ textAlign: 'center', borderBottom: '1px dashed var(--border-color)', paddingBottom: '14px', marginBottom: '16px' }}>
-                <h3 style={{ margin: '0 0 4px 0', fontSize: '20px', fontWeight: 700 }}>ARQUEO DE CAJA - REPORTE Z</h3>
+                <h3 style={{ margin: '0 0 4px 0', fontSize: '20px', fontWeight: 700 }}>ARQUEO DE CAJA - REPORTE DE CIERRE</h3>
                 <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Caja N° #{zReportFinal.cashId} | {zReportFinal.openedAt}</div>
               </div>
 
@@ -203,7 +315,7 @@ export const CashPage = () => {
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
                 <Button variant="ghost" onClick={() => setModalType(null)}>Cerrar</Button>
-                <Button icon={<Printer size={16} />} onClick={() => window.print()}>Imprimir Ticket Z</Button>
+                <Button icon={<Printer size={16} />} onClick={() => handlePrintZTicket(zReportFinal)}>Imprimir Ticket de Cierre</Button>
               </div>
             </div>
           )}
@@ -249,7 +361,7 @@ export const CashPage = () => {
           <div style={{ display: 'flex', gap: '8px' }}>
             <Button size="sm" variant="secondary" icon={<ArrowUpRight size={16} />} onClick={() => { setAmount(''); setDescription(''); setModalType('income'); }}>Ingreso</Button>
             <Button size="sm" variant="secondary" icon={<ArrowDownRight size={16} />} onClick={() => { setAmount(''); setDescription(''); setModalType('expense'); }}>Egreso</Button>
-            <Button size="sm" variant="danger" icon={<FileSpreadsheet size={16} />} onClick={handleOpenCloseModal}>Cierre de Turno Z (Arqueo)</Button>
+            <Button size="sm" variant="danger" icon={<FileSpreadsheet size={16} />} onClick={handleOpenCloseModal}>Cierre de Turno (Arqueo)</Button>
           </div>
         </div>
       }>
@@ -297,9 +409,9 @@ export const CashPage = () => {
       </Modal>
 
       {/* ========================================================================= */}
-      {/* MODAL CIERRE DE TURNO Z (SIN EMOJIS, LIMPIO Y PROFESIONAL)                */}
+      {/* MODAL CIERRE DE TURNO (SIN EMOJIS, LIMPIO Y PROFESIONAL)                */}
       {/* ========================================================================= */}
-      <Modal isOpen={modalType === 'close'} onClose={() => setModalType(null)} title="Cierre de Turno & Arqueo Z Exhaustivo" maxWidth="740px">
+      <Modal isOpen={modalType === 'close'} onClose={() => setModalType(null)} title="Cierre de Turno & Arqueo Exhaustivo" maxWidth="740px">
         {!summaryData ? (
           <div style={{ padding: '30px', textAlign: 'center', fontSize: '16px' }}>Cargando resumen de caja...</div>
         ) : !isRevealed ? (
@@ -338,7 +450,7 @@ export const CashPage = () => {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
               <Button variant="ghost" onClick={() => setModalType(null)}>Cancelar</Button>
               <Button icon={<Eye size={18} />} onClick={handleCalculateBlindClose} style={{ padding: '12px 24px', fontSize: '15px' }}>
-                Calcular Arqueo y Revelar Cierre Z
+                Calcular Arqueo y Revelar Cierre
               </Button>
             </div>
           </div>
