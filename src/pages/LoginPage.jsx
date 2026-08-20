@@ -1,11 +1,13 @@
 // src/pages/LoginPage.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, UtensilsCrossed } from 'lucide-react';
+import { User, Lock, ArrowRight, ShieldCheck, Sparkles } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
+import { KamiaLogo } from '../components/common/KamiaLogo';
+import { getFirstAllowedPath } from '../utils/navigationUtils';
 
 export const LoginPage = () => {
   const [username, setUsername] = useState('');
@@ -22,8 +24,9 @@ export const LoginPage = () => {
     setLoading(true);
     
     try {
-      await login(username, password);
-      navigate('/');
+      const loggedUser = await login(username, password);
+      const destination = getFirstAllowedPath(loggedUser);
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err.message || 'Credenciales inválidas');
     } finally {
@@ -37,55 +40,130 @@ export const LoginPage = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'radial-gradient(circle at top right, var(--bg-elevated), var(--bg-primary))',
-      padding: 'var(--space-4)'
+      background: 'radial-gradient(ellipse at top, #1E1B4B 0%, #111827 45%, #0B0F19 100%)',
+      padding: 'var(--space-4)',
+      position: 'relative',
+      overflow: 'hidden'
     }}>
-      <Card glass style={{ width: '100%', maxWidth: '400px', padding: 'var(--space-8)' }}>
-        <div style={{ textAlign: 'center', marginBottom: 'var(--space-8)' }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            background: 'var(--accent-primary)', width: '64px', height: '64px',
-            borderRadius: 'var(--radius-lg)', marginBottom: 'var(--space-4)',
-            boxShadow: '0 8px 16px hsla(142, 71%, 45%, 0.3)'
-          }}>
-            <UtensilsCrossed size={32} color="white" />
+      {/* Luces de Ambiente / Glows Eléctricos de Fondo */}
+      <div style={{
+        position: 'absolute',
+        top: '-15%',
+        left: '20%',
+        width: '450px',
+        height: '450px',
+        background: 'radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.05) 50%, transparent 70%)',
+        filter: 'blur(60px)',
+        pointerEvents: 'none'
+      }} />
+
+      <div style={{
+        position: 'absolute',
+        bottom: '-10%',
+        right: '15%',
+        width: '500px',
+        height: '500px',
+        background: 'radial-gradient(circle, rgba(139, 92, 246, 0.12) 0%, rgba(99, 102, 241, 0.04) 50%, transparent 70%)',
+        filter: 'blur(70px)',
+        pointerEvents: 'none'
+      }} />
+
+      <Card
+        glass
+        style={{
+          width: '100%',
+          maxWidth: '420px',
+          padding: '36px 32px',
+          border: '1px solid rgba(139, 92, 246, 0.25)',
+          boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 35px rgba(99, 102, 241, 0.15)',
+          position: 'relative',
+          zIndex: 10,
+          background: 'rgba(17, 24, 39, 0.88)'
+        }}
+      >
+        {/* Cabecera con Logotipo Oficial KAMIA by JF */}
+        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+            <KamiaLogo variant="stacked" size="xl" showSlogan={true} />
           </div>
-          <h1 style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: '32px', fontWeight: 800, margin: 0, letterSpacing: '-0.025em' }}>
-            JF <span style={{ color: 'var(--accent-secondary)' }}>POS</span>
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '4px', fontSize: '13px', fontStyle: 'italic' }}>
-            Control total. Operación impecable.
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '12px', color: 'var(--text-muted)', fontSize: '11px' }}>
+            <ShieldCheck size={14} color="var(--accent-secondary)" />
+            <span>Acceso Seguro al Sistema Operativo</span>
+          </div>
         </div>
 
         <form onSubmit={handleLogin}>
-          <Input 
-            icon={<User size={18} />}
-            placeholder="Usuario (ej. admin)"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-          <Input 
-            icon={<Lock size={18} />}
-            type="password"
-            placeholder="Contraseña (ej. admin)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+              Usuario
+            </label>
+            <Input 
+              icon={<User size={17} color="var(--accent-primary)" />}
+              placeholder="Ingresa tu usuario (ej. admin)"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              style={{ marginBottom: 0 }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '18px' }}>
+            <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+              Contraseña
+            </label>
+            <Input 
+              icon={<Lock size={17} color="var(--accent-primary)" />}
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{ marginBottom: 0 }}
+            />
+          </div>
           
           {error && (
-            <div style={{ color: 'var(--accent-danger)', fontSize: 'var(--font-sm)', marginBottom: 'var(--space-4)', textAlign: 'center', background: 'hsla(0, 84%, 60%, 0.1)', padding: '8px', borderRadius: 'var(--radius-sm)' }}>
+            <div style={{
+              color: '#F87171',
+              fontSize: '12px',
+              marginBottom: '16px',
+              textAlign: 'center',
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              padding: '10px',
+              borderRadius: 'var(--radius-sm)',
+              fontWeight: 500
+            }}>
               {error}
             </div>
           )}
 
-          <Button type="submit" loading={loading} style={{ width: '100%', marginTop: 'var(--space-2)' }}>
+          <Button
+            type="submit"
+            loading={loading}
+            icon={<ArrowRight size={16} />}
+            style={{
+              width: '100%',
+              padding: '11px',
+              fontSize: '13px',
+              fontWeight: 700,
+              letterSpacing: '0.02em',
+              background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+              boxShadow: '0 4px 18px rgba(99, 102, 241, 0.4)'
+            }}
+          >
             Iniciar Sesión
           </Button>
         </form>
+
+        <div style={{ marginTop: '24px', textAlign: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+          <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+            KAMIA Platform · Diseñado para operar con máxima precisión
+          </span>
+        </div>
       </Card>
     </div>
   );
 };
+
+export default LoginPage;

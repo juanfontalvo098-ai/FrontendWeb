@@ -2,7 +2,7 @@
 // Módulo centralizado y unificado de impresión térmica para todo el sistema POS
 // Garantiza formatos idénticos, máxima legibilidad y soporte de logo
 
-import { formatCOP } from '../api/client';
+import { formatCOP, formatDateTime, api } from '../api/client';
 
 /**
  * Envía el ticket directamente al Print Bridge local (puerto 8088) sin diálogos ni confirmaciones de Windows
@@ -161,8 +161,8 @@ export const getCleanTableOrType = (orderData = {}) => {
  * Genera el encabezado estándar del establecimiento (con logo si existe)
  */
 const getBusinessHeaderHTML = (settings, paperWidth = '80mm') => {
-  const name = settings?.business_name || 'GASTROSPOS RESTAURANTE';
-  const nit = settings?.tax_id || settings?.nit || '900.123.456-7';
+  const name = settings?.business_name || 'MI NEGOCIO POS';
+  const nit = settings?.tax_id || settings?.nit || '';
   const address = settings?.address || '';
   const phone = settings?.phone || '';
   const logoUrl = settings?.logo_url || '';
@@ -196,7 +196,7 @@ const getBusinessHeaderHTML = (settings, paperWidth = '80mm') => {
       </div>
     ` : ''}
     <div class="center bold" style="font-size: ${paperWidth === '58mm' ? '14px' : '16px'}; text-transform: uppercase; letter-spacing: -0.2px; color: #000000;">${name}</div>
-    <div class="center bold" style="font-size: ${paperWidth === '58mm' ? '11px' : '12px'}; color: #000000;">NIT: ${nit}</div>
+    ${nit ? `<div class="center bold" style="font-size: ${paperWidth === '58mm' ? '11px' : '12px'}; color: #000000;">NIT: ${nit}</div>` : ''}
     ${address ? `<div class="center" style="font-size: ${paperWidth === '58mm' ? '11px' : '12px'}; color: #000000; margin-top: 1px;">${address}</div>` : ''}
     ${phone ? `<div class="center" style="font-size: ${paperWidth === '58mm' ? '11px' : '12px'}; color: #000000; margin-top: 1px;">Tel: ${phone}</div>` : ''}
     ${regimeText ? `<div class="center bold" style="font-size: ${paperWidth === '58mm' ? '10.5px' : '11.5px'}; margin-top: 2px; color: #000000;">${regimeText}</div>` : ''}
@@ -529,16 +529,25 @@ export const printKitchenTicket = async (orderData, itemsList = [], settings = {
 // =========================================================================
 // 2. PRE-FACTURA / PRE-CUENTA (DOCUMENTO NO FISCAL DE CONTROL)
 // =========================================================================
-export const printPreFactura = async (orderData, itemsList = [], settings = {}, paperWidth = '80mm', calculations = {}) => {
-  let subtotal = calculations.itemsSubtotal || 0;
+export const printPreFactura = async (orderData, itemsList, settings = {}, paperWidth = '80mm', extras = {}) => {
+  let effectiveSettings = settings;
+  if (!effectiveSettings || !effectiveSettings.business_name || Object.keys(effectiveSettings).length === 0) {
+    try {
+      effectiveSettings = await api.get('/settings');
+    } catch (e) {
+      effectiveSettings = settings || {};
+    }
+  }
+  const mergedSettings = { ...(orderData.settings || {}), ...effectiveSettings };
+  let subtotal = extras.itemsSubtotal || 0;
   if (!subtotal) {
     subtotal = itemsList.reduce((acc, it) => acc + ((parseFloat(it.quantity || it.qty) || 1) * (parseFloat(it.unit_price || it.price || it.product?.price) || 0)), 0);
   }
 
-  const discount = parseFloat(calculations.discountVal || orderData.discount_amount || 0);
-  const deliveryFee = parseFloat(calculations.delFee || orderData.delivery_fee || 0);
+  const discount = parseFloat(extras.discountVal || orderData.discount_amount || 0);
+  const deliveryFee = parseFloat(extras.delFee || orderData.delivery_fee || 0);
   const baseTotal = Math.max(0, subtotal - discount) + deliveryFee;
-  const propinaSugerida = calculations.tipVal !== undefined ? calculations.tipVal : (baseTotal * 0.1);
+  const propinaSugerida = extras.tipVal !== undefined ? extras.tipVal : (baseTotal * 0.1);
   const totalConPropina = baseTotal + propinaSugerida;
   const tableOrType = getCleanTableOrType(orderData);
 
@@ -576,7 +585,7 @@ export const printPreFactura = async (orderData, itemsList = [], settings = {}, 
 
           <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};"><span>Espacio / Tipo:</span><span class="bold">${tableOrType}</span></div>
           <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};"><span>Atendido por:</span><span>${orderData.waiter_name || 'Mesero'}</span></div>
-          <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};"><span>Fecha / Hora:</span><span>${new Date().toLocaleString('es-CO')}</span></div>
+          <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};"><span>Fecha / Hora:</span><span>${formatDateTime(orderData.created_at || Date.now())}</span></div>
           
           <div class="solid-line"></div>
           <div style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; line-height: 1.4;">
@@ -658,7 +667,15 @@ export const printPreFactura = async (orderData, itemsList = [], settings = {}, 
 // 3. FACTURA POS OFICIAL (IMPRESIÓN TÉRMICA DEFINITIVA CON LOGO)
 // =========================================================================
 export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '80mm') => {
-  const mergedSettings = { ...(invoice.settings || {}), ...settings };
+  let effectiveSettings = settings;
+  if (!effectiveSettings || !effectiveSettings.business_name || Object.keys(effectiveSettings).length === 0) {
+    try {
+      effectiveSettings = await api.get('/settings');
+    } catch (e) {
+      effectiveSettings = settings || {};
+    }
+  }
+  const mergedSettings = { ...(invoice.settings || {}), ...effectiveSettings };
   const items = invoice.items || [];
   const taxTotal = parseFloat(invoice.tax_total || 0);
   const discount = parseFloat(invoice.discount_amount || 0);
@@ -697,7 +714,7 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
           <div class="solid-line"></div>
           <div class="center bold" style="font-size: ${paperWidth === '58mm' ? '13px' : '14.5px'}; color: #000000;">FACTURA DE VENTA POS</div>
           <div class="center black" style="font-size: ${paperWidth === '58mm' ? '13.5px' : '15px'}; color: #000000;">N° ${invoice.invoice_number || 'POS-0000'}</div>
-          <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};"><span>Fecha:</span><span>${new Date(invoice.created_at || Date.now()).toLocaleString('es-CO')}</span></div>
+          <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};"><span>Fecha:</span><span>${formatDateTime(invoice.created_at || Date.now())}</span></div>
           <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};"><span>Cajero:</span><span>${invoice.cashier_name || 'Caja'}</span></div>
           ${invoice.waiter_name ? `<div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};"><span>Mesero:</span><span>${invoice.waiter_name}</span></div>` : ''}
           <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};">
@@ -768,7 +785,7 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
 
           <div class="solid-line"></div>
           <div class="center bold" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'}; color: #000000;">${mergedSettings?.receipt_footer || '¡Gracias por su compra! Vuelva pronto.'}</div>
-          <div class="center" style="font-size: ${paperWidth === '58mm' ? '10px' : '11px'}; color: #000000; margin-top: 2px; font-style: italic;">Software POS GastrosPOS ERP v1.0</div>
+          <div class="center" style="font-size: ${paperWidth === '58mm' ? '10px' : '11px'}; color: #000000; margin-top: 2px; font-style: italic;">Proveedor del software: KAMIA by JF</div>
         </div>
       </body>
     </html>
@@ -797,55 +814,58 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
         </style>
       </head>
       <body>
-        ${getBusinessHeaderHTML(settings, paperWidth)}
-        <div class="solid-line"></div>
-        <div class="center black" style="font-size: ${paperWidth === '58mm' ? '13px' : '15px'};">*** CIERRE DE TURNO ***</div>
-        <div class="solid-line"></div>
+        <div class="receipt-wrapper">
+          ${getBusinessHeaderHTML(settings, paperWidth)}
+          <div class="solid-line"></div>
+          <div class="center black" style="font-size: ${paperWidth === '58mm' ? '13px' : '15px'};">*** CIERRE DE TURNO ***</div>
+          <div class="solid-line"></div>
 
-        <div class="flex-between"><span>Turno N°:</span><span class="black">#${shift.id}</span></div>
-        <div class="flex-between"><span>Jornada:</span><span class="bold">${shift.shift_name || 'Turno Principal'}</span></div>
-        <div class="flex-between"><span>Responsable:</span><span class="bold">${shift.user_name || 'Cajero'}</span></div>
-        <div class="flex-between"><span>Apertura:</span><span>${shift.opened_at || '---'}</span></div>
-        <div class="flex-between"><span>Cierre:</span><span>${shift.closed_at || new Date().toLocaleString('es-CO')}</span></div>
-        <div class="solid-line"></div>
+          <div class="flex-between"><span>Turno N°:</span><span class="black">#${shift.id}</span></div>
+          <div class="flex-between"><span>Jornada:</span><span class="bold">${shift.shift_name || 'Turno Principal'}</span></div>
+          <div class="flex-between"><span>Responsable:</span><span class="bold">${shift.user_name || 'Cajero'}</span></div>
+          <div class="flex-between"><span>Apertura:</span><span>${formatDateTime(shift.opened_at)}</span></div>
+          <div class="flex-between"><span>Cierre:</span><span>${formatDateTime(shift.closed_at || Date.now())}</span></div>
+          <div class="solid-line"></div>
 
-        <div class="center bold">-- RESUMEN ARQUEO EFECTIVO --</div>
-        <div class="flex-between"><span>(+) Base Inicial Float:</span><span>${formatCOP(initialFloat)}</span></div>
-        <div class="flex-between"><span>(+) Ventas Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
-        <div class="flex-between"><span>(+) Ingresos Manuales:</span><span>${formatCOP(snapshot.cashInflows || snapshot.manualIncomes || 0)}</span></div>
-        <div class="flex-between"><span>(-) Egresos Manuales:</span><span>${formatCOP(snapshot.cashOutflows || snapshot.manualExpenses || 0)}</span></div>
-        <div class="solid-line"></div>
-        <div class="flex-between bold" style="font-size: 12px;"><span>EFECTIVO ESPERADO:</span><span>${formatCOP(snapshot.expectedCash || 0)}</span></div>
-        <div class="flex-between bold" style="font-size: 12px;"><span>EFECTIVO CONTADO:</span><span>${formatCOP(shift.declared_amount || 0)}</span></div>
-        <div class="flex-between bold" style="font-size: 13px; margin-top: 2px;">
-          <span>DIFERENCIA EFECTIVO:</span>
-          <span>${formatCOP(shift.difference || 0)}</span>
+          <div class="center bold">-- RESUMEN ARQUEO EFECTIVO --</div>
+          <div class="flex-between"><span>(+) Base Inicial Float:</span><span>${formatCOP(initialFloat)}</span></div>
+          <div class="flex-between"><span>(+) Ventas Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
+          <div class="flex-between"><span>(+) Ingresos Manuales:</span><span>${formatCOP(snapshot.cashInflows || snapshot.manualIncomes || 0)}</span></div>
+          <div class="flex-between"><span>(-) Egresos Manuales:</span><span>${formatCOP(snapshot.cashOutflows || snapshot.manualExpenses || 0)}</span></div>
+          <div class="solid-line"></div>
+          <div class="flex-between bold" style="font-size: 12px;"><span>EFECTIVO ESPERADO:</span><span>${formatCOP(snapshot.expectedCash || 0)}</span></div>
+          <div class="flex-between bold" style="font-size: 12px;"><span>EFECTIVO CONTADO:</span><span>${formatCOP(shift.declared_amount || 0)}</span></div>
+          <div class="flex-between bold" style="font-size: 13px; margin-top: 2px;">
+            <span>DIFERENCIA EFECTIVO:</span>
+            <span>${formatCOP(shift.difference || 0)}</span>
+          </div>
+          <div class="solid-line"></div>
+
+          <div class="center bold">-- DESGLOSE DE VENTAS --</div>
+          <div class="flex-between"><span>Ventas Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas Tarjeta:</span><span>${formatCOP(snapshot.cardSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas Transferencia/Nequi:</span><span>${formatCOP(snapshot.transferSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas a Crédito (CxC):</span><span>${formatCOP(snapshot.creditSales || 0)}</span></div>
+          <div class="double-line"></div>
+          <div class="flex-between bold" style="font-size: 14px;">
+            <span>VENTAS BRUTAS:</span>
+            <span>${formatCOP(shift.gross_revenue || 0)}</span>
+          </div>
+          <div class="solid-line"></div>
+
+          <div class="center bold">-- OTROS CONCEPTOS --</div>
+          <div class="flex-between"><span>Propinas Recaudadas:</span><span>${formatCOP(snapshot.totalTips || 0)}</span></div>
+          <div class="flex-between"><span>Devoluciones Pagadas:</span><span>${formatCOP(snapshot.cashRefunds || 0)}</span></div>
+          <div class="flex-between"><span>Anulaciones (${audit.canceledOrdersCount || 0}):</span><span>${formatCOP(audit.canceledAmount || 0)}</span></div>
+          <div class="dashed-line"></div>
+
+          <br/><br/>
+          <div class="center">_______________________________</div>
+          <div class="center bold" style="margin-top: 4px; font-size: 11px;">Firma Cajero / Responsable</div>
+          <br/>
+          <div class="center" style="font-size: 9.5px; color: #555;">Documento de Control Interno de Turno</div>
+          <div class="center" style="font-size: 9px; color: #777; margin-top: 4px;">Proveedor del software: KAMIA by JF</div>
         </div>
-        <div class="solid-line"></div>
-
-        <div class="center bold">-- DESGLOSE DE VENTAS --</div>
-        <div class="flex-between"><span>Ventas Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
-        <div class="flex-between"><span>Ventas Tarjeta:</span><span>${formatCOP(snapshot.cardSales || 0)}</span></div>
-        <div class="flex-between"><span>Ventas Transferencia/Nequi:</span><span>${formatCOP(snapshot.transferSales || 0)}</span></div>
-        <div class="flex-between"><span>Ventas a Crédito (CxC):</span><span>${formatCOP(snapshot.creditSales || 0)}</span></div>
-        <div class="double-line"></div>
-        <div class="flex-between bold" style="font-size: 14px;">
-          <span>VENTAS BRUTAS:</span>
-          <span>${formatCOP(shift.gross_revenue || 0)}</span>
-        </div>
-        <div class="solid-line"></div>
-
-        <div class="center bold">-- OTROS CONCEPTOS --</div>
-        <div class="flex-between"><span>Propinas Recaudadas:</span><span>${formatCOP(snapshot.totalTips || 0)}</span></div>
-        <div class="flex-between"><span>Devoluciones Pagadas:</span><span>${formatCOP(snapshot.cashRefunds || 0)}</span></div>
-        <div class="flex-between"><span>Anulaciones (${audit.canceledOrdersCount || 0}):</span><span>${formatCOP(audit.canceledAmount || 0)}</span></div>
-        <div class="dashed-line"></div>
-
-        <br/><br/>
-        <div class="center">_______________________________</div>
-        <div class="center bold" style="margin-top: 4px; font-size: 11px;">Firma Cajero / Responsable</div>
-        <br/>
-        <div class="center" style="font-size: 9.5px; color: #555;">Documento de Control Interno de Turno</div>
       </body>
     </html>
   `;

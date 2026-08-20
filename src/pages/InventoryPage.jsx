@@ -230,20 +230,7 @@ export const InventoryPage = () => {
   const handleExportStockExcel = async () => {
     setExportingStockExcel(true);
     try {
-      const token = localStorage.getItem('token');
-      const API_BASE = (import.meta.env.VITE_API_URL || 'https://backendweb-ca9k.onrender.com').replace(/\/$/, '');
-      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
-      const response = await fetch(`${baseUrl}/inventory/stock/export/excel`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al generar el archivo Excel de inventario');
-      }
-
-      const blob = await response.blob();
+      const blob = await api.getBlob('/inventory/stock/export/excel');
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;

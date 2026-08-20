@@ -4,71 +4,13 @@ import {
   LayoutDashboard, UtensilsCrossed, ChefHat, Wallet, FileText,
   Package, Users, Settings, LogOut, X, FileSpreadsheet, Building2,
   Bike, ShoppingBag, Layers, ClipboardList, Percent, Landmark, UserCheck,
-  Truck, Boxes, ChevronDown, ListOrdered
+  Truck, Boxes, ChevronDown, ListOrdered, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useUiStore } from '../../store/uiStore';
 import { Badge } from '../ui/Badge';
-
-const MENU_CATEGORIES = [
-  {
-    id: 'principal',
-    title: 'Principal',
-    items: [
-      { path: '/', label: 'Dashboard', icon: LayoutDashboard, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero', 'mesero'] },
-      { path: '/negocios', label: 'Negocios SaaS', icon: Building2, defaultRoles: ['super_admin'] },
-    ]
-  },
-  {
-    id: 'restaurante',
-    title: 'Restaurante & Operaciones',
-    items: [
-      { path: '/ordenes', label: 'Lista de Órdenes', icon: ListOrdered, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero', 'mesero'] },
-      { path: '/mesas', label: 'Mesas & Sala', icon: UtensilsCrossed, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero', 'mesero'] },
-      { path: '/cocina', label: 'Comandas Cocina', icon: ChefHat, defaultRoles: ['super_admin', 'admin', 'gerente', 'cocinero'] },
-      { path: '/delivery', label: 'Delivery / Domicilios', icon: Bike, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero'] },
-      { path: '/caja', label: 'Caja & Turnos', icon: Wallet, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero'] },
-    ]
-  },
-  {
-    id: 'inventario',
-    title: 'Inventario & Abastecimiento',
-    items: [
-      { path: '/productos', label: 'Catálogo de Productos', icon: Package, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-      { path: '/insumos', label: 'Insumos & Materia Prima', icon: Boxes, defaultRoles: ['super_admin', 'admin', 'gerente', 'cocinero'] },
-      { path: '/inventario', label: 'Control de Stock', icon: Package, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-      { path: '/recetas', label: 'Fichas Técnicas / Recetas', icon: Layers, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-      { path: '/ordenes-compra', label: 'Órdenes de Compra', icon: ShoppingBag, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-      { path: '/conteo-stock', label: 'Conteo Físico', icon: ClipboardList, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-      { path: '/proveedores', label: 'Proveedores', icon: Truck, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-    ]
-  },
-  {
-    id: 'comercial',
-    title: 'Comercial & CRM',
-    items: [
-      { path: '/clientes', label: 'Clientes (CRM)', icon: Users, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero'] },
-      { path: '/descuentos', label: 'Promociones & Cupones', icon: Percent, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-    ]
-  },
-  {
-    id: 'finanzas',
-    title: 'Gestión & Finanzas',
-    items: [
-      { path: '/contabilidad', label: 'Contabilidad (PUC/P&L)', icon: Landmark, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-      { path: '/rrhh', label: 'RRHH & Nómina', icon: UserCheck, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-      { path: '/reportes', label: 'Reportes & BI', icon: FileSpreadsheet, defaultRoles: ['super_admin', 'admin', 'gerente', 'cajero'] },
-    ]
-  },
-  {
-    id: 'sistema',
-    title: 'Configuración & Sistema',
-    items: [
-      { path: '/usuarios', label: 'Usuarios & Permisos', icon: Users, defaultRoles: ['super_admin', 'admin'] },
-      { path: '/configuracion', label: 'Configuración', icon: Settings, defaultRoles: ['super_admin', 'admin', 'gerente'] },
-    ]
-  }
-];
+import { KamiaLogo } from '../common/KamiaLogo';
+import { MENU_CATEGORIES, isPathAllowed } from '../../utils/navigationUtils';
 
 export const Sidebar = () => {
   const { user, logout } = useAuth();
@@ -88,18 +30,9 @@ export const Sidebar = () => {
 
   if (!user) return null;
 
-  const isItemAllowed = (item) => {
-    if (item.path === '/negocios') return user.role === 'super_admin';
-    if (['super_admin', 'admin'].includes(user.role)) return true;
-    if (Array.isArray(user.permissions) && user.permissions.length > 0) {
-      return user.permissions.includes(item.path);
-    }
-    return item.defaultRoles.includes(user.role);
-  };
-
   const filteredCategories = MENU_CATEGORIES.map(category => ({
     ...category,
-    items: category.items.filter(isItemAllowed)
+    items: category.items.filter(item => isPathAllowed(item.path, user))
   })).filter(category => category.items.length > 0);
 
   // Asegurar que la categoría que contiene la ruta activa esté siempre desplegada
@@ -119,10 +52,14 @@ export const Sidebar = () => {
     });
   }, [location.pathname]);
 
-  const toggleCategory = (catId) => {
+  const toggleCategory = (categoryId) => {
     setCollapsedCategories(prev => {
-      const next = { ...prev, [catId]: !prev[catId] };
-      localStorage.setItem('pos_sidebar_collapsed', JSON.stringify(next));
+      const next = { ...prev, [categoryId]: !prev[categoryId] };
+      try {
+        localStorage.setItem('pos_sidebar_collapsed', JSON.stringify(next));
+      } catch (e) {
+        console.error('Error al guardar colapsado de sidebar:', e);
+      }
       return next;
     });
   };
@@ -159,7 +96,7 @@ export const Sidebar = () => {
             position: fixed !important;
             top: 0; left: 0; bottom: 0;
             z-index: 100 !important;
-            box-shadow: 4px 0 20px rgba(0,0,0,0.5) !important;
+            box-shadow: 4px 0 24px rgba(0,0,0,0.6) !important;
           }
         }
         .sidebar-category-header {
@@ -173,23 +110,16 @@ export const Sidebar = () => {
       `}</style>
 
       <aside className="sidebar" style={{ width: sidebarOpen ? '240px' : '0', overflow: 'hidden', transition: 'all 0.3s ease', display: 'flex', flexDirection: 'column' }}>
-        {/* Header / Logo */}
-        <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: '2px', borderBottom: '1px solid var(--border-color)' }}>
+        {/* Header / Logo KAMIA by JF */}
+        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '4px', borderBottom: '1px solid var(--border-color)', background: 'linear-gradient(180deg, rgba(31, 41, 55, 0.4) 0%, rgba(17, 24, 39, 0) 100%)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ background: 'var(--accent-primary)', padding: '6px', borderRadius: 'var(--radius-md)' }}>
-                <UtensilsCrossed size={16} color="white" />
-              </div>
-              <h1 style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: '18px', fontWeight: 800, margin: 0, letterSpacing: '-0.025em' }}>
-                JF <span style={{ color: 'var(--accent-secondary)' }}>POS ERP</span>
-              </h1>
-            </div>
+            <KamiaLogo variant="sidebar" size="md" showSlogan={false} />
             <button onClick={toggleSidebar} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: window.innerWidth <= 768 ? 'block' : 'none' }}>
               <X size={18} />
             </button>
           </div>
-          <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontStyle: 'italic', paddingLeft: '32px' }}>
-            {user.role === 'super_admin' ? 'Plataforma SaaS Multi-tenant' : 'Gestión Integral Restaurante'}
+          <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.02em', paddingLeft: '4px' }}>
+            Todo tu negocio, conectado.
           </div>
         </div>
 
@@ -211,11 +141,11 @@ export const Sidebar = () => {
                   style={{
                     width: '100%',
                     padding: '6px 16px',
-                    fontSize: '10px',
+                    fontSize: '9.5px',
                     fontWeight: 800,
                     textTransform: 'uppercase',
                     letterSpacing: '0.06em',
-                    color: hasActiveChild ? 'var(--accent-secondary)' : 'var(--text-muted)',
+                    color: hasActiveChild ? 'var(--accent-electric)' : 'var(--text-muted)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -254,11 +184,14 @@ export const Sidebar = () => {
                             display: 'flex',
                             alignItems: 'center',
                             gap: '8px',
-                            padding: '6px 16px',
+                            padding: '6.5px 16px',
                             fontSize: '12px',
-                            color: isActive ? 'white' : 'var(--text-secondary)',
-                            background: isActive ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
-                            borderLeft: isActive ? '3px solid var(--accent-primary)' : '3px solid transparent',
+                            color: isActive ? '#FFFFFF' : 'var(--text-secondary)',
+                            background: isActive
+                              ? 'linear-gradient(90deg, rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.10) 100%)'
+                              : 'transparent',
+                            borderLeft: isActive ? '3px solid var(--accent-electric)' : '3px solid transparent',
+                            boxShadow: isActive ? 'inset 0 0 14px rgba(99, 102, 241, 0.12)' : 'none',
                             transition: 'all 0.15s ease',
                             fontWeight: isActive ? 700 : 500
                           })}

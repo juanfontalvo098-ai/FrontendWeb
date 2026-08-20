@@ -414,9 +414,14 @@ pause >nul\r
             </div>
 
             {logoUrl && (
-              <div style={{ marginBottom: '16px', background: 'white', padding: '10px', borderRadius: '6px', display: 'inline-block' }}>
-                <div style={{ fontSize: '10px', color: '#666', marginBottom: '4px' }}>Vista previa del logo subido:</div>
-                <img src={logoUrl} alt="Logo Prev" style={{ maxHeight: '50px', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; }} />
+              <div style={{ marginBottom: '16px', background: 'white', padding: '12px 16px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '16px', border: '1px solid var(--border-color)', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}>
+                <div>
+                  <div style={{ fontSize: '10.5px', color: '#666', fontWeight: 600, marginBottom: '4px' }}>Logo actual de este negocio:</div>
+                  <img src={logoUrl} alt="Logo Prev" style={{ maxHeight: '55px', maxWidth: '160px', objectFit: 'contain', display: 'block' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                </div>
+                <Button type="button" variant="danger" size="sm" icon={<Trash2 size={13} />} onClick={() => { setLogoUrl(''); addToast('Logo retirado. Guarda los cambios para aplicar.', 'info'); }}>
+                  Eliminar Logo
+                </Button>
               </div>
             )}
 

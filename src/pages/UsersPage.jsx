@@ -1,7 +1,7 @@
 // src/pages/UsersPage.jsx
 import React, { useState, useEffect } from 'react';
 import {
-  UserPlus, Edit, Shield, CheckSquare, Square, Trash2,
+  Plus, UserPlus, Edit, Shield, CheckSquare, Square, Trash2,
   Users, UserCheck, ShieldAlert, CheckCircle2, Lock,
   Store, Search, RefreshCw, KeyRound, Sparkles, Building2
 } from 'lucide-react';
@@ -334,8 +334,8 @@ export const UsersPage = () => {
           <Button variant="secondary" icon={<RefreshCw size={14} className={loading ? 'animate-spin' : ''} />} onClick={fetchData}>
             Actualizar
           </Button>
-          <Button variant="primary" icon={<UserPlus size={16} />} onClick={handleOpenNewUser}>
-            + Nuevo Usuario
+          <Button variant="primary" icon={<Plus size={16} />} onClick={handleOpenNewUser}>
+            Nuevo Usuario
           </Button>
         </div>
       </div>

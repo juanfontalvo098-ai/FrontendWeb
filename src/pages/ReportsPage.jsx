@@ -31,6 +31,7 @@ export const ReportsPage = () => {
   const [activeModalTab, setActiveModalTab] = useState('resumen'); // 'resumen' | 'productos' | 'insumos' | 'facturas' | 'movimientos'
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
+  const [exportingConsolidated, setExportingConsolidated] = useState(false);
 
   const fetchShifts = async () => {
     try {
@@ -91,34 +92,47 @@ export const ReportsPage = () => {
   const handleDownloadExcel = async (shiftId) => {
     setDownloadingId(shiftId);
     try {
-      const token = localStorage.getItem('token');
-      const API_BASE = (import.meta.env.VITE_API_URL || 'https://backendweb-ca9k.onrender.com').replace(/\/$/, '');
-      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
-      const response = await fetch(`${baseUrl}/reports/shifts/${shiftId}/excel`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al generar el archivo Excel');
-      }
-
-      const blob = await response.blob();
+      const blob = await api.getBlob(`/reports/shifts/${shiftId}/excel`);
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `Reporte_Turno_${shiftId}.xlsx`;
+      link.download = `Reporte_Turno_${shiftId}_Detallado.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
 
-      addToast('Reporte Excel descargado exitosamente (.xlsx)', 'success');
+      addToast('Reporte Excel detallado descargado exitosamente (.xlsx)', 'success');
     } catch (err) {
-      addToast('Error al descargar el informe Excel', 'danger');
+      addToast(err.message || 'Error al descargar el informe Excel', 'danger');
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const handleDownloadConsolidatedExcel = async () => {
+    setExportingConsolidated(true);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (selectedUser) params.append('user_id', selectedUser);
+
+      const blob = await api.getBlob(`/reports/export/consolidated?${params.toString()}`);
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `Informe_Consolidado_BI_${startDate || 'General'}_al_${endDate || 'Hoy'}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      addToast('Informe Consolidado BI con Insumos y Recetas descargado con éxito (.xlsx)', 'success');
+    } catch (err) {
+      addToast(err.message || 'Error al exportar reporte consolidado', 'danger');
+    } finally {
+      setExportingConsolidated(false);
     }
   };
 
@@ -151,7 +165,19 @@ export const ReportsPage = () => {
           />
         </div>
 
-        <Button size="sm" variant="ghost" icon={<RefreshCw size={16} />} onClick={fetchShifts}>Refrescar</Button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<FileSpreadsheet size={15} />}
+            loading={exportingConsolidated}
+            onClick={handleDownloadConsolidatedExcel}
+            title="Exportar informe consolidado del período con métricas BI, insumos y recetas a Excel"
+          >
+            Exportar Consolidado (Excel)
+          </Button>
+          <Button size="sm" variant="ghost" icon={<RefreshCw size={16} />} onClick={fetchShifts}>Refrescar</Button>
+        </div>
       </div>
 
       {/* KPI Cards — Resumen Global BI del Período */}

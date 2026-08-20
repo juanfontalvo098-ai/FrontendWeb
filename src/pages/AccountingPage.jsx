@@ -13,9 +13,11 @@ import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { api, formatCOP } from '../api/client';
 import { useUiStore } from '../store/uiStore';
+import { useAuth } from '../hooks/useAuth';
 
 export const AccountingPage = () => {
   const addToast = useUiStore((state) => state.addToast);
+  const { user, activeBranchId } = useAuth();
 
   const [activeTab, setActiveTab] = useState('summary'); // 'summary' | 'coa' | 'journal' | 'balance' | 'pl' | 'ar' | 'ap'
 
@@ -33,6 +35,7 @@ export const AccountingPage = () => {
   const [suppliersList, setSuppliersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncingPayroll, setSyncingPayroll] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   // Filtros Libro Diario
   const [journalRefFilter, setJournalRefFilter] = useState('');
@@ -90,45 +93,50 @@ export const AccountingPage = () => {
   const fetchDashboard = async () => {
     try {
       const data = await api.get(`/accounting/dashboard?startDate=${startDate}&endDate=${endDate}`);
-      setDashboardData(data);
+      setDashboardData(data && !data.error ? data : null);
     } catch (err) {
       console.error('Error al cargar dashboard financiero:', err);
+      setDashboardData(null);
     }
   };
 
   const fetchCOA = async () => {
     try {
       const data = await api.get('/accounting/accounts');
-      setChartOfAccounts(data || []);
+      setChartOfAccounts(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error al cargar plan de cuentas:', err);
+      setChartOfAccounts([]);
     }
   };
 
   const fetchJournal = async () => {
     try {
       const data = await api.get('/accounting/journal');
-      setJournalEntries(data || []);
+      setJournalEntries(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error al cargar libro diario:', err);
+      setJournalEntries([]);
     }
   };
 
   const fetchBalanceSheet = async () => {
     try {
       const data = await api.get('/accounting/balance-sheet');
-      setBalanceSheet(data);
+      setBalanceSheet(data && !data.error ? data : null);
     } catch (err) {
       console.error('Error al cargar balance:', err);
+      setBalanceSheet(null);
     }
   };
 
   const fetchIncomeStatement = async () => {
     try {
       const data = await api.get(`/accounting/income-statement?startDate=${startDate}&endDate=${endDate}`);
-      setIncomeStatement(data);
+      setIncomeStatement(data && !data.error ? data : null);
     } catch (err) {
       console.error('Error al cargar P&L:', err);
+      setIncomeStatement(null);
     }
   };
 
@@ -136,10 +144,12 @@ export const AccountingPage = () => {
     try {
       const query = arStatusFilter !== 'todas' ? `?status=${arStatusFilter}` : '';
       const data = await api.get(`/accounting/receivable${query}`);
-      setReceivables(data.receivables || []);
-      setArSummary(data.summary || {});
+      setReceivables(data && Array.isArray(data.receivables) ? data.receivables : []);
+      setArSummary(data && data.summary ? data.summary : {});
     } catch (err) {
       console.error('Error al cargar CxC:', err);
+      setReceivables([]);
+      setArSummary({});
     }
   };
 
@@ -147,28 +157,32 @@ export const AccountingPage = () => {
     try {
       const query = apStatusFilter !== 'todas' ? `?status=${apStatusFilter}` : '';
       const data = await api.get(`/accounting/payable${query}`);
-      setPayables(data.payables || []);
-      setApSummary(data.summary || {});
+      setPayables(data && Array.isArray(data.payables) ? data.payables : []);
+      setApSummary(data && data.summary ? data.summary : {});
     } catch (err) {
       console.error('Error al cargar CxP:', err);
+      setPayables([]);
+      setApSummary({});
     }
   };
 
   const fetchCustomers = async () => {
     try {
       const data = await api.get('/customers');
-      setCustomersList(data || []);
+      setCustomersList(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error al cargar clientes:', err);
+      setCustomersList([]);
     }
   };
 
   const fetchSuppliers = async () => {
     try {
       const data = await api.get('/suppliers');
-      setSuppliersList(data || []);
+      setSuppliersList(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error al cargar proveedores:', err);
+      setSuppliersList([]);
     }
   };
 
@@ -190,36 +204,26 @@ export const AccountingPage = () => {
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [activeBranchId, user?.businessId]);
 
   useEffect(() => {
     fetchDashboard();
     fetchIncomeStatement();
   }, [startDate, endDate]);
 
-  const [exportingExcel, setExportingExcel] = useState(false);
-
   const handleExportAccountingExcel = async () => {
     setExportingExcel(true);
     try {
-      const token = localStorage.getItem('token');
-      const API_BASE = (import.meta.env.VITE_API_URL || 'https://backendweb-ca9k.onrender.com').replace(/\/$/, '');
-      const baseUrl = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
-      const response = await fetch(`${baseUrl}/accounting/export/excel?start_date=${startDate}&end_date=${endDate}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const params = new URLSearchParams();
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      const queryString = params.toString() ? `?${params.toString()}` : '';
 
-      if (!response.ok) {
-        throw new Error('Error al generar el archivo Excel de contabilidad');
-      }
-
-      const blob = await response.blob();
+      const blob = await api.getBlob(`/accounting/export/excel${queryString}`);
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `Contabilidad_${startDate}_al_${endDate}.xlsx`;
+      link.download = `Contabilidad_${startDate || 'General'}_al_${endDate || 'Hoy'}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -304,6 +308,8 @@ export const AccountingPage = () => {
     });
     return { debit, credit, diff: debit - credit };
   };
+
+  const jTotals = calculateJournalTotals();
 
   const handleCreateJournalEntry = async (e) => {
     e.preventDefault();
@@ -463,11 +469,6 @@ export const AccountingPage = () => {
     }
   };
 
-  const filteredJournalEntries = journalEntries.filter(e => {
-    if (!journalRefFilter) return true;
-    return e.reference_type === journalRefFilter;
-  });
-
   const handleRemoveJournalLine = (index) => {
     if (entryLines.length <= 2) {
       addToast('Un asiento contable requiere al menos 2 líneas', 'warning');
@@ -477,20 +478,25 @@ export const AccountingPage = () => {
     setEntryLines(newLines);
   };
 
-  const jTotals = calculateJournalTotals();
+  const filteredJournalEntries = (Array.isArray(journalEntries) ? journalEntries : []).filter(e => {
+    if (!journalRefFilter) return true;
+    return (
+      (e.entry_number || '').toLowerCase().includes(journalRefFilter.toLowerCase()) ||
+      (e.description || '').toLowerCase().includes(journalRefFilter.toLowerCase())
+    );
+  });
 
-  const filteredAR = receivables.filter(r => {
+  const filteredAR = (Array.isArray(receivables) ? receivables : []).filter(r => {
     if (!arSearchQuery) return true;
     const q = arSearchQuery.toLowerCase().trim();
     return (
       (r.customer_name || '').toLowerCase().includes(q) ||
-      (r.customer_doc || '').toLowerCase().includes(q) ||
       (r.customer_phone || '').includes(q) ||
       (r.invoice_number || '').toLowerCase().includes(q)
     );
   });
 
-  const filteredAP = payables.filter(p => {
+  const filteredAP = (Array.isArray(payables) ? payables : []).filter(p => {
     if (!apSearchQuery) return true;
     const q = apSearchQuery.toLowerCase().trim();
     return (
@@ -535,13 +541,13 @@ export const AccountingPage = () => {
 
           {activeTab === 'ar' && (
             <Button variant="primary" icon={<Plus size={16} />} onClick={handleOpenNewAR}>
-              + Nueva Cuenta por Cobrar
+              Nueva Cuenta por Cobrar
             </Button>
           )}
 
           {activeTab === 'ap' && (
             <Button variant="primary" icon={<Plus size={16} />} onClick={handleOpenNewAP}>
-              + Nueva Cuenta por Pagar
+              Nueva Cuenta por Pagar
             </Button>
           )}
 
@@ -660,11 +666,11 @@ export const AccountingPage = () => {
         {[
           { id: 'summary', label: 'Resumen Financiero', icon: Scale },
           { id: 'balance', label: 'Balance General', icon: Landmark },
-          { id: 'ar', label: 'Cartera (CxC)', icon: ArrowDownLeft, count: receivables.filter(r => r.status !== 'pagada').length },
-          { id: 'ap', label: 'Proveedores (CxP)', icon: ArrowUpRight, count: payables.filter(p => p.status !== 'pagada').length },
+          { id: 'ar', label: 'Cartera (CxC)', icon: ArrowDownLeft, count: (Array.isArray(receivables) ? receivables : []).filter(r => r.status !== 'pagada').length },
+          { id: 'ap', label: 'Proveedores (CxP)', icon: ArrowUpRight, count: (Array.isArray(payables) ? payables : []).filter(p => p.status !== 'pagada').length },
           { id: 'pl', label: 'Estado de Resultados (P&L)', icon: TrendingUp },
-          { id: 'journal', label: 'Libro Diario', icon: FileSpreadsheet, count: journalEntries.length },
-          { id: 'coa', label: 'Plan de Cuentas (PUC)', icon: BookOpen, count: chartOfAccounts.length },
+          { id: 'journal', label: 'Libro Diario', icon: FileSpreadsheet, count: Array.isArray(journalEntries) ? journalEntries.length : 0 },
+          { id: 'coa', label: 'Plan de Cuentas (PUC)', icon: BookOpen, count: Array.isArray(chartOfAccounts) ? chartOfAccounts.length : 0 },
         ].map((t) => (
           <button
             key={t.id}
@@ -692,8 +698,36 @@ export const AccountingPage = () => {
 
       {/* TAB 1: RESUMEN FINANCIERO */}
       {activeTab === 'summary' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '14px' }}>
-          <Card style={{ padding: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {chartOfAccounts.length === 0 && (
+            <div style={{
+              background: 'rgba(245, 158, 11, 0.1)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              borderRadius: '8px',
+              padding: '14px 18px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <AlertCircle size={24} color="#f59e0b" />
+                <div>
+                  <strong style={{ color: '#f59e0b', fontSize: '13.5px' }}>Plan Único de Cuentas (PUC) pendiente por inicializar</strong>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                    Para visualizar los balances, estados de resultados y libro mayor de este negocio, inicializa el PUC estándar.
+                  </div>
+                </div>
+              </div>
+              <Button size="sm" variant="primary" onClick={handleInitDefaultCOA}>
+                Inicializar PUC Estándar Ahora
+              </Button>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '14px' }}>
+            <Card style={{ padding: '16px' }}>
             <h3 style={{ fontSize: '14px', fontWeight: 800, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
               <TrendingUp size={18} color="var(--accent-primary)" />
               Rendimiento Operacional & Nómina del Período
@@ -755,7 +789,7 @@ export const AccountingPage = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-primary)', borderRadius: '6px', borderLeft: '3px solid var(--accent-secondary)' }}>
                 <div>
                   <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Cartera Clientes por Cobrar (CxC):</span>
-                  <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{receivables.filter(r => r.status !== 'pagada').length} cuentas pendientes</div>
+                  <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{(Array.isArray(receivables) ? receivables : []).filter(r => r.status !== 'pagada').length} cuentas pendientes</div>
                 </div>
                 <strong style={{ color: 'var(--accent-secondary)', fontSize: '13.5px' }}>{formatCOP(arSummary?.total_balance || 0)}</strong>
               </div>
@@ -772,7 +806,8 @@ export const AccountingPage = () => {
                 </strong>
               </div>
             </div>
-          </Card>
+            </Card>
+          </div>
         </div>
       )}
 
@@ -1177,17 +1212,17 @@ export const AccountingPage = () => {
         <Card style={{ padding: '16px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Banner Resumen Nómina */}
-            {incomeStatement?.payrollSummary?.total_payroll > 0 && (
+            {(incomeStatement?.payrollSummary?.total_payroll || 0) > 0 && (
               <div style={{ background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.3)', padding: '12px 16px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Users size={20} color="#8b5cf6" />
                   <div>
                     <strong style={{ color: '#8b5cf6', fontSize: '13px' }}>Nómina & Jornales en este Período</strong>
-                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{incomeStatement.payrollSummary.count} liquidaciones asentadas contablemente</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{incomeStatement?.payrollSummary?.count || 0} liquidaciones asentadas contablemente</div>
                   </div>
                 </div>
                 <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--accent-danger)' }}>
-                  {formatCOP(incomeStatement.payrollSummary.total_payroll)}
+                  {formatCOP(incomeStatement?.payrollSummary?.total_payroll || 0)}
                 </div>
               </div>
             )}
@@ -1359,7 +1394,7 @@ export const AccountingPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {chartOfAccounts.map(a => (
+                {(Array.isArray(chartOfAccounts) ? chartOfAccounts : []).map(a => (
                   <tr key={a.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                     <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--accent-primary)' }}>{a.code}</td>
                     <td style={{ padding: '8px 12px', fontWeight: a.code.length <= 3 ? 700 : 400 }}>{a.name}</td>

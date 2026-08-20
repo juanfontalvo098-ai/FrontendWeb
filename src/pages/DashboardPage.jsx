@@ -11,9 +11,21 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { api, formatCOP } from '../api/client';
 import { getSocket } from '../api/socket';
+import { useAuth } from '../hooks/useAuth';
+import { isPathAllowed, getFirstAllowedPath } from '../utils/navigationUtils';
 
 export const DashboardPage = () => {
   const navigate = useNavigate();
+  const { user, activeBranchId } = useAuth();
+
+  // Si el usuario no tiene permisos sobre el Dashboard, redirigir a su primera sección permitida
+  useEffect(() => {
+    if (user && !isPathAllowed('/', user)) {
+      const destination = getFirstAllowedPath(user);
+      navigate(destination, { replace: true });
+    }
+  }, [user, navigate]);
+
   const [period, setPeriod] = useState('today'); // 'today', 'yesterday', 'last7', 'month', 'custom'
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -34,9 +46,9 @@ export const DashboardPage = () => {
       // Verificación directa complementaria para garantizar el turno actual en vivo
       if (!data.currentShift) {
         try {
-          const shiftData = await api.get('/cash-register/current');
+          const shiftData = await api.get('/cash/current');
           if (shiftData && (shiftData.status === 'abierta' || shiftData.id)) {
-            const summary = await api.get('/cash-register/shift-summary').catch(() => null);
+            const summary = await api.get('/cash/summary').catch(() => null);
             data.currentShift = {
               id: shiftData.id,
               status: 'abierta',
@@ -47,7 +59,7 @@ export const DashboardPage = () => {
               total_sales: parseFloat(summary?.grossRevenue || 0),
               cash_inflows: parseFloat(summary?.cashInflows || 0),
               cash_outflows: parseFloat(summary?.cashOutflows || 0),
-              expected_cash: parseFloat(summary?.expectedInDrawer || shiftData.opening_amount || 0),
+              expected_cash: parseFloat(summary?.expectedCash || summary?.expectedInDrawer || shiftData.opening_amount || 0),
               invoices_count: parseInt(summary?.ticketsCount || 0)
             };
           }
@@ -66,7 +78,7 @@ export const DashboardPage = () => {
 
   useEffect(() => {
     fetchMetrics();
-  }, [period, startDate, endDate]);
+  }, [period, startDate, endDate, activeBranchId, user?.businessId]);
 
   // Real-Time Live Refresh
   useEffect(() => {

@@ -6,8 +6,9 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
-import { api, formatCurrency, formatCOP } from '../api/client';
+import { api, formatCurrency, formatCOP, formatDateTime } from '../api/client';
 import { useUiStore } from '../store/uiStore';
+import { printShiftCloseTicket } from '../utils/printUtils';
 
 import { useAuth } from '../hooks/useAuth';
 
@@ -57,47 +58,64 @@ export const CashPage = () => {
     fetchCashState();
   }, []);
 
-  const handlePrintZTicket = (zData) => {
+  const handlePrintZTicket = async (zData) => {
     if (!zData) return;
 
-    const cashId = zData.cashId || currentCash?.id || '---';
-    const openedAt = zData.openedAt || currentCash?.opened_at || '---';
-    const closedAt = new Date().toLocaleString('es-CO');
-    const summary = zData.summary || summaryData || {};
-    const audit = summary.audit || { canceledOrdersCount: 0, canceledAmount: 0 };
-
-    const openingBase = parseFloat(zData.opening_amount ?? zData.openingAmount ?? summary.initialFloat ?? summary.openingAmount ?? summary.opening_amount ?? currentCash?.opening_amount ?? 0);
-    const expectedCash = zData.expected ?? summary.expectedCash ?? 0;
-    const declaredCash = zData.declaredCash ?? zData.closing_amount ?? 0;
-    const diff = zData.difference ?? (declaredCash - expectedCash);
-
-    const shiftData = {
-      id: cashId,
-      shift_name: 'Turno Principal',
-      user_name: user?.full_name || 'Cajero',
-      opened_at: openedAt,
-      closed_at: closedAt,
-      opening_amount: openingBase,
-      declared_amount: declaredCash,
-      difference: diff,
-      gross_revenue: summary.grossRevenue || 0,
-      snapshot: {
-        initialFloat: openingBase,
-        cashSales: summary.cashSales || 0,
-        cardSales: summary.cardSales || 0,
-        transferSales: summary.transferSales || 0,
-        creditSales: summary.creditSales || 0,
-        cashInflows: summary.cashInflows || summary.manualIncomes || 0,
-        cashOutflows: summary.cashOutflows || summary.manualExpenses || 0,
-        expectedCash: expectedCash,
-        totalTips: summary.totalTips || 0,
-        cashRefunds: summary.cashRefunds || 0,
-        audit: audit
+    try {
+      let currentSettings = settings;
+      if (!currentSettings) {
+        currentSettings = await api.get('/settings').catch(() => ({}));
       }
-    };
 
-    printShiftCloseTicket(shiftData, settings || {}, settings?.default_paper_width || '80mm');
-    addToast('Ticket de Cierre de Turno enviado a impresión', 'info');
+      const cashId = zData.cashId || currentCash?.id || zData.id || '---';
+      const openedAt = zData.openedAt || zData.opened_at || currentCash?.opened_at || '---';
+      const closedAt = zData.closedAt || zData.closed_at || new Date().toLocaleString('es-CO');
+      const summary = zData.summary || summaryData || zData.salesSummary || {};
+      const audit = summary.audit || { canceledOrdersCount: 0, canceledAmount: 0 };
+
+      const openingBase = parseFloat(zData.opening_amount ?? zData.openingAmount ?? summary.initialFloat ?? summary.openingAmount ?? summary.opening_amount ?? currentCash?.opening_amount ?? 0);
+      const expectedCash = parseFloat(zData.expected ?? summary.expectedCash ?? 0);
+      const declaredCash = parseFloat(zData.declaredCash ?? zData.closing_amount ?? zData.declared_amount ?? 0);
+      const diff = parseFloat(zData.difference ?? (declaredCash - expectedCash));
+
+      const grossRev = parseFloat(summary.grossRevenue || summary.totalSales || (
+        (parseFloat(summary.cashSales) || 0) +
+        (parseFloat(summary.cardSales) || 0) +
+        (parseFloat(summary.transferSales) || 0) +
+        (parseFloat(summary.creditSales) || 0)
+      ) || 0);
+
+      const shiftData = {
+        id: cashId,
+        shift_name: 'Turno Principal',
+        user_name: user?.full_name || 'Cajero',
+        opened_at: openedAt,
+        closed_at: closedAt,
+        opening_amount: openingBase,
+        declared_amount: declaredCash,
+        difference: diff,
+        gross_revenue: grossRev,
+        snapshot: {
+          initialFloat: openingBase,
+          cashSales: parseFloat(summary.cashSales || 0),
+          cardSales: parseFloat(summary.cardSales || 0),
+          transferSales: parseFloat(summary.transferSales || 0),
+          creditSales: parseFloat(summary.creditSales || 0),
+          cashInflows: parseFloat(summary.cashInflows || summary.manualIncomes || 0),
+          cashOutflows: parseFloat(summary.cashOutflows || summary.manualExpenses || 0),
+          expectedCash: expectedCash,
+          totalTips: parseFloat(summary.totalTips || 0),
+          cashRefunds: parseFloat(summary.cashRefunds || 0),
+          audit: audit
+        }
+      };
+
+      printShiftCloseTicket(shiftData, currentSettings || {}, currentSettings?.default_paper_width || '80mm');
+      addToast('Ticket de Cierre de Turno enviado a impresión', 'info');
+    } catch (err) {
+      console.error('Error al imprimir ticket de cierre:', err);
+      addToast('Error al procesar la impresión del ticket', 'danger');
+    }
   };
 
   const handleOpenCash = async () => {
@@ -236,7 +254,7 @@ export const CashPage = () => {
             <div style={{ padding: '8px 0' }}>
               <div style={{ textAlign: 'center', borderBottom: '1px dashed var(--border-color)', paddingBottom: '14px', marginBottom: '16px' }}>
                 <h3 style={{ margin: '0 0 4px 0', fontSize: '20px', fontWeight: 700 }}>ARQUEO DE CAJA - REPORTE DE CIERRE</h3>
-                <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Caja N° #{zReportFinal.cashId} | {zReportFinal.openedAt}</div>
+                <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Caja N° #{zReportFinal.cashId} | Apertura: {formatDateTime(zReportFinal.openedAt || zReportFinal.opened_at)}</div>
               </div>
 
               <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: '10px', marginBottom: '16px', fontSize: '15px', display: 'flex', flexDirection: 'column', gap: '8px' }}>

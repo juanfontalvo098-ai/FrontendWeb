@@ -606,7 +606,7 @@ export const BillingPage = () => {
                   icon={<UserPlus size={12} />}
                   style={{ padding: '3px 8px', fontSize: '10.5px' }}
                 >
-                  + Nuevo Cliente
+                  Nuevo Cliente
                 </Button>
               </div>
             </div>

@@ -26,7 +26,16 @@ export const initSocket = () => {
     socket = null;
   }
 
-  const SOCKET_URL = (import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || 'https://backendweb-ca9k.onrender.com').replace(/\/api$/, '');
+  const resolveSocketUrl = () => {
+    if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
+    if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return window.location.origin;
+    }
+    return 'http://localhost:3001';
+  };
+
+  const SOCKET_URL = resolveSocketUrl().replace(/\/api$/, '');
 
   socket = io(SOCKET_URL, {
     auth: { token },

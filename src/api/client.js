@@ -1,4 +1,12 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'https://backendweb-ca9k.onrender.com';
+const resolveApiBase = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return window.location.origin;
+  }
+  return 'http://localhost:3001';
+};
+
+const API_BASE = resolveApiBase();
 const BASE_URL = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE.replace(/\/$/, '')}/api`;
 
 const getHeaders = () => {
@@ -41,37 +49,28 @@ const handleResponse = async (response) => {
 };
 
 export const api = {
-  get: async (endpoint) => {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      headers: getHeaders()
+  get: (endpoint) => fetch(`${BASE_URL}${endpoint}`, { headers: getHeaders() }).then(handleResponse),
+  post: (endpoint, data) => fetch(`${BASE_URL}${endpoint}`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(data) }).then(handleResponse),
+  put: (endpoint, data) => fetch(`${BASE_URL}${endpoint}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(data) }).then(handleResponse),
+  delete: (endpoint) => fetch(`${BASE_URL}${endpoint}`, { method: 'DELETE', headers: getHeaders() }).then(handleResponse),
+  getBlob: async (endpoint) => {
+    const token = localStorage.getItem('token');
+    const activeBranchId = localStorage.getItem('activeBranchId');
+    const res = await fetch(`${BASE_URL}${endpoint}`, {
+      headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(activeBranchId ? { 'X-Branch-Id': activeBranchId } : {})
+      }
     });
-    return handleResponse(response);
-  },
-  
-  post: async (endpoint, data) => {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  },
-  
-  put: async (endpoint, data) => {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify(data)
-    });
-    return handleResponse(response);
-  },
-  
-  delete: async (endpoint) => {
-    const response = await fetch(`${BASE_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers: getHeaders()
-    });
-    return handleResponse(response);
+    if (!res.ok) {
+      let errMsg = 'Error al generar el archivo para descarga';
+      try {
+        const json = await res.json();
+        if (json.error) errMsg = json.error;
+      } catch (e) {}
+      throw new Error(errMsg);
+    }
+    return res.blob();
   }
 };
 
@@ -95,4 +94,75 @@ export const formatCurrency = (amount) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(safeNum);
+};
+
+export const formatDateTime = (dateInput) => {
+  if (!dateInput) return '---';
+  try {
+    let date;
+    if (dateInput instanceof Date) {
+      date = dateInput;
+    } else if (typeof dateInput === 'number') {
+      date = new Date(dateInput);
+    } else if (typeof dateInput === 'string') {
+      let str = dateInput.trim();
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(str)) {
+        return str;
+      }
+      if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(str)) {
+        str = str.replace(' ', 'T') + 'Z';
+      }
+      date = new Date(str);
+    } else {
+      date = new Date(dateInput);
+    }
+
+    if (isNaN(date.getTime())) return String(dateInput);
+
+    return date.toLocaleString('es-CO', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+  } catch (e) {
+    return String(dateInput);
+  }
+};
+
+export const formatDate = (dateInput) => {
+  if (!dateInput) return '---';
+  try {
+    let date;
+    if (dateInput instanceof Date) {
+      date = dateInput;
+    } else if (typeof dateInput === 'number') {
+      date = new Date(dateInput);
+    } else if (typeof dateInput === 'string') {
+      let str = dateInput.trim();
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(str)) {
+        return str;
+      }
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+        str = str.replace(' ', 'T');
+        if (!str.includes('Z')) str += 'Z';
+      }
+      date = new Date(str);
+    } else {
+      date = new Date(dateInput);
+    }
+
+    if (isNaN(date.getTime())) return String(dateInput);
+
+    return date.toLocaleDateString('es-CO', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+  } catch (e) {
+    return String(dateInput);
+  }
 };

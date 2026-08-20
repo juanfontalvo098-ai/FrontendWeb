@@ -239,7 +239,7 @@ export const BusinessesPage = () => {
         <Card style={{ padding: '40px', textAlign: 'center' }}>
           <Building2 size={48} color="var(--text-muted)" style={{ margin: '0 auto 12px auto' }} />
           <h3>No hay clientes registrados</h3>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Haz clic en "+ Nuevo Cliente" para dar de alta un restaurante o bar.</p>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Haz clic en "Nuevo Cliente / Negocio" para dar de alta un restaurante o bar.</p>
         </Card>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>

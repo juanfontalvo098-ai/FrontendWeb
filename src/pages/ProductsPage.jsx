@@ -1,8 +1,8 @@
-// src/pages/ProductsPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, Edit2, Trash2, Upload, Image as ImageIcon,
-  Layers, Package, Search, DollarSign, Barcode, Tag
+  Layers, Package, Search, DollarSign, Barcode, Tag,
+  FileJson, Download, CheckCircle2, AlertCircle, RefreshCw, FileText
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -48,6 +48,14 @@ export const ProductsPage = () => {
   const [catName, setCatName] = useState('');
   const [catDescription, setCatDescription] = useState('');
   const [catSortOrder, setCatSortOrder] = useState('0');
+
+  // Modal Importación JSON masiva
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importJsonText, setImportJsonText] = useState('');
+  const [importUpdateExisting, setImportUpdateExisting] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importValidation, setImportValidation] = useState(null); // { isValid, prodCount, catCount, error }
+  const jsonFileInputRef = useRef(null);
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -243,6 +251,172 @@ export const ProductsPage = () => {
     }
   };
 
+  // --- IMPORTACIÓN MASIVA JSON ---
+  const handleOpenImportModal = () => {
+    setImportJsonText('');
+    setImportValidation(null);
+    setIsImportModalOpen(true);
+  };
+
+  const validateJsonContent = (text) => {
+    if (!text || !text.trim()) {
+      setImportValidation(null);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(text);
+      let catCount = 0;
+      let prodCount = 0;
+
+      if (Array.isArray(parsed)) {
+        prodCount = parsed.length;
+        const setCats = new Set(parsed.map(p => p.category_name || p.category || p.categoria || 'General'));
+        catCount = setCats.size;
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        if (Array.isArray(parsed.categories)) catCount = parsed.categories.length;
+        if (Array.isArray(parsed.products)) prodCount = parsed.products.length;
+        else if (Array.isArray(parsed.items)) prodCount = parsed.items.length;
+      }
+
+      if (prodCount === 0 && catCount === 0) {
+        setImportValidation({ isValid: false, error: 'El JSON no contiene arreglos de "products" o "categories"' });
+      } else {
+        setImportValidation({ isValid: true, prodCount, catCount, error: null });
+      }
+    } catch (e) {
+      setImportValidation({ isValid: false, error: `Sintaxis JSON inválida: ${e.message}` });
+    }
+  };
+
+  const handleJsonTextChange = (val) => {
+    setImportJsonText(val);
+    validateJsonContent(val);
+  };
+
+  const handleJsonFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result;
+      if (typeof content === 'string') {
+        setImportJsonText(content);
+        validateJsonContent(content);
+        addToast(`Archivo "${file.name}" cargado exitosamente`, 'success');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDownloadSampleJson = () => {
+    const sample = {
+      categories: [
+        {
+          name: "Bebidas",
+          description: "Bebidas frías y calientes",
+          sort_order: 1
+        },
+        {
+          name: "Platos Fuertes",
+          description: "Carnes, hamburguesas y especialidades",
+          sort_order: 2
+        },
+        {
+          name: "Postres",
+          description: "Helados y repostería artesanal",
+          sort_order: 3
+        }
+      ],
+      products: [
+        {
+          name: "Hamburguesa Especial",
+          category_name: "Platos Fuertes",
+          price: 28000,
+          cost_price: 14000,
+          sku: "HAM-ESP-01",
+          barcode: "7701234567891",
+          description: "Doble carne artesanal con tocineta y queso cheddar",
+          unit_of_measure: "unidad",
+          tax_rate: 0.08,
+          tax_included: true,
+          track_inventory: true,
+          min_stock: 10,
+          initial_stock: 50,
+          is_available: true
+        },
+        {
+          name: "Limonada de Coco",
+          category_name: "Bebidas",
+          price: 9500,
+          cost_price: 3200,
+          sku: "BEB-LIM-02",
+          barcode: "7701234567892",
+          description: "Limonada cremosa con leche de coco y hielo",
+          unit_of_measure: "unidad",
+          tax_rate: 0.08,
+          tax_included: true,
+          track_inventory: false,
+          min_stock: 0,
+          is_available: true
+        },
+        {
+          name: "Copa de Helado Artesanal",
+          category_name: "Postres",
+          price: 12000,
+          cost_price: 4500,
+          sku: "POS-HEL-03",
+          description: "3 bolas de helado artesanal con barquillo y salsa de chocolate",
+          unit_of_measure: "unidad",
+          tax_rate: 0.0,
+          tax_included: true,
+          track_inventory: false,
+          min_stock: 0,
+          is_available: true
+        }
+      ]
+    };
+
+    const blob = new Blob([JSON.stringify(sample, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plantilla_catalogo_productos.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addToast('Plantilla JSON descargada con éxito', 'info');
+  };
+
+  const handleExecuteImport = async () => {
+    if (!importJsonText.trim()) {
+      addToast('Ingresa o carga el contenido JSON a importar', 'warning');
+      return;
+    }
+    let parsedData;
+    try {
+      parsedData = JSON.parse(importJsonText);
+    } catch (e) {
+      addToast('Error de sintaxis en el archivo JSON', 'danger');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const res = await api.post('/products/import-json', {
+        data: parsedData,
+        update_existing: importUpdateExisting
+      });
+      addToast(res.message || 'Catálogo importado exitosamente', 'success');
+      setIsImportModalOpen(false);
+      fetchData();
+    } catch (err) {
+      addToast(err.message || 'Error al importar catálogo', 'danger');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const getTaxLabel = (rate) => {
     const num = parseFloat(rate);
     if (!num || num === 0) return 'Exento (0%)';
@@ -308,15 +482,28 @@ export const ProductsPage = () => {
           </button>
         </div>
 
-        <Button
-          size="sm"
-          variant="primary"
-          onClick={activeTab === 'productos' ? handleOpenNewProduct : handleOpenNewCategory}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-        >
-          <Plus size={15} />
-          Nuevo {activeTab === 'productos' ? 'Producto' : 'Categoría'}
-        </Button>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleOpenImportModal}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            title="Importar productos y categorías desde un archivo .json"
+          >
+            <FileJson size={15} color="var(--accent-primary)" />
+            Importar JSON
+          </Button>
+
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={activeTab === 'productos' ? handleOpenNewProduct : handleOpenNewCategory}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Plus size={15} />
+            Nuevo {activeTab === 'productos' ? 'Producto' : 'Categoría'}
+          </Button>
+        </div>
       </div>
 
       {/* Search & Filters */}
@@ -373,6 +560,7 @@ export const ProductsPage = () => {
                 <th style={{ padding: '8px 10px', width: '60px' }}>Foto</th>
                 <th style={{ padding: '8px 10px' }}>Nombre</th>
                 {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>Categoría</th>}
+                {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>U. Medida</th>}
                 {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>Costo</th>}
                 {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>Precio Venta</th>}
                 {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>Margen</th>}
@@ -386,14 +574,14 @@ export const ProductsPage = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="10" style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
+                  <td colSpan="11" style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
                     Cargando catálogo...
                   </td>
                 </tr>
               ) : activeTab === 'productos' ? (
                 filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
+                    <td colSpan="11" style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
                       No se encontraron productos registrados.
                     </td>
                   </tr>
@@ -423,6 +611,21 @@ export const ProductsPage = () => {
                           {prod.sku && <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>SKU: {prod.sku}</div>}
                         </td>
                         <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{prod.category_name || 'Sin categoría'}</td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '2px 8px',
+                            background: 'var(--bg-secondary)',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border-color)',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: 'var(--text-secondary)',
+                            textTransform: 'capitalize'
+                          }}>
+                            {prod.unit_of_measure || 'unidad'}
+                          </span>
+                        </td>
                         <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{formatCOP(cost)}</td>
                         <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--accent-primary)' }}>{formatCOP(priceVal)}</td>
                         <td style={{ padding: '8px 10px' }}>
@@ -764,6 +967,168 @@ export const ProductsPage = () => {
               </Button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* MODAL: IMPORTACIÓN MASIVA JSON */}
+      {isImportModalOpen && (
+        <Modal
+          isOpen={isImportModalOpen}
+          onClose={() => !importing && setIsImportModalOpen(false)}
+          title="Importación Masiva de Productos y Categorías (.json)"
+          maxWidth="700px"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '4px 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FileJson size={16} color="var(--accent-primary)" /> Estructura JSON Oficial
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Puedes cargar un archivo <code>.json</code> o pegar el código directamente.
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                icon={<Download size={13} />}
+                onClick={handleDownloadSampleJson}
+              >
+                Descargar Plantilla de Ejemplo (.json)
+              </Button>
+            </div>
+
+            {/* Input de archivo */}
+            <div style={{ border: '2px dashed var(--border-color)', borderRadius: '8px', padding: '16px', textAlign: 'center', background: 'var(--bg-primary)' }}>
+              <input
+                type="file"
+                ref={jsonFileInputRef}
+                accept=".json,application/json"
+                onChange={handleJsonFileUpload}
+                style={{ display: 'none' }}
+              />
+              <Upload size={24} style={{ color: 'var(--accent-primary)', marginBottom: '8px' }} />
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                Selecciona tu archivo JSON de productos
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                Formatos compatibles: Objeto con <code>categories</code> y <code>products</code> o Lista plana de productos.
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => jsonFileInputRef.current?.click()}
+              >
+                Examinar Archivo .json
+              </Button>
+            </div>
+
+            {/* Editor / Textarea JSON */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Contenido JSON (Pegar o editar):
+                </label>
+                {importJsonText && (
+                  <button
+                    type="button"
+                    onClick={() => { setImportJsonText(''); setImportValidation(null); }}
+                    style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+              <textarea
+                value={importJsonText}
+                onChange={(e) => handleJsonTextChange(e.target.value)}
+                placeholder='{\n  "categories": [\n    { "name": "Bebidas", "sort_order": 1 }\n  ],\n  "products": [\n    { "name": "Limonada Natural", "category_name": "Bebidas", "price": 8000 }\n  ]\n}'
+                rows={9}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  background: 'var(--bg-primary)',
+                  border: `1px solid ${importValidation ? (importValidation.isValid ? '#10b981' : '#ef4444') : 'var(--border-color)'}`,
+                  borderRadius: '6px',
+                  color: 'var(--text-primary)',
+                  resize: 'vertical',
+                  lineHeight: '1.4'
+                }}
+              />
+            </div>
+
+            {/* Validador en vivo */}
+            {importValidation && (
+              <div style={{
+                padding: '10px 12px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: importValidation.isValid ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                border: `1px solid ${importValidation.isValid ? '#10b981' : '#ef4444'}`,
+                color: importValidation.isValid ? '#10b981' : '#ef4444'
+              }}>
+                {importValidation.isValid ? (
+                  <>
+                    <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
+                    <div>
+                      <strong>JSON Válido:</strong> Se detectaron <strong>{importValidation.prodCount}</strong> productos y <strong>{importValidation.catCount}</strong> categorías listas para procesar.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                    <div>
+                      <strong>Error en JSON:</strong> {importValidation.error}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Opciones */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: '6px' }}>
+              <input
+                type="checkbox"
+                id="update-existing-chk"
+                checked={importUpdateExisting}
+                onChange={(e) => setImportUpdateExisting(e.target.checked)}
+                style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+              />
+              <label htmlFor="update-existing-chk" style={{ fontSize: '12px', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 500 }}>
+                Actualizar precios y detalles si el producto ya existe (coincidencia por SKU o Nombre).
+              </label>
+            </div>
+
+            {/* Botones de acción */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={importing}
+                onClick={() => setIsImportModalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                loading={importing}
+                disabled={!importValidation || !importValidation.isValid}
+                onClick={handleExecuteImport}
+                icon={<Upload size={14} />}
+              >
+                {importing ? 'Importando Catálogo...' : 'Procesar e Importar al Catálogo'}
+              </Button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

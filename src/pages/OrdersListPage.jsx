@@ -16,7 +16,7 @@ import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
-import { api, formatCOP } from '../api/client';
+import { api, formatCOP, formatDateTime, formatDate } from '../api/client';
 import { useUiStore } from '../store/uiStore';
 import { useAuth } from '../hooks/useAuth';
 import { useSocket } from '../hooks/useSocket';
@@ -107,7 +107,7 @@ const CustomerSearchSelector = ({
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px'
             }}
           >
-            <UserPlus size={11} /> + Nuevo Cliente
+            <UserPlus size={11} /> Nuevo Cliente
           </button>
         </div>
       </div>
@@ -1692,22 +1692,22 @@ export const OrdersListPage = () => {
   const getOrderTypeBadge = (order) => {
     if (order.order_type === 'delivery') {
       return (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#06b6d4', fontWeight: 700 }}>
-          <Bike size={14} /> Domicilio
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: 'var(--text-primary)', fontWeight: 600 }}>
+          <Bike size={14} color="var(--text-muted)" /> Domicilio
         </span>
       );
     }
     if (order.order_type === 'para_llevar') {
       return (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#8b5cf6', fontWeight: 700 }}>
-          <ShoppingBag size={14} /> Para Llevar
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: 'var(--text-primary)', fontWeight: 600 }}>
+          <ShoppingBag size={14} color="var(--text-muted)" /> Para Llevar
         </span>
       );
     }
     const cleanTable = (order.table_number || '').toString().replace(/^mesa\s*/i, '').trim();
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#10b981', fontWeight: 700 }}>
-        <UtensilsCrossed size={14} /> {cleanTable ? `Mesa ${cleanTable}` : 'Mesa'}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: 'var(--text-primary)', fontWeight: 600 }}>
+        <UtensilsCrossed size={14} color="var(--text-muted)" /> {cleanTable ? `Mesa ${cleanTable}` : 'Mesa'}
       </span>
     );
   };
@@ -1731,7 +1731,7 @@ export const OrdersListPage = () => {
             Actualizar
           </Button>
           <Button variant="primary" icon={<Plus size={16} />} onClick={handleOpenNewOrder}>
-            + Nueva Orden
+            Nueva Orden
           </Button>
         </div>
       </div>
@@ -2097,12 +2097,12 @@ export const OrdersListPage = () => {
                       {/* Código Factura */}
                       <td style={{ padding: '12px 14px' }}>
                         {o.invoice_number ? (
-                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px', color: '#10b981' }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '12px', color: 'var(--text-primary)' }}>
                             {o.invoice_number}
                           </span>
                         ) : (
-                          <span style={{ fontSize: '10.5px', color: '#f59e0b' }}>
-                            ⏳ Sin Facturar
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            —
                           </span>
                         )}
                       </td>
@@ -2171,10 +2171,10 @@ export const OrdersListPage = () => {
                       <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ fontSize: '11.5px', color: 'var(--text-primary)', fontWeight: 600 }}>
-                            {new Date(o.created_at || Date.now()).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {formatDate(o.created_at)}
                           </span>
                           <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                            {new Date(o.created_at || Date.now()).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                            {formatDateTime(o.created_at).split(',')[1]?.trim() || ''}
                           </span>
                         </div>
                       </td>
@@ -4114,7 +4114,7 @@ export const OrdersListPage = () => {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px', margin: '2.5px 0', color: '#000' }}>
                   <span>Fecha:</span>
-                  <span>{new Date(generatedInvoice.created_at || Date.now()).toLocaleString('es-CO')}</span>
+                  <span>{formatDateTime(generatedInvoice.created_at || Date.now())}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px', margin: '2.5px 0', color: '#000' }}>
                   <span>Cajero:</span>
@@ -4225,7 +4225,7 @@ export const OrdersListPage = () => {
                   {effSettings.receipt_footer || '¡Gracias por su compra! Vuelva pronto.'}
                 </div>
                 <div style={{ textAlign: 'center', fontSize: paperWidth === '58mm' ? '10px' : '11px', color: '#000', marginTop: '2px', fontStyle: 'italic' }}>
-                  Software POS GastrosPOS ERP v1.0
+                  Proveedor del software: KAMIA by JF
                 </div>
               </div>
             );

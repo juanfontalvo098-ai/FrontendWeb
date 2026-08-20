@@ -68,6 +68,7 @@ export const useAuthStore = create((set, get) => ({
 
     set({ user: data.user, token, activeBranchId, isAuthenticated: true });
     initSocket();
+    return data.user;
   },
 
   switchBranch: async (branchId) => {
