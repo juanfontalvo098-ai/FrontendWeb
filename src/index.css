@@ -1,4 +1,8 @@
 /* === BRAND BOOK EXPRESS: JF POS DESIGN SYSTEM === */
+html {
+  font-size: 14px; /* Escala global compacta y elegante */
+}
+
 :root {
   /* Fondo / Superficies (Slate 900, Slate 800, Slate 700) */
   --bg-primary: #0F172A;
@@ -28,39 +32,39 @@
   
   /* Bordes y radios */
   --border-color: rgba(148, 163, 184, 0.15);
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
   
   /* Transiciones */
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
   
-  /* Tipografía */
+  /* Tipografía compacta */
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-heading: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
 
-  --font-xs: 0.75rem;
-  --font-sm: 0.875rem;
-  --font-base: 1rem;
-  --font-lg: 1.125rem;
-  --font-xl: 1.25rem;
-  --font-2xl: 1.5rem;
-  --font-3xl: 2rem;
-  --font-4xl: 2.5rem;
+  --font-xs: 0.72rem;
+  --font-sm: 0.82rem;
+  --font-base: 0.92rem;
+  --font-lg: 1.05rem;
+  --font-xl: 1.2rem;
+  --font-2xl: 1.4rem;
+  --font-3xl: 1.75rem;
+  --font-4xl: 2.1rem;
   
-  /* Espaciado */
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.25rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-10: 2.5rem;
-  --space-12: 3rem;
+  /* Espaciado compacto */
+  --space-1: 0.2rem;
+  --space-2: 0.4rem;
+  --space-3: 0.6rem;
+  --space-4: 0.85rem;
+  --space-5: 1.1rem;
+  --space-6: 1.3rem;
+  --space-8: 1.6rem;
+  --space-10: 2rem;
+  --space-12: 2.5rem;
 }
 
 /* === RESET Y ESTILOS BASE === */
@@ -74,7 +78,7 @@ body {
   font-family: var(--font-family);
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  line-height: 1.5;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -90,15 +94,15 @@ a {
 
 /* Scrollbar personalizado */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: var(--bg-primary);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--bg-elevated);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
@@ -114,7 +118,7 @@ a {
 }
 
 .sidebar {
-  width: 260px;
+  width: 240px;
   background-color: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -132,19 +136,19 @@ a {
 }
 
 .header {
-  height: 64px;
+  height: 52px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
-  padding: 0 var(--space-6);
+  padding: 0 var(--space-4);
   justify-content: space-between;
 }
 
 .page-content {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-6);
+  padding: var(--space-4);
 }
 
 /* Glassmorphism Card */
@@ -159,7 +163,7 @@ a {
 }
 .card-glass:hover {
   border-color: rgba(148, 163, 184, 0.3);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
 }
 
 /* Modals */
@@ -181,7 +185,7 @@ a {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   width: 90%;
-  max-width: 500px;
+  max-width: 520px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -190,7 +194,7 @@ a {
 }
 
 .modal-header {
-  padding: var(--space-4) var(--space-6);
+  padding: var(--space-3) var(--space-5);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
@@ -198,27 +202,27 @@ a {
 }
 
 .modal-body {
-  padding: var(--space-6);
+  padding: var(--space-4) var(--space-5);
   overflow-y: auto;
 }
 
 .modal-footer {
-  padding: var(--space-4) var(--space-6);
+  padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 /* Forms */
 .input, .select, .textarea {
   width: 100%;
-  padding: 0.625rem 1rem;
+  padding: 0.45rem 0.75rem;
   background-color: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: var(--font-base);
+  font-size: var(--font-sm);
   font-family: var(--font-body);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -235,9 +239,10 @@ a {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: 0.625rem 1.25rem;
+  padding: 0.45rem 0.9rem;
   border-radius: var(--radius-md);
   font-weight: 600;
+  font-size: var(--font-sm);
   cursor: pointer;
   border: 1px solid transparent;
   transition: all var(--transition-fast);

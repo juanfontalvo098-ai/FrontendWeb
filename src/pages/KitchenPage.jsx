@@ -1,12 +1,13 @@
 // src/pages/KitchenPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle, ArrowLeft, Utensils } from 'lucide-react';
+import { Clock, CheckCircle, ArrowLeft, Utensils, Printer } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { api } from '../api/client';
 import { getSocket } from '../api/socket';
 import { useUiStore } from '../store/uiStore';
+import { printKitchenTicket } from '../utils/printUtils';
 
 // Sonido de timbre usando Web Audio API (no requiere archivo externo)
 const playBellSound = () => {
@@ -173,10 +174,32 @@ export const KitchenPage = () => {
             
             return (
               <Card key={order.id} style={{ borderTop: `6px solid ${color}`, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-4)' }}>
                   <div>
-                    <h2 style={{ margin: 0, fontSize: 'var(--font-xl)', fontWeight: 800 }}>{order.table_number || `Mesa ${order.table_id}`}</h2>
-                    <span style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>Atendido por: {order.waiter_name || 'Mesero'}</span>
+                    {order.order_type === 'delivery' ? (
+                      <div>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#06b6d4', color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 900, marginBottom: '4px' }}>
+                          DOMICILIO
+                        </div>
+                        <h2 style={{ margin: 0, fontSize: 'var(--font-xl)', fontWeight: 900, color: 'var(--text-primary)' }}>
+                          Orden #{order.id} {order.customer_name ? `— ${order.customer_name}` : ''}
+                        </h2>
+                      </div>
+                    ) : order.order_type === 'para_llevar' ? (
+                      <div>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#8b5cf6', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 900, marginBottom: '4px' }}>
+                          PARA LLEVAR
+                        </div>
+                        <h2 style={{ margin: 0, fontSize: 'var(--font-xl)', fontWeight: 900, color: 'var(--text-primary)' }}>
+                          Orden #{order.id} {order.customer_name ? `— ${order.customer_name}` : ''}
+                        </h2>
+                      </div>
+                    ) : (
+                      <h2 style={{ margin: 0, fontSize: 'var(--font-xl)', fontWeight: 900 }}>
+                        Mesa {order.table_number || order.table_id || `#${order.id}`}
+                      </h2>
+                    )}
+                    <span style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>Atendido por: {order.waiter_name || 'Personal'}</span>
                   </div>
                   
                   {/* Cronómetro en Tiempo Real Segundo a Segundo */}
@@ -215,13 +238,23 @@ export const KitchenPage = () => {
                   </ul>
                 </div>
 
-                <div style={{ marginTop: 'var(--space-6)', display: 'flex', gap: 'var(--space-2)' }}>
+                <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: '8px' }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Printer size={15} />}
+                    onClick={() => printKitchenTicket(order, order.items || [], {}, '80mm')}
+                    style={{ flexShrink: 0 }}
+                    title="Imprimir Comanda Térmica"
+                  >
+                    Imprimir
+                  </Button>
                   {order.status === 'enviado_cocina' ? (
-                    <Button variant="primary" style={{ width: '100%', padding: '12px', fontSize: '15px', fontWeight: 700 }} onClick={() => handleUpdateStatus(order.id, 'en_preparacion')}>
+                    <Button variant="primary" style={{ width: '100%', padding: '10px', fontSize: '14px', fontWeight: 700 }} onClick={() => handleUpdateStatus(order.id, 'en_preparacion')}>
                       Iniciar Preparación
                     </Button>
                   ) : (
-                    <Button variant="success" style={{ width: '100%', padding: '12px', fontSize: '15px', fontWeight: 700, background: 'var(--accent-primary)', color: 'white' }} onClick={() => handleUpdateStatus(order.id, 'lista')} icon={<CheckCircle size={20} />}>
+                    <Button variant="success" style={{ width: '100%', padding: '10px', fontSize: '14px', fontWeight: 700, background: 'var(--accent-primary)', color: 'white' }} onClick={() => handleUpdateStatus(order.id, 'lista')} icon={<CheckCircle size={18} />}>
                       Marcar Como Listo
                     </Button>
                   )}

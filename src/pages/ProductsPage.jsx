@@ -1,6 +1,9 @@
 // src/pages/ProductsPage.jsx
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Upload, Image as ImageIcon } from 'lucide-react';
+import {
+  Plus, Edit2, Trash2, Upload, Image as ImageIcon,
+  Layers, Package, Search, DollarSign, Barcode, Tag
+} from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
@@ -12,24 +15,40 @@ import { useUiStore } from '../store/uiStore';
 export const ProductsPage = () => {
   const addToast = useUiStore((state) => state.addToast);
 
-  const [activeTab, setActiveTab] = useState('productos');
+  const [activeTab, setActiveTab] = useState('productos'); // 'productos' | 'categorias'
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
 
+  // Modales
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
 
   // Form states para producto
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
+  const [costPrice, setCostPrice] = useState('0');
+  const [sku, setSku] = useState('');
+  const [barcode, setBarcode] = useState('');
+  const [unitOfMeasure, setUnitOfMeasure] = useState('unidad');
+  const [trackInventory, setTrackInventory] = useState(true);
+  const [minStock, setMinStock] = useState('5');
   const [taxRate, setTaxRate] = useState('0'); // '0', '0.08', '0.19'
   const [taxIncluded, setTaxIncluded] = useState(1);
   const [categoryId, setCategoryId] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+
+  // Form states para categoría
+  const [catName, setCatName] = useState('');
+  const [catDescription, setCatDescription] = useState('');
+  const [catSortOrder, setCatSortOrder] = useState('0');
+
   const [submitting, setSubmitting] = useState(false);
 
   const fetchData = async () => {
@@ -39,13 +58,14 @@ export const ProductsPage = () => {
         api.get('/products'),
         api.get('/categories')
       ]);
-      setProducts(prods);
-      setCategories(cats);
-      if (cats.length > 0 && !categoryId) {
+      setProducts(prods || []);
+      setCategories(cats || []);
+      if (cats && cats.length > 0 && !categoryId) {
         setCategoryId(cats[0].id.toString());
       }
     } catch (err) {
       console.error('Error al cargar catálogo:', err);
+      addToast('Error al cargar catálogo de productos', 'danger');
     } finally {
       setLoading(false);
     }
@@ -55,10 +75,17 @@ export const ProductsPage = () => {
     fetchData();
   }, []);
 
+  // --- PRODUCTOS ---
   const handleOpenNewProduct = () => {
-    setEditingItem(null);
+    setEditingProduct(null);
     setName('');
     setPrice('');
+    setCostPrice('0');
+    setSku('');
+    setBarcode('');
+    setUnitOfMeasure('unidad');
+    setTrackInventory(true);
+    setMinStock('5');
     setTaxRate('0');
     setTaxIncluded(1);
     setDescription('');
@@ -68,14 +95,20 @@ export const ProductsPage = () => {
   };
 
   const handleOpenEditProduct = (prod) => {
-    setEditingItem(prod);
+    setEditingProduct(prod);
     setName(prod.name);
     setPrice(Math.round(parseFloat(prod.price || 0)).toString());
+    setCostPrice(parseFloat(prod.cost_price || 0).toString());
+    setSku(prod.sku || '');
+    setBarcode(prod.barcode || '');
+    setUnitOfMeasure(prod.unit_of_measure || 'unidad');
+    setTrackInventory(Boolean(prod.track_inventory));
+    setMinStock(parseFloat(prod.min_stock || 5).toString());
     setTaxRate(parseFloat(prod.tax_rate ?? 0).toString());
-    setTaxIncluded(prod.tax_included ?? 1);
+    setTaxIncluded(prod.tax_included ? 1 : 0);
     setDescription(prod.description || '');
     setImageUrl(prod.image_url || '');
-    setCategoryId(prod.category_id.toString());
+    setCategoryId(prod.category_id ? prod.category_id.toString() : (categories[0]?.id?.toString() || ''));
     setIsProductModalOpen(true);
   };
 
@@ -91,7 +124,7 @@ export const ProductsPage = () => {
           base64: reader.result
         });
         setImageUrl(res.url);
-        addToast('Imagen subida al servidor exitosamente', 'success');
+        addToast('Imagen subida con éxito', 'success');
       } catch (err) {
         addToast('Error al subir la imagen del producto', 'danger');
       } finally {
@@ -101,16 +134,23 @@ export const ProductsPage = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleSaveProduct = async () => {
-    if (!name || !price || !categoryId) {
-      addToast('Nombre, precio y categoría son requeridos', 'warning');
+  const handleSaveProduct = async (e) => {
+    if (e) e.preventDefault();
+    if (!name.trim() || !price || !categoryId) {
+      addToast('Nombre, precio y categoría son obligatorios', 'warning');
       return;
     }
     setSubmitting(true);
     try {
       const payload = {
-        name,
+        name: name.trim(),
         price: parseFloat(price),
+        cost_price: parseFloat(costPrice) || 0,
+        sku: sku || undefined,
+        barcode: barcode || undefined,
+        unit_of_measure: unitOfMeasure || 'unidad',
+        track_inventory: Boolean(trackInventory),
+        min_stock: parseFloat(minStock) || 0,
         tax_rate: parseFloat(taxRate),
         tax_included: Boolean(parseInt(taxIncluded, 10)),
         category_id: parseInt(categoryId, 10),
@@ -118,12 +158,12 @@ export const ProductsPage = () => {
         image_url: imageUrl || undefined
       };
 
-      if (editingItem) {
-        await api.put(`/products/${editingItem.id}`, payload);
-        addToast('Producto actualizado', 'success');
+      if (editingProduct) {
+        await api.put(`/products/${editingProduct.id}`, payload);
+        addToast('Producto actualizado exitosamente', 'success');
       } else {
         await api.post('/products', payload);
-        addToast('Producto creado', 'success');
+        addToast('Producto creado exitosamente', 'success');
       }
       setIsProductModalOpen(false);
       fetchData();
@@ -134,215 +174,598 @@ export const ProductsPage = () => {
     }
   };
 
-  const handleDeleteProduct = async (id) => {
-    if (!window.confirm('¿Seguro que deseas eliminar este producto?')) return;
+  const handleDeleteProduct = async (prod, displayIndex) => {
+    if (!window.confirm(`¿Seguro que deseas eliminar el producto #${displayIndex} "${prod.name}"?`)) return;
     try {
-      await api.delete(`/products/${id}`);
-      addToast('Producto eliminado', 'info');
+      await api.delete(`/products/${prod.id}`);
+      addToast(`Producto #${displayIndex} eliminado`, 'info');
       fetchData();
     } catch (err) {
       addToast('Error al eliminar producto', 'danger');
     }
   };
 
-  const handleSaveCategory = async () => {
-    if (!name) {
+  // --- CATEGORÍAS ---
+  const handleOpenNewCategory = () => {
+    setEditingCategory(null);
+    setCatName('');
+    setCatDescription('');
+    setCatSortOrder(categories.length.toString());
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleOpenEditCategory = (cat) => {
+    setEditingCategory(cat);
+    setCatName(cat.name);
+    setCatDescription(cat.description || '');
+    setCatSortOrder((cat.sort_order || 0).toString());
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleSaveCategory = async (e) => {
+    if (e) e.preventDefault();
+    if (!catName.trim()) {
       addToast('El nombre de la categoría es obligatorio', 'warning');
       return;
     }
     setSubmitting(true);
     try {
-      await api.post('/categories', { name, description: description || undefined });
-      addToast('Categoría creada', 'success');
+      const payload = {
+        name: catName.trim(),
+        description: catDescription || undefined,
+        sort_order: parseInt(catSortOrder, 10) || 0
+      };
+
+      if (editingCategory) {
+        await api.put(`/categories/${editingCategory.id}`, payload);
+        addToast('Categoría actualizada exitosamente', 'success');
+      } else {
+        await api.post('/categories', payload);
+        addToast('Categoría creada exitosamente', 'success');
+      }
       setIsCategoryModalOpen(false);
-      setName('');
-      setDescription('');
       fetchData();
     } catch (err) {
-      addToast('Error al crear categoría', 'danger');
+      addToast(err.message || 'Error al guardar categoría', 'danger');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const getTaxLabel = (rate) => {
-    if (!rate || rate === 0) return 'Exento (0%)';
-    if (rate === 0.08) return 'Impoconsumo (8%)';
-    if (rate === 0.19) return 'IVA (19%)';
-    return `${(rate * 100).toFixed(0)}%`;
+  const handleDeleteCategory = async (cat, displayIndex) => {
+    if (!window.confirm(`¿Seguro que deseas eliminar la categoría #${displayIndex} "${cat.name}"?`)) return;
+    try {
+      await api.delete(`/categories/${cat.id}`);
+      addToast(`Categoría #${displayIndex} eliminada`, 'info');
+      fetchData();
+    } catch (err) {
+      addToast(err.message || 'Error al eliminar categoría', 'danger');
+    }
   };
 
-  if (loading) {
-    return <div style={{ padding: 'var(--space-6)', textAlign: 'center' }}>Cargando catálogo...</div>;
-  }
+  const getTaxLabel = (rate) => {
+    const num = parseFloat(rate);
+    if (!num || num === 0) return 'Exento (0%)';
+    if (num === 0.08) return 'Impoconsumo (8%)';
+    if (num === 0.19) return 'IVA (19%)';
+    return `${(num * 100).toFixed(0)}%`;
+  };
+
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (p.barcode && p.barcode.includes(searchTerm));
+    const matchesCategory = categoryFilter ? p.category_id?.toString() === categoryFilter : true;
+    return matchesSearch && matchesCategory;
+  });
+
+  const filteredCategories = categories.filter(c =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-        <button 
-          onClick={() => setActiveTab('productos')}
-          style={{ padding: '8px 16px', background: activeTab === 'productos' ? 'var(--bg-elevated)' : 'transparent', border: 'none', color: activeTab === 'productos' ? 'var(--text-primary)' : 'var(--text-secondary)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600 }}
+    <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+      {/* Header Tabs */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button
+            onClick={() => { setActiveTab('productos'); setSearchTerm(''); }}
+            style={{
+              padding: '6px 14px',
+              background: activeTab === 'productos' ? 'var(--bg-elevated)' : 'transparent',
+              border: activeTab === 'productos' ? '1px solid var(--accent-secondary)' : '1px solid transparent',
+              color: activeTab === 'productos' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: 'var(--font-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Package size={15} color={activeTab === 'productos' ? 'var(--accent-secondary)' : 'inherit'} />
+            Catálogo de Productos ({products.length})
+          </button>
+          <button
+            onClick={() => { setActiveTab('categorias'); setSearchTerm(''); }}
+            style={{
+              padding: '6px 14px',
+              background: activeTab === 'categorias' ? 'var(--bg-elevated)' : 'transparent',
+              border: activeTab === 'categorias' ? '1px solid var(--accent-secondary)' : '1px solid transparent',
+              color: activeTab === 'categorias' ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              fontWeight: 700,
+              fontSize: 'var(--font-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Layers size={15} color={activeTab === 'categorias' ? 'var(--accent-secondary)' : 'inherit'} />
+            Categorías ({categories.length})
+          </button>
+        </div>
+
+        <Button
+          size="sm"
+          variant="primary"
+          onClick={activeTab === 'productos' ? handleOpenNewProduct : handleOpenNewCategory}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          Productos ({products.length})
-        </button>
-        <button 
-          onClick={() => setActiveTab('categorias')}
-          style={{ padding: '8px 16px', background: activeTab === 'categorias' ? 'var(--bg-elevated)' : 'transparent', border: 'none', color: activeTab === 'categorias' ? 'var(--text-primary)' : 'var(--text-secondary)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600 }}
-        >
-          Categorías ({categories.length})
-        </button>
+          <Plus size={15} />
+          Nuevo {activeTab === 'productos' ? 'Producto' : 'Categoría'}
+        </Button>
       </div>
 
-      <Card header={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{activeTab === 'productos' ? 'Lista de Productos' : 'Lista de Categorías'}</span>
-          <Button size="sm" icon={<Plus size={16} />} onClick={activeTab === 'productos' ? handleOpenNewProduct : () => { setName(''); setDescription(''); setIsCategoryModalOpen(true); }}>
-            Nuevo {activeTab === 'productos' ? 'Producto' : 'Categoría'}
-          </Button>
+      {/* Search & Filters */}
+      <Card style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: activeTab === 'productos' ? '2fr 1fr' : '1fr', gap: 'var(--space-3)' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder={activeTab === 'productos' ? 'Buscar productos por nombre, SKU o código de barras...' : 'Buscar categorías...'}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '7px 10px 7px 32px',
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
+                fontSize: 'var(--font-xs)'
+              }}
+            />
+          </div>
+
+          {activeTab === 'productos' && (
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              style={{
+                padding: '7px 10px',
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
+                fontSize: 'var(--font-xs)'
+              }}
+            >
+              <option value="">Todas las categorías ({categories.length})</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
         </div>
-      }>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}>
-              <th style={{ padding: '12px 8px' }}>Imagen</th>
-              <th style={{ padding: '12px 8px' }}>Nombre</th>
-              {activeTab === 'productos' && <th style={{ padding: '12px 8px' }}>Categoría</th>}
-              {activeTab === 'productos' && <th style={{ padding: '12px 8px' }}>Precio</th>}
-              {activeTab === 'productos' && <th style={{ padding: '12px 8px' }}>Impuesto</th>}
-              <th style={{ padding: '12px 8px' }}>Estado</th>
-              <th style={{ padding: '12px 8px', textAlign: 'right' }}>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {activeTab === 'productos' ? (
-              products.map((prod) => (
-                <tr key={prod.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ padding: '12px 8px' }}>
-                    {prod.image_url ? (
-                      <img src={prod.image_url} alt={prod.name} style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '40px', height: '40px', borderRadius: '6px', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <ImageIcon size={18} color="var(--text-muted)" />
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 8px', fontWeight: 500 }}>{prod.name}</td>
-                  <td style={{ padding: '12px 8px', color: 'var(--text-secondary)' }}>{prod.category_name || 'Sin cat.'}</td>
-                  <td style={{ padding: '12px 8px' }}>{formatCOP(prod.price)}</td>
-                  <td style={{ padding: '12px 8px' }}>
-                    <Badge variant={prod.tax_rate > 0 ? 'warning' : 'info'}>{getTaxLabel(prod.tax_rate)}</Badge>
-                  </td>
-                  <td style={{ padding: '12px 8px' }}>
-                    <Badge variant={prod.is_available ? 'success' : 'danger'}>{prod.is_available ? 'Disponible' : 'Agotado'}</Badge>
-                  </td>
-                  <td style={{ padding: '12px 8px', textAlign: 'right' }}>
-                    <button onClick={() => handleOpenEditProduct(prod)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', marginRight: '8px' }}><Edit2 size={16} /></button>
-                    <button onClick={() => handleDeleteProduct(prod.id)} style={{ background: 'none', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer' }}><Trash2 size={16} /></button>
+      </Card>
+
+      {/* Main Table */}
+      <Card style={{ overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 'var(--font-xs)' }}>
+            <thead>
+              <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                <th style={{ padding: '8px 10px', width: '50px' }}>#</th>
+                <th style={{ padding: '8px 10px', width: '60px' }}>Foto</th>
+                <th style={{ padding: '8px 10px' }}>Nombre</th>
+                {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>Categoría</th>}
+                {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>Costo</th>}
+                {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>Precio Venta</th>}
+                {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>Margen</th>}
+                {activeTab === 'productos' && <th style={{ padding: '8px 10px' }}>Impuesto</th>}
+                {activeTab === 'categorias' && <th style={{ padding: '8px 10px' }}>Descripción</th>}
+                {activeTab === 'categorias' && <th style={{ padding: '8px 10px' }}>Orden</th>}
+                <th style={{ padding: '8px 10px' }}>Estado</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right' }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan="10" style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
+                    Cargando catálogo...
                   </td>
                 </tr>
-              ))
-            ) : (
-              categories.map((cat) => (
-                <tr key={cat.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ padding: '12px 8px' }}>-</td>
-                  <td style={{ padding: '12px 8px', fontWeight: 500 }}>{cat.name}</td>
-                  <td style={{ padding: '12px 8px' }}>
-                    <Badge variant="success">Activa</Badge>
-                  </td>
-                  <td style={{ padding: '12px 8px', textAlign: 'right' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>ID #{cat.id}</span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : activeTab === 'productos' ? (
+                filteredProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan="10" style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
+                      No se encontraron productos registrados.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProducts.map((prod, index) => {
+                    const displayId = index + 1; // ID relativo correlativo del negocio (#1, #2...)
+                    const cost = parseFloat(prod.cost_price || 0);
+                    const priceVal = parseFloat(prod.price || 0);
+                    const margin = priceVal > 0 ? (((priceVal - cost) / priceVal) * 100).toFixed(0) : 0;
+
+                    return (
+                      <tr key={prod.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--accent-secondary)' }}>
+                          #{displayId}
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          {prod.image_url ? (
+                            <img src={prod.image_url} alt={prod.name} style={{ width: '34px', height: '34px', borderRadius: '4px', objectFit: 'cover' }} />
+                          ) : (
+                            <div style={{ width: '34px', height: '34px', borderRadius: '4px', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <ImageIcon size={14} color="var(--text-muted)" />
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <div style={{ fontWeight: 700 }}>{prod.name}</div>
+                          {prod.sku && <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>SKU: {prod.sku}</div>}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{prod.category_name || 'Sin categoría'}</td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{formatCOP(cost)}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--accent-primary)' }}>{formatCOP(priceVal)}</td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span style={{ fontWeight: 700, color: margin > 50 ? 'var(--accent-primary)' : 'var(--accent-warning)' }}>
+                            {margin}%
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <Badge variant={prod.tax_rate > 0 ? 'warning' : 'info'}>{getTaxLabel(prod.tax_rate)}</Badge>
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <Badge variant={prod.is_available ? 'success' : 'danger'}>{prod.is_available ? 'Disponible' : 'Agotado'}</Badge>
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                            <button
+                              onClick={() => handleOpenEditProduct(prod)}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
+                              title="Editar Producto"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProduct(prod, displayId)}
+                              style={{ background: 'none', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', padding: '4px' }}
+                              title="Eliminar Producto"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )
+              ) : (
+                filteredCategories.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}>
+                      No hay categorías registradas.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCategories.map((cat, index) => {
+                    const displayCatId = index + 1; // ID relativo correlativo del negocio (#1, #2...)
+
+                    return (
+                      <tr key={cat.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--accent-secondary)' }}>
+                          #{displayCatId}
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <div style={{ width: '34px', height: '34px', borderRadius: '4px', background: 'rgba(6, 182, 212, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Layers size={15} color="var(--accent-secondary)" />
+                          </div>
+                        </td>
+                        <td style={{ padding: '8px 10px', fontWeight: 700 }}>{cat.name}</td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-secondary)' }}>{cat.description || '-'}</td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>Posición {cat.sort_order || 0}</td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <Badge variant="success">Activa</Badge>
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                            <button
+                              onClick={() => handleOpenEditCategory(cat)}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
+                              title="Editar Categoría"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCategory(cat, displayCatId)}
+                              style={{ background: 'none', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', padding: '4px' }}
+                              title="Eliminar Categoría"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {/* Modal Producto */}
-      <Modal isOpen={isProductModalOpen} onClose={() => setIsProductModalOpen(false)} title={editingItem ? 'Editar Producto' : 'Nuevo Producto'}>
-        <div>
-          <Input label="Nombre del Producto" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Hamburguesa Especial" />
-          <Input label="Precio ($)" type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Ej. 28000" />
-          
-          <Select 
-            label="Categoría" 
-            value={categoryId} 
-            onChange={(e) => setCategoryId(e.target.value)}
-            options={categories.map(c => ({ value: c.id.toString(), label: c.name }))}
-          />
-
-          <Select 
-            label="Tipo de Impuesto (Impoconsumo / IVA / Exento)" 
-            value={taxRate} 
-            onChange={(e) => setTaxRate(e.target.value)}
-            options={[
-              { value: '0', label: 'Exento / Sin Impuesto (0%)' },
-              { value: '0.08', label: 'Impoconsumo Restaurantes (8%)' },
-              { value: '0.19', label: 'IVA General (19%)' }
-            ]}
-          />
-
-          <Select 
-            label="Modalidad del Precio" 
-            value={taxIncluded.toString()} 
-            onChange={(e) => setTaxIncluded(parseInt(e.target.value, 10))}
-            options={[
-              { value: '1', label: 'El precio ya incluye el impuesto' },
-              { value: '0', label: 'El impuesto se liquida adicional' }
-            ]}
-          />
-
-          {/* Carga de Imagen del Producto */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--text-primary)' }}>
-              Imagen del Producto (Subir archivo o pegar URL)
-            </label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={handleProductImageUpload} 
-                style={{ display: 'none' }} 
-                id="product-image-file" 
+      {isProductModalOpen && (
+        <Modal
+          isOpen={isProductModalOpen}
+          onClose={() => setIsProductModalOpen(false)}
+          title={editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
+        >
+          <form onSubmit={handleSaveProduct} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Nombre del Producto *</label>
+              <Input
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ej. Hamburguesa Doble Queso"
+                style={{ padding: '6px 8px' }}
               />
-              <Button type="button" variant="secondary" icon={<Upload size={16} />} loading={uploadingImage} onClick={() => document.getElementById('product-image-file').click()}>
-                Subir Imagen desde Equipo
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Precio de Venta ($) *</label>
+                <Input
+                  type="number"
+                  required
+                  min="0"
+                  step="50"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="Ej. 28000"
+                  style={{ padding: '6px 8px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Costo Unitario ($)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="50"
+                  value={costPrice}
+                  onChange={(e) => setCostPrice(e.target.value)}
+                  placeholder="Ej. 12000"
+                  style={{ padding: '6px 8px' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Categoría *</label>
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  style={{
+                    width: '100%', padding: '7px 8px', background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)', fontSize: 'var(--font-xs)'
+                  }}
+                >
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Unidad de Medida</label>
+                <select
+                  value={unitOfMeasure}
+                  onChange={(e) => setUnitOfMeasure(e.target.value)}
+                  style={{
+                    width: '100%', padding: '7px 8px', background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)', fontSize: 'var(--font-xs)'
+                  }}
+                >
+                  <option value="unidad">unidad</option>
+                  <option value="porción">porción</option>
+                  <option value="vaso">vaso</option>
+                  <option value="plato">plato</option>
+                  <option value="gramos">gramos</option>
+                  <option value="kg">kg</option>
+                  <option value="ml">ml</option>
+                  <option value="litro">litro</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Código SKU (Opcional)</label>
+                <Input
+                  type="text"
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value)}
+                  placeholder="HAM-001"
+                  style={{ padding: '6px 8px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Código de Barras</label>
+                <Input
+                  type="text"
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  placeholder="770123456789"
+                  style={{ padding: '6px 8px' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Impuesto</label>
+                <select
+                  value={taxRate}
+                  onChange={(e) => setTaxRate(e.target.value)}
+                  style={{
+                    width: '100%', padding: '7px 8px', background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)', fontSize: 'var(--font-xs)'
+                  }}
+                >
+                  <option value="0">Exento / Sin Impuesto (0%)</option>
+                  <option value="0.08">Impoconsumo Restaurantes (8%)</option>
+                  <option value="0.19">IVA General (19%)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Stock Mínimo Alerta</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={minStock}
+                  onChange={(e) => setMinStock(e.target.value)}
+                  placeholder="5"
+                  style={{ padding: '6px 8px' }}
+                />
+              </div>
+            </div>
+
+            {/* Imagen */}
+            <div>
+              <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Imagen del Producto</label>
+              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleProductImageUpload}
+                  style={{ display: 'none' }}
+                  id="product-image-file"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => document.getElementById('product-image-file').click()}
+                  disabled={uploadingImage}
+                  style={{ fontSize: 'var(--font-xs)', padding: '5px 10px' }}
+                >
+                  <Upload size={13} /> {uploadingImage ? 'Subiendo...' : 'Examinar Foto'}
+                </Button>
+                <Input
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://... o ruta de imagen"
+                  style={{ flex: 1, padding: '5px 8px' }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Descripción</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Ingredientes principales, preparación o notas para cocina..."
+                rows="2"
+                style={{
+                  width: '100%', padding: '6px 8px', background: 'var(--bg-primary)',
+                  border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)', fontSize: 'var(--font-xs)', resize: 'vertical'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: '4px' }}>
+              <Button type="button" variant="ghost" onClick={() => setIsProductModalOpen(false)}>Cancelar</Button>
+              <Button type="submit" variant="primary" disabled={submitting}>
+                {submitting ? 'Guardando...' : editingProduct ? 'Actualizar Producto' : 'Crear Producto'}
               </Button>
             </div>
-            <Input 
-              value={imageUrl} 
-              onChange={(e) => setImageUrl(e.target.value)} 
-              placeholder="http://localhost:3001/uploads/hamburguesa.png"
-              style={{ marginTop: '8px' }}
-            />
-            {imageUrl && (
-              <div style={{ marginTop: '8px' }}>
-                <img src={imageUrl} alt="Preview" style={{ height: '60px', borderRadius: '6px', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
-              </div>
-            )}
-          </div>
-          
-          <Input label="Descripción (opcional)" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </form>
+        </Modal>
+      )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-            <Button variant="ghost" onClick={() => setIsProductModalOpen(false)}>Cancelar</Button>
-            <Button loading={submitting} onClick={handleSaveProduct}>Guardar Producto</Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Modal Categoría (Crear y Editar) */}
+      {isCategoryModalOpen && (
+        <Modal
+          isOpen={isCategoryModalOpen}
+          onClose={() => setIsCategoryModalOpen(false)}
+          title={editingCategory ? 'Editar Categoría' : 'Nueva Categoría'}
+        >
+          <form onSubmit={handleSaveCategory} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Nombre de la Categoría *</label>
+              <Input
+                required
+                value={catName}
+                onChange={(e) => setCatName(e.target.value)}
+                placeholder="Ej. Hamburguesas Gourmet, Bebidas Frías..."
+                style={{ padding: '6px 8px' }}
+              />
+            </div>
 
-      {/* Modal Categoría */}
-      <Modal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} title="Nueva Categoría">
-        <div>
-          <Input label="Nombre de la Categoría" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Bebidas Calientes" />
-          <Input label="Descripción (opcional)" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-            <Button variant="ghost" onClick={() => setIsCategoryModalOpen(false)}>Cancelar</Button>
-            <Button loading={submitting} onClick={handleSaveCategory}>Guardar Categoría</Button>
-          </div>
-        </div>
-      </Modal>
+            <div>
+              <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Orden de Visualización (0, 1, 2...)</label>
+              <Input
+                type="number"
+                min="0"
+                value={catSortOrder}
+                onChange={(e) => setCatSortOrder(e.target.value)}
+                placeholder="0"
+                style={{ padding: '6px 8px' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 'var(--font-xs)', marginBottom: '3px', fontWeight: 600 }}>Descripción (Opcional)</label>
+              <textarea
+                value={catDescription}
+                onChange={(e) => setCatDescription(e.target.value)}
+                placeholder="Breve descripción o notas de la categoría..."
+                rows="2"
+                style={{
+                  width: '100%', padding: '6px 8px', background: 'var(--bg-primary)',
+                  border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)', fontSize: 'var(--font-xs)', resize: 'vertical'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: '4px' }}>
+              <Button type="button" variant="ghost" onClick={() => setIsCategoryModalOpen(false)}>Cancelar</Button>
+              <Button type="submit" variant="primary" disabled={submitting}>
+                {submitting ? 'Guardando...' : editingCategory ? 'Actualizar Categoría' : 'Crear Categoría'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };

@@ -71,92 +71,33 @@ export const CashPage = () => {
     const declaredCash = zData.declaredCash ?? zData.closing_amount ?? 0;
     const diff = zData.difference ?? (declaredCash - expectedCash);
 
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
+    const shiftData = {
+      id: cashId,
+      shift_name: 'Turno Principal',
+      user_name: user?.full_name || 'Cajero',
+      opened_at: openedAt,
+      closed_at: closedAt,
+      opening_amount: openingBase,
+      declared_amount: declaredCash,
+      difference: diff,
+      gross_revenue: summary.grossRevenue || 0,
+      snapshot: {
+        initialFloat: openingBase,
+        cashSales: summary.cashSales || 0,
+        cardSales: summary.cardSales || 0,
+        transferSales: summary.transferSales || 0,
+        creditSales: summary.creditSales || 0,
+        cashInflows: summary.cashInflows || summary.manualIncomes || 0,
+        cashOutflows: summary.cashOutflows || summary.manualExpenses || 0,
+        expectedCash: expectedCash,
+        totalTips: summary.totalTips || 0,
+        cashRefunds: summary.cashRefunds || 0,
+        audit: audit
+      }
+    };
 
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Informe Cierre de Caja Z - #${cashId}</title>
-          <style>
-            @page { size: 80mm auto; margin: 0mm; }
-            body {
-              margin: 0; padding: 6px;
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 12px; color: black; background: white; width: 80mm;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .dashed { border-top: 1px dashed #000; margin: 6px 0; }
-            .flex-between { display: flex; justify-content: space-between; margin: 2px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="center bold" style="font-size: 16px;">${settings?.business_name || 'GastrosPOS'}</div>
-          <div class="center">NIT: ${settings?.nit || '900.123.456-7'}</div>
-          ${settings?.address ? `<div class="center">${settings.address}</div>` : ''}
-          ${settings?.phone ? `<div class="center">Tel: ${settings.phone}</div>` : ''}
-          <div class="center bold" style="margin-top:6px; font-size:13px;">*** ARQUEO Y CIERRE DE CAJA (Z) ***</div>
-          <div class="dashed"></div>
-
-          <div class="flex-between"><span>Caja / Turno N°:</span><span class="bold">#${cashId}</span></div>
-          <div class="flex-between"><span>Responsable:</span><span>${user?.full_name || 'Cajero'}</span></div>
-          <div class="flex-between"><span>Fecha Apertura:</span><span>${openedAt}</span></div>
-          <div class="flex-between"><span>Fecha Cierre:</span><span>${closedAt}</span></div>
-          <div class="dashed"></div>
-
-          <div class="center bold">-- RESUMEN ARQUEO EFECTIVO --</div>
-          <div class="flex-between"><span>(+) Base Inicial Float:</span><span>${formatCOP(openingBase)}</span></div>
-          <div class="flex-between"><span>(+) Ventas Efectivo:</span><span>${formatCOP(summary.cashSales || 0)}</span></div>
-          <div class="flex-between"><span>(+) Ingresos Manuales:</span><span>${formatCOP(summary.cashInflows || summary.manualIncomes || 0)}</span></div>
-          <div class="flex-between"><span>(-) Egresos Manuales:</span><span>${formatCOP(summary.cashOutflows || summary.manualExpenses || 0)}</span></div>
-          <div class="dashed"></div>
-          <div class="flex-between bold" style="font-size: 13px;"><span>EFECTIVO ESPERADO:</span><span>${formatCOP(expectedCash)}</span></div>
-          <div class="flex-between bold" style="font-size: 13px;"><span>EFECTIVO CONTADO:</span><span>${formatCOP(declaredCash)}</span></div>
-          <div class="flex-between bold" style="font-size: 14px; margin-top:2px;">
-            <span>DIFERENCIA EFECTIVO:</span>
-            <span>${formatCOP(diff)}</span>
-          </div>
-          <div class="dashed"></div>
-
-          <div class="center bold">-- DESGLOSE DE INGRESOS --</div>
-          <div class="flex-between"><span>Ventas en Efectivo:</span><span>${formatCOP(summary.cashSales || 0)}</span></div>
-          <div class="flex-between"><span>Ventas con Tarjeta:</span><span>${formatCOP(summary.cardSales || 0)}</span></div>
-          <div class="flex-between"><span>Ventas Transferencia/Nequi:</span><span>${formatCOP(summary.transferSales || 0)}</span></div>
-          <div class="flex-between"><span>Ventas a Crédito (Fiado):</span><span>${formatCOP(summary.creditSales || 0)}</span></div>
-          <div class="dashed"></div>
-          <div class="flex-between bold" style="font-size: 14px;"><span>TOTAL VENTAS BRUTAS:</span><span>${formatCOP(summary.grossRevenue || 0)}</span></div>
-          <div class="dashed"></div>
-
-          <div class="center bold">-- OTROS CONCEPTOS --</div>
-          <div class="flex-between"><span>Propinas Recaudadas:</span><span>${formatCOP(summary.totalTips || 0)}</span></div>
-          <div class="flex-between"><span>Devoluciones Pagadas:</span><span>${formatCOP(summary.cashRefunds || 0)}</span></div>
-          <div class="flex-between"><span>Anulaciones (${audit.canceledOrdersCount || 0}):</span><span>${formatCOP(audit.canceledAmount || 0)}</span></div>
-          <div class="dashed"></div>
-
-          <br/><br/>
-          <div class="center">_______________________________</div>
-          <div class="center" style="margin-top:4px;">Firma Cajero / Responsable</div>
-          <br/>
-          <div class="center" style="font-size: 10px;">Comprobante de Cierre de Caja Térmico</div>
-        </body>
-      </html>
-    `);
-    doc.close();
-    iframe.contentWindow.focus();
-    setTimeout(() => {
-      iframe.contentWindow.print();
-      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 1000);
-    }, 300);
+    printShiftCloseTicket(shiftData, settings || {}, settings?.default_paper_width || '80mm');
+    addToast('Ticket de Cierre de Turno enviado a impresión', 'info');
   };
 
   const handleOpenCash = async () => {
@@ -324,17 +265,12 @@ export const CashPage = () => {
     );
   }
 
-  // Valores acumulados de caja abierta
-  let totalIngresos = 0;
-  let totalEgresos = 0;
-  if (report && report.movements) {
-    report.movements.forEach(m => {
-      if (m.type === 'ingreso' || m.type === 'venta') totalIngresos += (m.total || 0);
-      if (m.type === 'egreso' || m.type === 'retiro') totalEgresos += (m.total || 0);
-    });
-  }
-  const baseInicial = currentCash.opening_amount || 0;
-  const totalEnCaja = baseInicial + totalIngresos - totalEgresos;
+  // Valores acumulados de caja abierta (incluye ventas en efectivo + movimientos manuales)
+  const salesSummary = report?.salesSummary || {};
+  const baseInicial = parseFloat(currentCash.opening_amount || 0);
+  const totalIngresos = parseFloat(salesSummary.cashSales || 0) + parseFloat(salesSummary.cashInflows || 0);
+  const totalEgresos = parseFloat(salesSummary.cashOutflows || 0);
+  const totalEnCaja = parseFloat(salesSummary.expectedCash || 0) || (baseInicial + totalIngresos - totalEgresos);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>

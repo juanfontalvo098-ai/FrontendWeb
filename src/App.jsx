@@ -12,15 +12,31 @@ import { OrderPage } from './pages/OrderPage';
 import { KitchenPage } from './pages/KitchenPage';
 import { CashPage } from './pages/CashPage';
 import { BillingPage } from './pages/BillingPage';
+import { OrdersListPage } from './pages/OrdersListPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { UsersPage } from './pages/UsersPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { BusinessesPage } from './pages/BusinessesPage';
 
+// ERP Pages
+import { CustomersPage } from './pages/CustomersPage';
+import { SuppliersPage } from './pages/SuppliersPage';
+import { SuppliesPage } from './pages/SuppliesPage';
+import { InventoryPage } from './pages/InventoryPage';
+import { PurchaseOrdersPage } from './pages/PurchaseOrdersPage';
+import { RecipesPage } from './pages/RecipesPage';
+import { StockCountPage } from './pages/StockCountPage';
+import { DiscountsPage } from './pages/DiscountsPage';
+import { DeliveryPage } from './pages/DeliveryPage';
+import { AccountingPage } from './pages/AccountingPage';
+import { HRPage } from './pages/HRPage';
+import { AutoPrintManager } from './components/common/AutoPrintManager';
+
 function App() {
   return (
     <BrowserRouter>
+      <AutoPrintManager />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         
@@ -28,14 +44,28 @@ function App() {
         <Route element={<ProtectedRoute layout={true} />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/negocios" element={<BusinessesPage />} />
+          <Route path="/ordenes" element={<OrdersListPage />} />
           <Route path="/mesas" element={<TablesPage />} />
           <Route path="/mesas/:id/orden" element={<OrderPage />} />
           <Route path="/caja" element={<CashPage />} />
-          <Route path="/facturacion" element={<BillingPage />} />
+          <Route path="/facturacion" element={<OrdersListPage />} />
           <Route path="/reportes" element={<ReportsPage />} />
           <Route path="/productos" element={<ProductsPage />} />
           <Route path="/usuarios" element={<UsersPage />} />
           <Route path="/configuracion" element={<SettingsPage />} />
+
+          {/* Rutas ERP */}
+          <Route path="/clientes" element={<CustomersPage />} />
+          <Route path="/proveedores" element={<SuppliersPage />} />
+          <Route path="/insumos" element={<SuppliesPage />} />
+          <Route path="/inventario" element={<InventoryPage />} />
+          <Route path="/ordenes-compra" element={<PurchaseOrdersPage />} />
+          <Route path="/recetas" element={<RecipesPage />} />
+          <Route path="/conteo-stock" element={<StockCountPage />} />
+          <Route path="/descuentos" element={<DiscountsPage />} />
+          <Route path="/delivery" element={<DeliveryPage />} />
+          <Route path="/contabilidad" element={<AccountingPage />} />
+          <Route path="/rrhh" element={<HRPage />} />
         </Route>
         
         {/* Rutas sin Layout standard (ej. Cocina es full screen) */}

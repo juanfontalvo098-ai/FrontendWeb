@@ -1,6 +1,6 @@
 // src/pages/ReportsPage.jsx
 import React, { useState, useEffect } from 'react';
-import { Calendar, Download, Eye, FileSpreadsheet, RefreshCw, User, DollarSign, AlertCircle, ShoppingBag, Clock, FileText, Package, Receipt, ArrowDownRight, ArrowUpRight, Printer } from 'lucide-react';
+import { Calendar, Download, Eye, FileSpreadsheet, RefreshCw, User, DollarSign, AlertCircle, ShoppingBag, Clock, FileText, Package, Receipt, ArrowDownRight, ArrowUpRight, Printer, Boxes, TrendingUp, Sparkles, BarChart2 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
@@ -8,6 +8,7 @@ import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { api, formatCOP } from '../api/client';
 import { useUiStore } from '../store/uiStore';
+import { printShiftCloseTicket } from '../utils/printUtils';
 
 export const ReportsPage = () => {
   const addToast = useUiStore((state) => state.addToast);
@@ -25,28 +26,31 @@ export const ReportsPage = () => {
   // Modal Detalle Z-Report y Pestañas
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedShift, setSelectedShift] = useState(null);
-  const [activeModalTab, setActiveModalTab] = useState('resumen'); // 'resumen' | 'productos' | 'facturas' | 'movimientos'
+  const [suppliesUsageData, setSuppliesUsageData] = useState(null);
+  const [loadingSuppliesUsage, setLoadingSuppliesUsage] = useState(false);
+  const [activeModalTab, setActiveModalTab] = useState('resumen'); // 'resumen' | 'productos' | 'insumos' | 'facturas' | 'movimientos'
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
 
   const fetchShifts = async () => {
     try {
       setLoading(true);
-      let url = '/reports/shifts?';
-      if (startDate && endDate) url += `startDate=${startDate}&endDate=${endDate}&`;
-      if (selectedUser) url += `user_id=${selectedUser}&`;
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      if (selectedUser) params.append('user_id', selectedUser);
 
       const [shiftsData, usersData, settingsData] = await Promise.all([
-        api.get(url),
-        cashiers.length === 0 ? api.get('/users').catch(() => []) : Promise.resolve(cashiers),
+        api.get(`/reports/shifts?${params.toString()}`),
+        api.get('/users').catch(() => []),
         api.get('/settings').catch(() => null)
       ]);
 
       setShifts(shiftsData);
-      if (usersData) setCashiers(usersData);
-      if (settingsData) setSettings(settingsData);
+      setCashiers(usersData.filter(u => ['cajero', 'admin', 'gerente', 'super_admin'].includes(u.role)));
+      setSettings(settingsData);
     } catch (err) {
-      console.error('Error al cargar informes de turnos:', err);
+      console.error('Error cargando reportes:', err);
       addToast('Error al cargar historial de turnos', 'danger');
     } finally {
       setLoading(false);
@@ -55,97 +59,8 @@ export const ReportsPage = () => {
 
   const handlePrintShiftTicket = (shift) => {
     if (!shift) return;
-
-    const snapshot = shift.snapshot || {};
-    const audit = snapshot.audit || { canceledOrdersCount: 0, canceledAmount: 0 };
-
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Ticket Cierre Z - Turno #${shift.id}</title>
-          <style>
-            @page { size: 80mm auto; margin: 0mm; }
-            body {
-              margin: 0; padding: 6px;
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 12px; color: black; background: white; width: 80mm;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .dashed { border-top: 1px dashed #000; margin: 6px 0; }
-            .flex-between { display: flex; justify-content: space-between; margin: 2px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="center bold" style="font-size: 16px;">${settings?.business_name || 'GastrosPOS'}</div>
-          <div class="center">NIT: ${settings?.nit || '900.123.456-7'}</div>
-          ${settings?.address ? `<div class="center">${settings.address}</div>` : ''}
-          ${settings?.phone ? `<div class="center">Tel: ${settings.phone}</div>` : ''}
-          <div class="center bold" style="margin-top:6px; font-size:13px;">*** INFORME DE CIERRE DE TURNO (Z) ***</div>
-          <div class="dashed"></div>
-
-          <div class="flex-between"><span>Turno N°:</span><span class="bold">#${shift.id}</span></div>
-          <div class="flex-between"><span>Jornada:</span><span>${shift.shift_name}</span></div>
-          <div class="flex-between"><span>Responsable:</span><span>${shift.user_name}</span></div>
-          <div class="flex-between"><span>Apertura:</span><span>${shift.opened_at || '---'}</span></div>
-          <div class="flex-between"><span>Cierre:</span><span>${shift.closed_at}</span></div>
-          <div class="dashed"></div>
-
-          <div class="center bold">-- RESUMEN ARQUEO EFECTIVO --</div>
-          <div class="flex-between"><span>(+) Base Inicial Float:</span><span>${formatCOP(parseFloat(shift.opening_amount ?? snapshot.initialFloat ?? snapshot.openingAmount ?? 0))}</span></div>
-          <div class="flex-between"><span>(+) Ventas Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
-          <div class="flex-between"><span>(+) Ingresos Manuales:</span><span>${formatCOP(snapshot.cashInflows || snapshot.manualIncomes || 0)}</span></div>
-          <div class="flex-between"><span>(-) Egresos Manuales:</span><span>${formatCOP(snapshot.cashOutflows || snapshot.manualExpenses || 0)}</span></div>
-          <div class="dashed"></div>
-          <div class="flex-between bold" style="font-size: 13px;"><span>EFECTIVO ESPERADO:</span><span>${formatCOP(snapshot.expectedCash || 0)}</span></div>
-          <div class="flex-between bold" style="font-size: 13px;"><span>EFECTIVO CONTADO:</span><span>${formatCOP(shift.declared_amount || 0)}</span></div>
-          <div class="flex-between bold" style="font-size: 14px; margin-top:2px;">
-            <span>DIFERENCIA EFECTIVO:</span>
-            <span>${formatCOP(shift.difference || 0)}</span>
-          </div>
-          <div class="dashed"></div>
-
-          <div class="center bold">-- DESGLOSE DE VENTAS --</div>
-          <div class="flex-between"><span>Ventas en Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
-          <div class="flex-between"><span>Ventas con Tarjeta:</span><span>${formatCOP(snapshot.cardSales || 0)}</span></div>
-          <div class="flex-between"><span>Ventas Transferencia:</span><span>${formatCOP(snapshot.transferSales || 0)}</span></div>
-          <div class="flex-between"><span>Ventas a Crédito:</span><span>${formatCOP(snapshot.creditSales || 0)}</span></div>
-          <div class="dashed"></div>
-          <div class="flex-between bold" style="font-size: 14px;"><span>VENTAS BRUTAS:</span><span>${formatCOP(shift.gross_revenue || 0)}</span></div>
-          <div class="dashed"></div>
-
-          <div class="center bold">-- OTROS CONCEPTOS --</div>
-          <div class="flex-between"><span>Propinas Recaudadas:</span><span>${formatCOP(snapshot.totalTips || 0)}</span></div>
-          <div class="flex-between"><span>Devoluciones Pagadas:</span><span>${formatCOP(snapshot.cashRefunds || 0)}</span></div>
-          <div class="flex-between"><span>Anulaciones (${audit.canceledOrdersCount || 0}):</span><span>${formatCOP(audit.canceledAmount || 0)}</span></div>
-          <div class="dashed"></div>
-
-          <br/><br/>
-          <div class="center">_______________________________</div>
-          <div class="center" style="margin-top:4px;">Firma Cajero / Responsable</div>
-          <br/>
-          <div class="center" style="font-size: 10px;">Ticket de Cierre Z Histórico Térmico</div>
-        </body>
-      </html>
-    `);
-    doc.close();
-    iframe.contentWindow.focus();
-    setTimeout(() => {
-      iframe.contentWindow.print();
-      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 1000);
-    }, 300);
+    printShiftCloseTicket(shift, settings || {}, settings?.default_paper_width || '80mm');
+    addToast('Ticket de Cierre de Turno enviado a impresión', 'info');
   };
 
   useEffect(() => {
@@ -156,9 +71,14 @@ export const ReportsPage = () => {
     setLoadingDetail(true);
     setDetailModalOpen(true);
     setActiveModalTab('resumen');
+    setSuppliesUsageData(null);
     try {
-      const data = await api.get(`/reports/shifts/${shiftId}`);
-      setSelectedShift(data);
+      const [shiftData, suppliesData] = await Promise.all([
+        api.get(`/reports/shifts/${shiftId}`),
+        api.get(`/reports/shifts/${shiftId}/supplies-usage`).catch(() => null)
+      ]);
+      setSelectedShift(shiftData);
+      setSuppliesUsageData(suppliesData);
     } catch (err) {
       addToast('Error al cargar detalle del turno', 'danger');
       setDetailModalOpen(false);
@@ -232,7 +152,51 @@ export const ReportsPage = () => {
         </div>
 
         <Button size="sm" variant="ghost" icon={<RefreshCw size={16} />} onClick={fetchShifts}>Refrescar</Button>
-      </div>      {/* Tabla de Historial de Turnos */}
+      </div>
+
+      {/* KPI Cards — Resumen Global BI del Período */}
+      {(() => {
+        const totalGross = shifts.reduce((acc, s) => acc + parseFloat(s.gross_revenue || 0), 0);
+        const totalNet = shifts.reduce((acc, s) => acc + parseFloat(s.net_revenue || 0), 0);
+        const totalTips = shifts.reduce((acc, s) => acc + parseFloat(s.total_tips || 0), 0);
+        const totalDiff = shifts.reduce((acc, s) => acc + parseFloat(s.difference || 0), 0);
+        const totalTickets = shifts.reduce((acc, s) => acc + (parseInt(s.total_tickets) || 0), 0);
+        const avgTicket = totalTickets > 0 ? (totalGross / totalTickets) : 0;
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+            <Card style={{ padding: '16px', borderLeft: '4px solid var(--accent-primary)', background: 'var(--bg-elevated)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Ventas Brutas Período</div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--accent-primary)', marginTop: '4px' }}>{formatCOP(totalGross)}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>Neto: {formatCOP(totalNet)}</div>
+            </Card>
+
+            <Card style={{ padding: '16px', borderLeft: '4px solid #06b6d4', background: 'var(--bg-elevated)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Ticket Promedio / Factura</div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: '#06b6d4', marginTop: '4px' }}>{formatCOP(avgTicket)}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{totalTickets} tickets en {shifts.length} turnos</div>
+            </Card>
+
+            <Card style={{ padding: '16px', borderLeft: '4px solid #10b981', background: 'var(--bg-elevated)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Propinas Recaudadas</div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: '#10b981', marginTop: '4px' }}>{formatCOP(totalTips)}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>Destinado a personal de servicio</div>
+            </Card>
+
+            <Card style={{ padding: '16px', borderLeft: `4px solid ${totalDiff === 0 ? 'var(--accent-success)' : (totalDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)')}`, background: 'var(--bg-elevated)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>Diferencia Neta de Caja</div>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: totalDiff === 0 ? 'var(--accent-success)' : (totalDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)'), marginTop: '4px' }}>
+                {formatCOP(totalDiff)}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {totalDiff === 0 ? 'Arqueo perfecto' : (totalDiff < 0 ? 'Faltante acumulado' : 'Sobrante acumulado')}
+              </div>
+            </Card>
+          </div>
+        );
+      })()}
+
+      {/* Tabla de Historial de Turnos */}
       <Card header="Historial de Reportes de Cierre de Caja">
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -306,7 +270,7 @@ export const ReportsPage = () => {
             </div>
 
             {/* Pestañas de Navegación del Modal */}
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', flexWrap: 'wrap' }}>
               <button 
                 onClick={() => setActiveModalTab('resumen')}
                 style={{ 
@@ -328,6 +292,17 @@ export const ReportsPage = () => {
                 }}
               >
                 <Package size={15} /> Productos Vendidos ({(snapshot.itemizedSales || []).length})
+              </button>
+              <button 
+                onClick={() => setActiveModalTab('insumos')}
+                style={{ 
+                  padding: '6px 12px', borderRadius: '6px', border: 'none', 
+                  background: activeModalTab === 'insumos' ? 'var(--accent-primary)' : 'var(--bg-secondary)', 
+                  color: activeModalTab === 'insumos' ? 'white' : 'var(--text-primary)', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                  display: 'flex', alignItems: 'center', gap: '4px'
+                }}
+              >
+                <Boxes size={15} /> Insumos Usados ({suppliesUsageData?.supplies?.length || 0})
               </button>
               <button 
                 onClick={() => setActiveModalTab('facturas')}
@@ -408,6 +383,65 @@ export const ReportsPage = () => {
                             <td style={{ padding: '8px', textAlign: 'center', fontWeight: 700, color: 'var(--accent-primary)' }}>{p.quantity} unds</td>
                             <td style={{ padding: '8px', textAlign: 'right' }}>{formatCOP(p.unit_price)}</td>
                             <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>{formatCOP(p.total_sales)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {/* TAB: Insumos Consumidos en el Turno */}
+            {activeModalTab === 'insumos' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <h4 style={{ margin: 0, fontSize: '14px', color: 'var(--accent-primary)', fontWeight: 700 }}>
+                    Insumos & Materias Primas Consumidas por Recetas
+                  </h4>
+                  {suppliesUsageData && (
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                      Costo Estimado Insumos: <strong style={{ color: 'var(--accent-primary)' }}>{formatCOP(suppliesUsageData.total_supplies_cost || 0)}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ maxHeight: '290px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--bg-secondary)', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                        <th style={{ padding: '8px', textAlign: 'left' }}>Insumo / Ingrediente</th>
+                        <th style={{ padding: '8px', textAlign: 'left' }}>Categoría</th>
+                        <th style={{ padding: '8px', textAlign: 'center' }}>Consumo Total</th>
+                        <th style={{ padding: '8px', textAlign: 'right' }}>Costo Unit.</th>
+                        <th style={{ padding: '8px', textAlign: 'right' }}>Costo Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(!suppliesUsageData?.supplies || suppliesUsageData.supplies.length === 0) ? (
+                        <tr>
+                          <td colSpan="5" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            <Boxes size={24} style={{ margin: '0 auto 6px', opacity: 0.5 }} />
+                            <div>No se registraron consumos de insumos por recetas en este turno.</div>
+                            <div style={{ fontSize: '11px', marginTop: '4px' }}>(Verifica que los productos vendidos tengan recetas configuradas en el módulo de Inventario).</div>
+                          </td>
+                        </tr>
+                      ) : (
+                        suppliesUsageData.supplies.map((s, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '8px' }}>
+                              <strong style={{ color: 'var(--text-primary)' }}>{s.name}</strong>
+                              {s.used_in_products?.length > 0 && (
+                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                  Usado en: {s.used_in_products.map(p => `${p.product_name} (${p.units_sold}x)`).join(', ')}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>{s.category}</td>
+                            <td style={{ padding: '8px', textAlign: 'center', fontWeight: 800, color: '#0d9488' }}>
+                              {s.total_used.toFixed(2)} {s.unit}
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>{formatCOP(s.cost_price)}</td>
+                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: 800 }}>{formatCOP(s.total_cost)}</td>
                           </tr>
                         ))
                       )}

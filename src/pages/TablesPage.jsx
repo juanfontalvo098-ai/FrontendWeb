@@ -83,18 +83,9 @@ export const TablesPage = () => {
     }
   }, []);
 
-  // Abrir mesa directamente
-  const handleTableClick = async (table) => {
-    if (table.status === 'libre') {
-      try {
-        await api.post('/orders', { table_id: table.id, guests: 1 });
-        navigate(`/mesas/${table.id}/orden`);
-      } catch (err) {
-        addToast('Error al abrir la mesa', 'danger');
-      }
-    } else {
-      navigate(`/mesas/${table.id}/orden`);
-    }
+  // Abrir mesa directamente (sin crear orden automática hasta que se guarde o envíe a cocina)
+  const handleTableClick = (table) => {
+    navigate(`/mesas/${table.id}/orden`);
   };
 
   // CRUD Mesas Admin

@@ -9,6 +9,7 @@ import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { useUiStore } from '../store/uiStore';
 import { useAuth } from '../hooks/useAuth';
+import { printKitchenTicket, printPreFactura } from '../utils/printUtils';
 
 export const OrderPage = () => {
   const { id: tableId } = useParams();
@@ -21,7 +22,7 @@ export const OrderPage = () => {
   const [products, setProducts] = useState([]);
   const [activeCategory, setActiveCategory] = useState('Todos');
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   const [tableDetails, setTableDetails] = useState(null);
   const [currentOrder, setCurrentOrder] = useState(null);
   const [orderItems, setOrderItems] = useState([]);
@@ -61,7 +62,7 @@ export const OrderPage = () => {
       setProducts(prodsData);
       setSettings(settingsData);
       if (tableData) setTableDetails(tableData);
-
+      
       const activeOrder = ordersData.find(o => ['abierta', 'enviado_cocina', 'en_preparacion', 'lista', 'pendiente_pago'].includes(o.status));
       if (activeOrder) {
         const fullOrder = await api.get(`/orders/${activeOrder.id}`);
@@ -75,9 +76,8 @@ export const OrderPage = () => {
         }));
         setOrderItems(mappedItems);
       } else {
-        const newOrderRes = await api.post('/orders', { table_id: parseInt(tableId, 10), guests: 1 });
-        const newOrder = await api.get(`/orders/${newOrderRes.id}`);
-        setCurrentOrder(newOrder);
+        // No crear orden en la base de datos hasta que el usuario decida 'Guardar Mesa' o 'Enviar a Cocina'
+        setCurrentOrder(null);
         setOrderItems([]);
       }
     } catch (err) {
@@ -109,9 +109,20 @@ export const OrderPage = () => {
     : `Mesa ${tableId}`;
 
   const filteredProducts = products.filter(p => {
-    const matchCategory = activeCategory === 'Todos' || 
-      categories.find(c => c.id === p.category_id)?.name === activeCategory;
-    const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const prodCategory = categories.find(c => c.id === p.category_id)?.name || '';
+    const matchCategory = activeCategory === 'Todos' || prodCategory.toLowerCase() === activeCategory.toLowerCase();
+    
+    if (!searchTerm.trim()) {
+      return matchCategory;
+    }
+
+    const term = searchTerm.trim().toLowerCase();
+    const matchName = (p.name || '').toLowerCase().includes(term);
+    const matchCategoryName = prodCategory.toLowerCase().includes(term);
+    const matchSku = (p.sku || '').toLowerCase().includes(term);
+    const matchDesc = (p.description || '').toLowerCase().includes(term);
+
+    const matchSearch = matchName || matchCategoryName || matchSku || matchDesc;
     return matchCategory && matchSearch;
   });
 
@@ -142,13 +153,13 @@ export const OrderPage = () => {
     const newItems = [...orderItems];
     newItems[index].qty += delta;
     if (newItems[index].qty <= 0) {
-      if (item.dbId) {
+      if (item.dbId && currentOrder) {
         try {
           await api.delete(`/orders/${currentOrder.id}/items/${item.dbId}`);
         } catch (e) { console.error(e); }
       }
       newItems.splice(index, 1);
-    } else if (item.dbId) {
+    } else if (item.dbId && currentOrder) {
       try {
         await api.put(`/orders/${currentOrder.id}/items/${item.dbId}/quantity`, { quantity: newItems[index].qty });
       } catch (e) { console.error(e); }
@@ -188,7 +199,11 @@ export const OrderPage = () => {
   };
 
   const handleCancelOrder = async () => {
-    if (!currentOrder) return;
+    if (!currentOrder) {
+      setOrderItems([]);
+      navigate('/mesas');
+      return;
+    }
     setCanceling(true);
     try {
       await api.post(`/orders/${currentOrder.id}/cancel`, { reason: cancelReason });
@@ -208,24 +223,54 @@ export const OrderPage = () => {
 
   const subtotal = calculateSubtotal();
 
-  // Guardar la mesa sin duplicar (filtra SOLO ítems sin dbId)
+  // Guardar la mesa: verifica internamente si la mesa ya tiene orden activa y crea o añade ítems
   const handleSaveOrder = async () => {
-    if (!currentOrder || orderItems.length === 0) return;
+    if (orderItems.length === 0) {
+      addToast('Selecciona al menos un producto para guardar la mesa', 'warning');
+      return;
+    }
     setSending(true);
 
     try {
-      const unsavedItems = orderItems.filter(i => !i.dbId);
-      if (unsavedItems.length > 0) {
-        const payload = unsavedItems.map(i => ({
-          product_id: i.product.id,
-          quantity: i.qty,
-          unit_price: parseFloat(i.product.price),
-          notes: i.note || null
-        }));
-        await api.post(`/orders/${currentOrder.id}/items`, { items: payload });
+      // Verificación interna silenciosa de orden activa existente en la mesa
+      let activeOrder = currentOrder;
+      if (!activeOrder) {
+        const freshOrders = await api.get(`/orders?table_id=${tableId}`).catch(() => []);
+        const found = freshOrders.find(o => ['abierta', 'enviado_cocina', 'en_preparacion', 'lista', 'pendiente_pago'].includes(o.status));
+        if (found) {
+          activeOrder = found;
+          setCurrentOrder(found);
+        }
       }
 
-      addToast('Mesa guardada exitosamente (Comanda permanece abierta)', 'success');
+      if (!activeOrder) {
+        const payload = {
+          table_id: parseInt(tableId, 10),
+          guests: 1,
+          order_type: 'mesa',
+          items: orderItems.map(i => ({
+            product_id: i.product.id,
+            quantity: i.qty,
+            unit_price: parseFloat(i.product.price),
+            notes: i.note || null
+          }))
+        };
+        await api.post('/orders', payload);
+        addToast('Mesa guardada exitosamente (Comanda creada)', 'success');
+      } else {
+        const unsavedItems = orderItems.filter(i => !i.dbId);
+        if (unsavedItems.length > 0) {
+          const payload = unsavedItems.map(i => ({
+            product_id: i.product.id,
+            quantity: i.qty,
+            unit_price: parseFloat(i.product.price),
+            notes: i.note || null
+          }));
+          await api.post(`/orders/${activeOrder.id}/items`, { items: payload });
+        }
+        addToast('Mesa guardada exitosamente (Comanda permanece abierta)', 'success');
+      }
+
       await fetchData();
     } catch (err) {
       addToast(err.message || 'Error al guardar mesa', 'danger');
@@ -234,27 +279,58 @@ export const OrderPage = () => {
     }
   };
 
-  // Enviar a cocina sin duplicar (filtra SOLO ítems sin dbId y luego llama send-to-kitchen)
+  // Enviar a cocina: verifica internamente y crea o añade ítems disparando comandas
   const handleSendToKitchen = async () => {
-    if (!currentOrder || orderItems.length === 0) return;
+    if (orderItems.length === 0) {
+      addToast('Selecciona al menos un producto para enviar a cocina', 'warning');
+      return;
+    }
     setSending(true);
 
     try {
-      const unsavedItems = orderItems.filter(i => !i.dbId);
-      if (unsavedItems.length > 0) {
-        const payload = unsavedItems.map(i => ({
-          product_id: i.product.id,
-          quantity: i.qty,
-          unit_price: parseFloat(i.product.price),
-          notes: i.note || null
-        }));
-        await api.post(`/orders/${currentOrder.id}/items`, { items: payload });
+      // Verificación interna silenciosa de orden activa existente en la mesa
+      let activeId = currentOrder?.id;
+      if (!activeId) {
+        const freshOrders = await api.get(`/orders?table_id=${tableId}`).catch(() => []);
+        const found = freshOrders.find(o => ['abierta', 'enviado_cocina', 'en_preparacion', 'lista', 'pendiente_pago'].includes(o.status));
+        if (found) {
+          activeId = found.id;
+          setCurrentOrder(found);
+        }
       }
 
-      await api.post(`/orders/${currentOrder.id}/send-to-kitchen`);
+      if (!activeId) {
+        const payload = {
+          table_id: parseInt(tableId, 10),
+          guests: 1,
+          order_type: 'mesa',
+          items: orderItems.map(i => ({
+            product_id: i.product.id,
+            quantity: i.qty,
+            unit_price: parseFloat(i.product.price),
+            notes: i.note || null
+          })),
+          send_to_kitchen: true
+        };
+        const newOrderRes = await api.post('/orders', payload);
+        activeId = newOrderRes.id || newOrderRes.order?.id;
+      } else {
+        const unsavedItems = orderItems.filter(i => !i.dbId);
+        if (unsavedItems.length > 0) {
+          const payload = unsavedItems.map(i => ({
+            product_id: i.product.id,
+            quantity: i.qty,
+            unit_price: parseFloat(i.product.price),
+            notes: i.note || null
+          }));
+          await api.post(`/orders/${activeId}/items`, { items: payload });
+        }
+        await api.post(`/orders/${activeId}/send-to-kitchen`);
+      }
+
       addToast('Orden enviada a cocina con éxito', 'success');
 
-      handlePrintKitchenTicket(orderItems);
+      handlePrintKitchenTicket(orderItems, activeId);
       await fetchData();
     } catch (err) {
       addToast(err.message || 'Error al enviar a cocina', 'danger');
@@ -263,152 +339,36 @@ export const OrderPage = () => {
     }
   };
 
-  const handlePrintKitchenTicket = (ticketItems) => {
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Comanda Cocina - ${displayTableNumber}</title>
-          <style>
-            @page { size: 80mm auto; margin: 0mm; }
-            body {
-              margin: 0; padding: 6px;
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 13px; color: black; background: white; width: 80mm;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .dashed { border-top: 1px dashed #000; margin: 6px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="center bold" style="font-size: 16px;">*** COMANDA DE COCINA ***</div>
-          <div class="center bold" style="font-size: 15px;">${displayTableNumber.toUpperCase()}</div>
-          <div class="dashed"></div>
-          <div>Orden #: ${currentOrder?.id || '---'}</div>
-          <div>Atendido por: ${currentOrder?.waiter_name || 'Mesero'}</div>
-          <div>Fecha/Hora: ${new Date().toLocaleString('es-CO')}</div>
-          <div class="dashed"></div>
-          <table style="width:100%; text-align:left;">
-            <thead>
-              <tr style="border-bottom:1px solid #000;">
-                <th>Cant</th>
-                <th>Producto / Notas</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${ticketItems.map(i => `
-                <tr>
-                  <td style="vertical-align:top; font-size:16px; font-weight:bold; padding:4px 0;">${i.qty || i.quantity}x</td>
-                  <td style="vertical-align:top; padding:4px 0;">
-                    <span style="font-size:15px; font-weight:bold;">${i.product?.name || i.name}</span>
-                    ${(i.note || i.notes) ? `<br/><span style="font-style:italic; font-weight:bold;">* NOTA: ${i.note || i.notes}</span>` : ''}
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div class="dashed"></div>
-          <div class="center" style="font-size:11px;">(Impresión Física para Cocina - Sin Precios)</div>
-        </body>
-      </html>
-    `);
-    doc.close();
-    iframe.contentWindow.focus();
-    setTimeout(() => {
-      iframe.contentWindow.print();
-      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 1000);
-    }, 300);
+  const handlePrintKitchenTicket = (ticketItems, explicitOrderId = null) => {
+    const tableClean = displayTableNumber.replace(/^Mesa\s*/i, '');
+    printKitchenTicket(
+      {
+        id: explicitOrderId || currentOrder?.id,
+        table_number: tableClean,
+        order_type: 'mesa',
+        waiter_name: currentOrder?.waiter_name || user?.full_name || 'Personal'
+      },
+      ticketItems,
+      settings || {},
+      settings?.default_paper_width || '80mm'
+    );
+    addToast('Comanda enviada a impresión', 'info');
   };
 
   const handlePrintPreBill = () => {
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0px';
-    iframe.style.height = '0px';
-    iframe.style.border = 'none';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Pre-Factura ${displayTableNumber}</title>
-          <style>
-            @page { size: 80mm auto; margin: 0mm; }
-            body {
-              margin: 0; padding: 6px;
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 12px; color: black; background: white; width: 80mm;
-            }
-            .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .dashed { border-top: 1px dashed #000; margin: 6px 0; }
-            .flex-between { display: flex; justify-content: space-between; }
-          </style>
-        </head>
-        <body>
-          <div class="center bold" style="font-size: 16px;">${settings?.business_name || 'GastrosPOS'}</div>
-          <div class="center">NIT: ${settings?.nit || '900.123.456-7'}</div>
-          <div class="center bold" style="margin-top:4px;">*** PRE-CUENTA / PRE-FACTURA ***</div>
-          <div class="center">(Documento no fiscal)</div>
-          <div class="dashed"></div>
-          <div>Mesa: ${displayTableNumber}</div>
-          <div>Atendido por: ${currentOrder?.waiter_name || 'Mesero'}</div>
-          <div>Fecha: ${new Date().toLocaleString('es-CO')}</div>
-          <div class="dashed"></div>
-          <table style="width:100%; border-collapse:collapse;">
-            <thead>
-              <tr style="border-bottom:1px solid #000; text-align:left;">
-                <th>Cant</th>
-                <th>Producto</th>
-                <th style="text-align:right;">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${orderItems.map(i => `
-                <tr>
-                  <td style="vertical-align:top; padding:2px 0;">${i.qty}x</td>
-                  <td style="vertical-align:top; padding:2px 0;">${i.product.name}</td>
-                  <td style="vertical-align:top; padding:2px 0; text-align:right;">${formatCOP(i.product.price * i.qty)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div class="dashed"></div>
-          <div class="flex-between bold" style="font-size:14px;">
-            <span>TOTAL CONSUMO:</span>
-            <span>${formatCOP(subtotal)}</span>
-          </div>
-          <div style="font-size:10px; font-style:italic; margin-top:4px;">* Propina del 10% sugerida: ${formatCOP(subtotal * 0.1)}</div>
-          <div style="font-size:10px; font-style:italic;">* Total sugerido con propina: ${formatCOP(subtotal * 1.1)}</div>
-          <div class="dashed"></div>
-          <div class="center" style="font-size:10px;">¡Gracias por su visita!</div>
-        </body>
-      </html>
-    `);
-    doc.close();
-    iframe.contentWindow.focus();
-    setTimeout(() => {
-      iframe.contentWindow.print();
-      setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe); }, 1000);
-    }, 300);
-
+    const tableClean = displayTableNumber.replace(/^Mesa\s*/i, '');
+    printPreFactura(
+      {
+        id: currentOrder?.id,
+        table_number: tableClean,
+        order_type: 'mesa',
+        waiter_name: currentOrder?.waiter_name || user?.full_name || 'Personal'
+      },
+      orderItems,
+      settings || {},
+      settings?.default_paper_width || '80mm',
+      { itemsSubtotal: subtotal }
+    );
     addToast('Pre-factura enviada a impresión térmica', 'info');
   };
 
@@ -431,14 +391,7 @@ export const OrderPage = () => {
     }
   };
 
-  const handleBackToTables = async () => {
-    if (currentOrder && currentOrder.status === 'abierta' && !orderItems.some(i => i.dbId)) {
-      try {
-        await api.delete(`/orders/${currentOrder.id}/cleanup`);
-      } catch (e) {
-        console.error('Error al limpiar orden vacía:', e);
-      }
-    }
+  const handleBackToTables = () => {
     navigate('/mesas');
   };
 
@@ -463,6 +416,20 @@ export const OrderPage = () => {
           .products-section { display: ${mobileTab === 'menu' ? 'flex' : 'none'} !important; height: 100% !important; }
           .cart-section { display: ${mobileTab === 'cart' ? 'flex' : 'none'} !important; width: 100% !important; min-width: 100% !important; height: 100% !important; }
           .order-header-bar { margin-bottom: 14px !important; gap: 12px !important; }
+          .products-grid-container {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 8px !important;
+          }
+          .product-card-item {
+            padding: 8px !important;
+            gap: 6px !important;
+          }
+          .product-card-item h4 {
+            font-size: 13px !important;
+          }
+          .product-card-item p {
+            font-size: 13.5px !important;
+          }
         }
       `}</style>
 
@@ -478,22 +445,22 @@ export const OrderPage = () => {
 
       {/* Pestañas táctiles para móviles */}
       <div className="mobile-order-tabs" style={{ display: 'none', gap: '8px', marginBottom: '8px', flexShrink: 0 }}>
-        <button 
+        <button
           onClick={() => setMobileTab('menu')}
-          style={{ 
-            flex: 1, padding: '12px', borderRadius: '8px', border: 'none', 
-            background: mobileTab === 'menu' ? 'var(--accent-primary)' : 'var(--bg-secondary)', 
+          style={{
+            flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
+            background: mobileTab === 'menu' ? 'var(--accent-primary)' : 'var(--bg-secondary)',
             color: mobileTab === 'menu' ? 'white' : 'var(--text-primary)', fontWeight: 700, fontSize: '14px',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
           }}
         >
           <Grid size={18} /> Menú Productos
         </button>
-        <button 
+        <button
           onClick={() => setMobileTab('cart')}
-          style={{ 
-            flex: 1, padding: '12px', borderRadius: '8px', border: 'none', 
-            background: mobileTab === 'cart' ? 'var(--accent-primary)' : 'var(--bg-secondary)', 
+          style={{
+            flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
+            background: mobileTab === 'cart' ? 'var(--accent-primary)' : 'var(--bg-secondary)',
             color: mobileTab === 'cart' ? 'white' : 'var(--text-primary)', fontWeight: 700, fontSize: '14px',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
           }}
@@ -505,14 +472,14 @@ export const OrderPage = () => {
       <div className="order-layout-container" style={{ display: 'flex', gap: 'var(--space-4)', flex: 1, height: '100%', minHeight: 0, overflow: 'hidden' }}>
         {/* Catálogo de Productos (Izquierda) */}
         <div className="products-section" style={{ flex: 1.6, display: 'flex', flexDirection: 'column', gap: '8px', height: '100%', minHeight: 0, overflow: 'hidden' }}>
-          <Input 
-            icon={<Search size={20} />} 
-            placeholder="Buscar producto..." 
+          <Input
+            icon={<Search size={20} />}
+            placeholder="Buscar por producto o categoría..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ marginBottom: 0, flexShrink: 0 }}
           />
-          
+
           <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', flexShrink: 0 }}>
             <button
               onClick={() => setActiveCategory('Todos')}
@@ -542,28 +509,29 @@ export const OrderPage = () => {
           </div>
 
           {/* Grilla con tarjetas de productos */}
-          <div style={{ 
-            flex: 1, 
-            minHeight: 0, 
-            overflowY: 'auto', 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', 
-            gap: '12px', 
+          <div className="products-grid-container" style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
+            gap: '12px',
             alignContent: 'start',
             paddingRight: '4px'
           }}>
             {filteredProducts.map(product => (
-              <div 
-                key={product.id} 
-                style={{ 
-                  cursor: 'pointer', 
-                  padding: '10px', 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  gap: '8px', 
-                  touchAction: 'manipulation', 
-                  background: 'var(--bg-elevated)', 
-                  border: '1px solid var(--border-color)', 
+              <div
+                key={product.id}
+                className="product-card-item"
+                style={{
+                  cursor: 'pointer',
+                  padding: '10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  touchAction: 'manipulation',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-color)',
                   borderRadius: 'var(--radius-md)',
                   transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
                   boxShadow: '0 2px 5px rgba(0,0,0,0.15)'
@@ -573,25 +541,25 @@ export const OrderPage = () => {
                 onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.transform = 'none'; }}
               >
                 {product.image_url ? (
-                  <img 
-                    src={product.image_url} 
-                    alt={product.name} 
-                    style={{ 
-                      width: '100%', 
-                      aspectRatio: '4 / 3', 
-                      borderRadius: '6px', 
-                      objectFit: 'cover' 
-                    }} 
+                  <img
+                    src={product.image_url}
+                    alt={product.name}
+                    style={{
+                      width: '100%',
+                      aspectRatio: '4 / 3',
+                      borderRadius: '6px',
+                      objectFit: 'cover'
+                    }}
                   />
                 ) : (
-                  <div style={{ 
-                    width: '100%', 
-                    aspectRatio: '4 / 3', 
-                    borderRadius: '6px', 
-                    background: 'var(--bg-secondary)', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center' 
+                  <div style={{
+                    width: '100%',
+                    aspectRatio: '4 / 3',
+                    borderRadius: '6px',
+                    background: 'var(--bg-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}>
                     <ImageIcon size={26} color="var(--text-muted)" />
                   </div>
@@ -606,13 +574,13 @@ export const OrderPage = () => {
         </div>
 
         {/* Panel de Orden / Comanda (Derecha) */}
-        <div className="cart-section" style={{ 
-          flex: 1, 
-          display: 'flex', 
-          flexDirection: 'column', 
-          minWidth: '350px', 
-          height: '100%', 
-          minHeight: 0, 
+        <div className="cart-section" style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: '350px',
+          height: '100%',
+          minHeight: 0,
           overflow: 'hidden',
           background: 'var(--bg-elevated)',
           borderRadius: 'var(--radius-lg)',
@@ -630,14 +598,14 @@ export const OrderPage = () => {
           </div>
 
           {/* Recuadro de Ítems con Scroll Independiente */}
-          <div style={{ 
-            flex: 1, 
-            minHeight: 0, 
-            overflowY: 'auto', 
-            margin: '10px', 
-            padding: '8px', 
-            background: 'var(--bg-secondary)', 
-            borderRadius: 'var(--radius-md)', 
+          <div style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            margin: '10px',
+            padding: '8px',
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border-color)',
             display: 'flex',
             flexDirection: 'column',
@@ -673,9 +641,9 @@ export const OrderPage = () => {
                     )}
                   </div>
 
-                  <input 
-                    type="text" 
-                    placeholder="Notas (ej. sin cebolla)" 
+                  <input
+                    type="text"
+                    placeholder="Notas (ej. sin cebolla)"
                     value={item.note}
                     onChange={(e) => updateNote(idx, e.target.value)}
                     disabled={!!item.dbId && item.status !== 'pendiente'}
@@ -685,12 +653,12 @@ export const OrderPage = () => {
               ))
             )}
           </div>
-          
+
           {/* Footer de Acciones Estático con Botones aún más Grandes */}
-          <div style={{ 
-            flexShrink: 0, 
-            padding: '14px 16px', 
-            borderTop: '1px solid var(--border-color)', 
+          <div style={{
+            flexShrink: 0,
+            padding: '14px 16px',
+            borderTop: '1px solid var(--border-color)',
             background: 'var(--bg-secondary)',
             display: 'flex',
             flexDirection: 'column',
@@ -703,32 +671,32 @@ export const OrderPage = () => {
 
             {/* Fila 1: Botones de Cocina Ticket, Pre-Factura y Guardar Mesa (GRANDES Y EXTRA CÓMODOS) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-              <Button 
-                variant="ghost" 
-                size="md" 
-                icon={<Printer size={18} />} 
-                onClick={() => handlePrintKitchenTicket(orderItems)} 
-                disabled={orderItems.length === 0} 
+              <Button
+                variant="ghost"
+                size="md"
+                icon={<Printer size={18} />}
+                onClick={() => handlePrintKitchenTicket(orderItems)}
+                disabled={orderItems.length === 0}
                 style={{ padding: '12px 8px', fontSize: '14px', fontWeight: 700, minHeight: '48px' }}
               >
                 Ticket Cocina
               </Button>
-              <Button 
-                variant="ghost" 
-                size="md" 
-                icon={<FileText size={18} />} 
-                onClick={handlePrintPreBill} 
-                disabled={orderItems.length === 0} 
+              <Button
+                variant="ghost"
+                size="md"
+                icon={<FileText size={18} />}
+                onClick={handlePrintPreBill}
+                disabled={orderItems.length === 0}
                 style={{ padding: '12px 8px', fontSize: '14px', fontWeight: 700, minHeight: '48px' }}
               >
                 Pre-Factura
               </Button>
-              <Button 
-                variant="secondary" 
-                size="md" 
-                icon={<Save size={18} />} 
-                onClick={handleSaveOrder} 
-                disabled={orderItems.length === 0} 
+              <Button
+                variant="secondary"
+                size="md"
+                icon={<Save size={18} />}
+                onClick={handleSaveOrder}
+                disabled={orderItems.length === 0}
                 style={{ padding: '12px 8px', fontSize: '14px', fontWeight: 800, minHeight: '48px' }}
               >
                 Guardar Mesa
@@ -737,23 +705,23 @@ export const OrderPage = () => {
 
             {/* Fila 2: Botones de Facturar y A Cocina (MÁXIMA VISIBILIDAD Y TAMAÑO TÁCTIL) */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <Button 
-                variant="warning" 
-                size="lg" 
-                icon={<Receipt size={20} />} 
-                onClick={handleRequestBill} 
+              <Button
+                variant="warning"
+                size="lg"
+                icon={<Receipt size={20} />}
+                onClick={handleRequestBill}
                 disabled={orderItems.length === 0 || !canAccessBilling()}
                 title={!canAccessBilling() ? 'No tienes permisos para acceder a Facturación' : ''}
                 style={{ padding: '14px 16px', fontSize: '16px', fontWeight: 800, minHeight: '52px' }}
               >
                 Facturar
               </Button>
-              <Button 
-                variant="primary" 
-                size="lg" 
-                loading={sending} 
-                icon={<Send size={20} />} 
-                onClick={handleSendToKitchen} 
+              <Button
+                variant="primary"
+                size="lg"
+                loading={sending}
+                icon={<Send size={20} />}
+                onClick={handleSendToKitchen}
                 disabled={orderItems.length === 0}
                 style={{ padding: '14px 16px', fontSize: '16px', fontWeight: 800, minHeight: '52px' }}
               >
@@ -771,11 +739,11 @@ export const OrderPage = () => {
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
             Modifica el precio unitario del producto exclusivamente para esta comanda. El catálogo general conservará su precio original.
           </p>
-          <Input 
-            label="Nuevo Precio Unitario ($)" 
-            type="number" 
-            value={customPriceInput} 
-            onChange={(e) => setCustomPriceInput(e.target.value)} 
+          <Input
+            label="Nuevo Precio Unitario ($)"
+            type="number"
+            value={customPriceInput}
+            onChange={(e) => setCustomPriceInput(e.target.value)}
             style={{ fontSize: '16px' }}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
@@ -791,9 +759,9 @@ export const OrderPage = () => {
           <p style={{ fontSize: '14px', color: 'var(--accent-danger)' }}>
             ¿Estás seguro de que deseas anular esta orden? La mesa se marcará como LIBRE y la transacción quedará registrada en el informe anti-fraude.
           </p>
-          <Input 
-            label="Motivo de la Anulación (opcional)" 
-            placeholder="Ej. Cliente cambió de opinión, error de tipeo" 
+          <Input
+            label="Motivo de la Anulación (opcional)"
+            placeholder="Ej. Cliente cambió de opinión, error de tipeo"
             value={cancelReason}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ fontSize: '14px' }}
