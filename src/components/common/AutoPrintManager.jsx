@@ -38,10 +38,16 @@ export const AutoPrintManager = () => {
 
     // 1. Escuchar nuevas comandas de cocina enviadas remotamente
     const handleKitchenTicket = async (ticketData) => {
-      const settings = settingsRef.current;
+      let settings = settingsRef.current;
+      if (!settings) {
+        try {
+          settings = await api.get('/settings');
+          settingsRef.current = settings;
+        } catch (e) {}
+      }
       if (!settings) return;
 
-      const isSilentEnabled = !!settings.enable_silent_printing;
+      const isSilentEnabled = settings.enable_silent_printing !== undefined ? !!settings.enable_silent_printing : true;
       const isAutoKitchenEnabled = settings.auto_print_kitchen_tickets !== undefined ? !!settings.auto_print_kitchen_tickets : true;
 
       if (isSilentEnabled && isAutoKitchenEnabled && ticketData && ticketData.items && ticketData.items.length > 0) {
@@ -60,7 +66,7 @@ export const AutoPrintManager = () => {
           );
 
           if (res && res.success) {
-            addToast(`Comanda de ${ticketData.table_number || 'Mesa'} impresa automáticamente en Cocina`, 'info');
+            addToast(`🍳 Comanda de ${ticketData.table_number || 'Mesa'} impresa automáticamente en Cocina`, 'info');
           }
         } catch (err) {
           console.error('[AutoPrintManager] Error al auto-imprimir comanda:', err);
@@ -70,10 +76,16 @@ export const AutoPrintManager = () => {
 
     // 2. Escuchar facturas creadas remotamente
     const handleInvoiceCreated = async (invoiceData) => {
-      const settings = settingsRef.current;
+      let settings = settingsRef.current;
+      if (!settings) {
+        try {
+          settings = await api.get('/settings');
+          settingsRef.current = settings;
+        } catch (e) {}
+      }
       if (!settings) return;
 
-      const isSilentEnabled = !!settings.enable_silent_printing;
+      const isSilentEnabled = settings.enable_silent_printing !== undefined ? !!settings.enable_silent_printing : true;
       const isAutoInvoiceEnabled = !!settings.auto_print_invoices;
 
       if (isSilentEnabled && isAutoInvoiceEnabled && invoiceData) {
@@ -87,7 +99,7 @@ export const AutoPrintManager = () => {
           );
 
           if (res && res.success) {
-            addToast(`Factura ${invoiceData.invoice_number || ''} impresa automáticamente en Caja`, 'info');
+            addToast(`🧾 Factura ${invoiceData.invoice_number || ''} impresa automáticamente en Caja`, 'info');
           }
         } catch (err) {
           console.error('[AutoPrintManager] Error al auto-imprimir factura:', err);
