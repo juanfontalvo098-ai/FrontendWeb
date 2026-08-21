@@ -287,7 +287,22 @@ export const buildKitchenTicketPlainText = (orderData, itemsList = [], notes = '
     const qty = item.quantity || item.qty || 1;
     const name = (item.product?.name || item.name || 'Producto').toUpperCase();
     const itemNote = item.notes || item.note || '';
+    const rawMods = item.modifiers || item.modifiers_json;
+    let parsedMods = [];
+    if (rawMods) {
+      try {
+        parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+      } catch (e) {
+        parsedMods = Array.isArray(rawMods) ? rawMods : [];
+      }
+    }
+
     text += `${qty}x    ${name}\n`;
+    if (Array.isArray(parsedMods) && parsedMods.length > 0) {
+      parsedMods.forEach(m => {
+        text += `      + ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}\n`;
+      });
+    }
     if (itemNote) {
       text += `      * NOTA: ${itemNote}\n`;
     }
@@ -346,6 +361,23 @@ export const buildPreFacturaPlainText = (orderData, itemsList = [], settings = {
     const price = parseFloat(it.unit_price || it.price || it.product?.price || 0);
     const tot = formatCOP(price * qty).padStart(11, ' ');
     text += `${qty}x   ${name} ${tot}\n`;
+
+    const rawMods = it.modifiers || it.modifiers_json;
+    let parsedMods = [];
+    if (rawMods) {
+      try {
+        parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+      } catch (e) {
+        parsedMods = Array.isArray(rawMods) ? rawMods : [];
+      }
+    }
+    if (Array.isArray(parsedMods) && parsedMods.length > 0) {
+      parsedMods.forEach(m => {
+        const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+        const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
+        text += `      + ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}${extraStr}\n`;
+      });
+    }
   });
 
   text += line + '\n';
@@ -408,6 +440,23 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
     const name = (it.name || 'Item').substring(0, 20).padEnd(20, ' ');
     const total = formatCOP(qty * parseFloat(it.unit_price || 0)).padStart(11, ' ');
     text += `${qty}x   ${name} ${total}\n`;
+
+    const rawMods = it.modifiers || it.modifiers_json;
+    let parsedMods = [];
+    if (rawMods) {
+      try {
+        parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+      } catch (e) {
+        parsedMods = Array.isArray(rawMods) ? rawMods : [];
+      }
+    }
+    if (Array.isArray(parsedMods) && parsedMods.length > 0) {
+      parsedMods.forEach(m => {
+        const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+        const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
+        text += `      + ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}${extraStr}\n`;
+      });
+    }
   });
 
   text += line + '\n';
@@ -424,10 +473,27 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
   if (parseFloat(invoice.tax_total || 0) > 0) {
     text += `Impuestos Inc:`.padEnd(22) + `${formatCOP(invoice.tax_total)}`.padStart(16) + '\n';
   }
-  text += doubleLine + '\n';
-  text += `TOTAL PAGADO:`.padEnd(20) + `${formatCOP(invoice.total || 0)}`.padStart(18) + '\n';
-  text += `Forma de Pago: ${(invoice.payment_method || 'Efectivo').toUpperCase()}\n`;
-  text += line + '\n';
+
+  const isCredit = invoice.payment_method === 'credito' || parseFloat(invoice.credit_balance || invoice.credit_amount || 0) > 0;
+  const creditBalance = parseFloat(invoice.credit_balance !== undefined ? invoice.credit_balance : (invoice.credit_amount || (invoice.payment_method === 'credito' ? invoice.total : 0)));
+  const paidInitial = Math.max(0, parseFloat(invoice.total || 0) - creditBalance);
+
+  if (isCredit && creditBalance > 0) {
+    text += doubleLine + '\n';
+    text += '   *** DETALLE VENTA A CREDITO ***\n';
+    text += `Total Factura:`.padEnd(22) + `${formatCOP(invoice.total || 0)}`.padStart(16) + '\n';
+    text += `Abono Inicial:`.padEnd(22) + `${formatCOP(paidInitial)}`.padStart(16) + '\n';
+    text += `VALOR ADEUDADO:`.padEnd(22) + `${formatCOP(creditBalance)}`.padStart(16) + '\n';
+    if (invoice.credit_due_date) {
+      text += `Fecha Limite: ${invoice.credit_due_date}\n`;
+    }
+    text += doubleLine + '\n';
+  } else {
+    text += doubleLine + '\n';
+    text += `TOTAL PAGADO:`.padEnd(20) + `${formatCOP(invoice.total || 0)}`.padStart(18) + '\n';
+    text += `Forma de Pago: ${(invoice.payment_method || 'Efectivo').toUpperCase()}\n`;
+    text += line + '\n';
+  }
   text += `  ${mergedSettings?.receipt_footer || '¡Gracias por su compra!'}\n`;
   text += `    Software POS GastrosPOS ERP v1.0\n`;
   text += doubleLine + '\n';
@@ -489,12 +555,26 @@ export const printKitchenTicket = async (orderData, itemsList = [], settings = {
                 const qty = item.quantity || item.qty || 1;
                 const name = item.product?.name || item.name || 'Producto';
                 const itemNote = item.notes || item.note || '';
+                const rawMods = item.modifiers || item.modifiers_json;
+                let parsedMods = [];
+                if (rawMods) {
+                  try {
+                    parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+                  } catch (e) {
+                    parsedMods = Array.isArray(rawMods) ? rawMods : [];
+                  }
+                }
 
                 return `
                   <tr style="border-bottom: 1px solid #000000;">
                     <td style="font-size: ${paperWidth === '58mm' ? '14px' : '16px'}; font-weight: 900; padding: 4px 0; color: #000000;">${qty}x</td>
                     <td style="padding: 4px 0;">
                       <div style="font-size: ${paperWidth === '58mm' ? '12px' : '14px'}; font-weight: 800; color: #000000; text-transform: uppercase;">${name}</div>
+                      ${Array.isArray(parsedMods) && parsedMods.length > 0 ? `
+                        <div style="font-size: 11px; font-weight: 700; color: #000000; margin-top: 2px;">
+                          ${parsedMods.map(m => `• ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}`).join('<br/>')}
+                        </div>
+                      ` : ''}
                       ${itemNote ? `
                         <div style="font-size: 11px; font-weight: 800; border: 1px solid #000000; padding: 1px 4px; margin-top: 2px; display: inline-block; color: #000000;">
                           NOTA: ${itemNote}
@@ -611,12 +691,30 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
                 const qty = it.quantity || it.qty || 1;
                 const name = it.product?.name || it.name || 'Producto';
                 const price = parseFloat(it.unit_price || it.price || it.product?.price || 0);
+                const rawMods = it.modifiers || it.modifiers_json;
+                let parsedMods = [];
+                if (rawMods) {
+                  try {
+                    parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+                  } catch (e) {
+                    parsedMods = Array.isArray(rawMods) ? rawMods : [];
+                  }
+                }
                 return `
                   <tr style="border-bottom: 1px solid #000000;">
                     <td style="font-weight: 900; font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; padding: 2.5px 0;">${qty}x</td>
                     <td style="padding: 2.5px 0;">
                       <div style="font-weight: 800; font-size: ${paperWidth === '58mm' ? '12px' : '13.5px'}; color: #000000; text-transform: uppercase;">${name}</div>
                       <div style="font-size: ${paperWidth === '58mm' ? '11px' : '12px'}; font-weight: 400; color: #000000;">Unit: ${formatCOP(price)}</div>
+                      ${Array.isArray(parsedMods) && parsedMods.length > 0 ? `
+                        <div style="font-size: ${paperWidth === '58mm' ? '10.5px' : '11.5px'}; color: #000000; margin-top: 2px; padding-left: 4px; border-left: 2px solid #333;">
+                          ${parsedMods.map(m => {
+                            const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+                            const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
+                            return `<div>• ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}${extraStr}</div>`;
+                          }).join('')}
+                        </div>
+                      ` : ''}
                     </td>
                     <td style="text-align: right; font-weight: 900; font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; padding: 2.5px 0;">${formatCOP(price * qty)}</td>
                   </tr>
@@ -746,12 +844,30 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
                 const qty = it.quantity || 1;
                 const unitPrice = parseFloat(it.unit_price || 0);
                 const lineTotal = qty * unitPrice;
+                const rawMods = it.modifiers || it.modifiers_json;
+                let parsedMods = [];
+                if (rawMods) {
+                  try {
+                    parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+                  } catch (e) {
+                    parsedMods = Array.isArray(rawMods) ? rawMods : [];
+                  }
+                }
                 return `
                   <tr style="border-bottom: 1px solid #000000;">
                     <td style="font-weight: 900; font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; padding: 2.5px 0;">${qty}x</td>
                     <td style="padding: 2.5px 0;">
                       <div style="font-weight: 800; font-size: ${paperWidth === '58mm' ? '12px' : '13.5px'}; color: #000000; text-transform: uppercase;">${it.name || 'Ítem'}</div>
                       <div style="font-size: ${paperWidth === '58mm' ? '11px' : '12px'}; font-weight: 400; color: #000000;">Unit: ${formatCOP(unitPrice)}</div>
+                      ${Array.isArray(parsedMods) && parsedMods.length > 0 ? `
+                        <div style="font-size: ${paperWidth === '58mm' ? '10.5px' : '11.5px'}; color: #000000; margin-top: 2px; padding-left: 4px; border-left: 2px solid #333;">
+                          ${parsedMods.map(m => {
+                            const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+                            const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
+                            return `<div>• ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}${extraStr}</div>`;
+                          }).join('')}
+                        </div>
+                      ` : ''}
                     </td>
                     <td style="text-align: right; font-weight: 900; font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; padding: 2.5px 0;">${formatCOP(lineTotal)}</td>
                   </tr>
@@ -768,15 +884,49 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
           ${taxTotal > 0 ? `<div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12px'};"><span>Impuestos Incluidos:</span><span class="bold">${formatCOP(taxTotal)}</span></div>` : ''}
 
           <div class="double-line"></div>
-          <div class="flex-between bold" style="font-size: ${paperWidth === '58mm' ? '14px' : '16px'}; color: #000000;">
-            <span>TOTAL PAGADO:</span>
-            <span>${formatCOP(total)}</span>
-          </div>
+          ${(() => {
+            const isCredit = invoice.payment_method === 'credito' || parseFloat(invoice.credit_balance || invoice.credit_amount || 0) > 0;
+            const creditBalance = parseFloat(invoice.credit_balance !== undefined ? invoice.credit_balance : (invoice.credit_amount || (invoice.payment_method === 'credito' ? total : 0)));
+            const paidInitial = Math.max(0, total - creditBalance);
 
-          <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; margin-top: 3px; color: #000000;">
-            <span>Forma de Pago:</span>
-            <span class="bold" style="text-transform: capitalize;">${invoice.payment_method || 'Efectivo'}</span>
-          </div>
+            if (isCredit && creditBalance > 0) {
+              return `
+                <div style="border: 1.5px solid #000000; padding: 6px 8px; margin: 4px 0; background: #fafafa;">
+                  <div class="center bold" style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000;">*** CONDICIÓN DE PAGO: CRÉDITO ***</div>
+                  <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'}; margin-top: 4px;">
+                    <span>Total Factura:</span>
+                    <span class="bold">${formatCOP(total)}</span>
+                  </div>
+                  <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'};">
+                    <span>Abono Inicial Recibido:</span>
+                    <span class="bold">${formatCOP(paidInitial)}</span>
+                  </div>
+                  <div class="flex-between bold" style="font-size: ${paperWidth === '58mm' ? '13px' : '14.5px'}; color: #000000; margin-top: 3px; border-top: 1px dashed #000000; padding-top: 3px;">
+                    <span>VALOR ADEUDADO:</span>
+                    <span>${formatCOP(creditBalance)}</span>
+                  </div>
+                  ${invoice.credit_due_date ? `
+                    <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '10.5px' : '11.5px'}; margin-top: 2px;">
+                      <span>Fecha Límite Pago:</span>
+                      <span>${invoice.credit_due_date}</span>
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }
+
+            return `
+              <div class="flex-between bold" style="font-size: ${paperWidth === '58mm' ? '14px' : '16px'}; color: #000000;">
+                <span>TOTAL PAGADO:</span>
+                <span>${formatCOP(total)}</span>
+              </div>
+
+              <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; margin-top: 3px; color: #000000;">
+                <span>Forma de Pago:</span>
+                <span class="bold" style="text-transform: capitalize;">${invoice.payment_method || 'Efectivo'}</span>
+              </div>
+            `;
+          })()}
 
           ${invoice.notes ? `
             <div class="solid-line"></div>

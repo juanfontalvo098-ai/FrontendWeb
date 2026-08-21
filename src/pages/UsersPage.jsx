@@ -229,7 +229,7 @@ export const UsersPage = () => {
         full_name: fullName,
         role,
         is_active: isActive,
-        branch_id: branchId ? parseInt(branchId, 10) : null,
+        branch_id: branchId && branchId.trim() !== '' ? branchId.trim() : null,
         permissions: selectedPermissions,
         ...(password ? { password } : {})
       };

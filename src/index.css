@@ -108,6 +108,11 @@ a {
 }
 
 /* Scrollbar personalizado */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-hover) var(--bg-primary);
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -117,10 +122,21 @@ a {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--bg-elevated);
-  border-radius: 3px;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* Ocultar barra de scroll en elementos deslizables (pills, carruseles, chips) */
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* === ESTRUCTURA PRINCIPAL === */

@@ -260,12 +260,13 @@ export const DeliveryPage = () => {
 
   const handleSubmitAssign = async (e) => {
     e.preventDefault();
-    if (!selectedPendingOrder || !selectedDriverId) return;
+    const orderId = selectedPendingOrder.order_id || selectedPendingOrder.id;
+    if (!orderId || !selectedDriverId) return;
 
     setSubmitting(true);
     try {
       await api.post('/delivery/assign', {
-        order_id: selectedPendingOrder.id,
+        order_id: orderId,
         driver_user_id: parseInt(selectedDriverId, 10),
         delivery_zone_id: selectedZoneId ? parseInt(selectedZoneId, 10) : null
       });
@@ -329,6 +330,8 @@ export const DeliveryPage = () => {
 
   const getStatusBadge = (status) => {
     switch (status) {
+      case 'sin_asignar':
+        return <Badge variant="warning">⚠️ Sin Repartidor</Badge>;
       case 'asignado':
         return <Badge variant="warning">En Preparación / Asignado</Badge>;
       case 'en_camino':
@@ -338,7 +341,7 @@ export const DeliveryPage = () => {
       case 'cancelado':
         return <Badge variant="danger">Cancelado</Badge>;
       default:
-        return <Badge variant="default">{status}</Badge>;
+        return <Badge variant="default">{status || 'Sin Asignar'}</Badge>;
     }
   };
 
@@ -613,10 +616,10 @@ export const DeliveryPage = () => {
                 </span>
                 {[
                   { id: 'all', label: 'Todos' },
-                  { id: 'asignado', label: 'En Preparación / Asignados' },
+                  { id: 'sin_asignar', label: '⚠️ Sin Repartidor' },
+                  { id: 'asignado', label: 'En Preparación' },
                   { id: 'en_camino', label: 'En Ruta' },
-                  { id: 'entregado', label: 'Entregados' },
-                  { id: 'cancelado', label: 'Cancelados' }
+                  { id: 'entregado', label: 'Entregados' }
                 ].map(st => (
                   <button
                     key={st.id}
@@ -795,7 +798,7 @@ export const DeliveryPage = () => {
                       )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--accent-warning)', fontWeight: 600 }}>
                         <Bike size={12} />
-                        <span>Repartidor: {a.driver_name}</span>
+                        <span>Repartidor: {a.driver_name || <span style={{ color: '#f59e0b', fontWeight: 700 }}>Sin asignar aún</span>}</span>
                       </div>
                       {a.zone_name && (
                         <div style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
@@ -843,14 +846,33 @@ export const DeliveryPage = () => {
                   {/* Acciones de Entrega y Cobro */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderTop: '1px solid var(--border-color)', paddingTop: 'var(--space-2)' }}>
                     <div style={{ display: 'flex', gap: '4px' }}>
-                      {a.status === 'asignado' && (
+                      {(!a.driver_user_id || a.status === 'sin_asignar') && (
                         <Button
                           variant="primary"
-                          onClick={() => handleUpdateStatus(a.id, 'en_camino')}
-                          style={{ flex: 1, fontSize: '11px', padding: '5px 8px', background: 'var(--accent-secondary)' }}
+                          onClick={() => handleOpenAssignModal(a)}
+                          style={{ flex: 1, fontSize: '11px', padding: '5px 8px', background: 'var(--accent-primary)' }}
                         >
-                          <Navigation size={12} /> Salir a Ruta
+                          <Bike size={12} /> Asignar Repartidor
                         </Button>
+                      )}
+                      {a.status === 'asignado' && (
+                        <>
+                          <Button
+                            variant="primary"
+                            onClick={() => handleUpdateStatus(a.id, 'en_camino')}
+                            style={{ flex: 1, fontSize: '11px', padding: '5px 8px', background: 'var(--accent-secondary)' }}
+                          >
+                            <Navigation size={12} /> Salir a Ruta
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => handleOpenAssignModal(a)}
+                            title="Reasignar Repartidor"
+                            style={{ fontSize: '11px', padding: '5px 8px' }}
+                          >
+                            Reasignar
+                          </Button>
+                        </>
                       )}
                       {a.status === 'en_camino' && (
                         <Button

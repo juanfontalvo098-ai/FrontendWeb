@@ -745,21 +745,56 @@ export const BillingPage = () => {
           </div>
 
           {/* Lista de Ítems */}
-          <div style={{ maxHeight: '140px', overflowY: 'auto', marginBottom: '10px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '6px 8px' }}>
+          <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '10px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '6px 8px' }}>
             {items.length === 0 ? (
               <p style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Esta orden no contiene ítems.</p>
             ) : (
-              items.map((item, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed var(--border-color)', fontSize: '11px' }}>
-                  <div>
-                    <span style={{ fontWeight: 600 }}>{item.quantity}x {item.name}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '6px' }}>
-                      ({item.tax_rate > 0 ? `${(item.tax_rate * 100).toFixed(0)}% imp` : 'Exento'})
-                    </span>
+              items.map((item, idx) => {
+                const rawMods = item.modifiers || item.modifiers_json;
+                let parsedMods = [];
+                if (rawMods) {
+                  try {
+                    parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+                  } catch (e) {
+                    parsedMods = Array.isArray(rawMods) ? rawMods : [];
+                  }
+                }
+                return (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '4px 0', borderBottom: '1px dashed var(--border-color)', fontSize: '11px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div>
+                        <span style={{ fontWeight: 600 }}>{item.quantity}x {item.name}</span>
+                        <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '6px' }}>
+                          ({item.tax_rate > 0 ? `${(item.tax_rate * 100).toFixed(0)}% imp` : 'Exento'})
+                        </span>
+                      </div>
+                      <span style={{ fontWeight: 700 }}>{formatCOP(item.unit_price * item.quantity)}</span>
+                    </div>
+                    {Array.isArray(parsedMods) && parsedMods.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '1px' }}>
+                        {parsedMods.map((m, mIdx) => {
+                          const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+                          return (
+                            <span
+                              key={mIdx}
+                              style={{
+                                fontSize: '9.5px',
+                                background: 'var(--bg-elevated)',
+                                border: '1px solid var(--border-color)',
+                                padding: '1px 4px',
+                                borderRadius: '3px',
+                                color: 'var(--text-secondary)'
+                              }}
+                            >
+                              🍨 {m.name} {m.quantity > 1 ? `(x${m.quantity})` : ''} {extra > 0 ? `(+${formatCOP(extra)})` : ''}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <span style={{ fontWeight: 700 }}>{formatCOP(item.unit_price * item.quantity)}</span>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
@@ -1012,13 +1047,48 @@ export const BillingPage = () => {
               </div>
             </div>
 
-            <div style={{ maxHeight: '140px', overflowY: 'auto', marginBottom: '12px', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '6px 8px' }}>
-              {(selectedInvoiceDetail.items || []).map((i, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px dashed var(--border-color)', fontSize: '12px' }}>
-                  <span>{i.quantity}x {i.name}</span>
-                  <span style={{ fontWeight: 700 }}>{formatCOP(i.unit_price * i.quantity)}</span>
-                </div>
-              ))}
+            <div style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '12px', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '6px 8px' }}>
+              {(selectedInvoiceDetail.items || []).map((i, idx) => {
+                const rawMods = i.modifiers || i.modifiers_json;
+                let parsedMods = [];
+                if (rawMods) {
+                  try {
+                    parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+                  } catch (e) {
+                    parsedMods = Array.isArray(rawMods) ? rawMods : [];
+                  }
+                }
+                return (
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '3px 0', borderBottom: '1px dashed var(--border-color)', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: 600 }}>{i.quantity}x {i.name}</span>
+                      <span style={{ fontWeight: 700 }}>{formatCOP(i.unit_price * i.quantity)}</span>
+                    </div>
+                    {Array.isArray(parsedMods) && parsedMods.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '1px' }}>
+                        {parsedMods.map((m, mIdx) => {
+                          const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+                          return (
+                            <span
+                              key={mIdx}
+                              style={{
+                                fontSize: '10px',
+                                background: 'var(--bg-elevated)',
+                                border: '1px solid var(--border-color)',
+                                padding: '1px 4px',
+                                borderRadius: '3px',
+                                color: 'var(--text-secondary)'
+                              }}
+                            >
+                              🍨 {m.name} {m.quantity > 1 ? `(x${m.quantity})` : ''} {extra > 0 ? `(+${formatCOP(extra)})` : ''}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: '6px', fontSize: '12px' }}>
@@ -1173,18 +1243,38 @@ export const BillingPage = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {(generatedInvoice.items || []).map((i, idx) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #000' }}>
-                          <td style={{ verticalAlign: 'top', padding: '2.5px 0', fontWeight: 900, fontSize: paperWidth === '58mm' ? '12px' : '13px', color: '#000' }}>{i.quantity}x</td>
-                          <td style={{ verticalAlign: 'top', padding: '2.5px 0', color: '#000' }}>
-                            <div style={{ fontWeight: 800, fontSize: paperWidth === '58mm' ? '12px' : '13.5px', textTransform: 'uppercase' }}>{i.name}</div>
-                            <div style={{ fontSize: paperWidth === '58mm' ? '11px' : '12px', fontWeight: 400, color: '#000' }}>Unit: {formatCOP(i.unit_price)}</div>
-                          </td>
-                          <td style={{ verticalAlign: 'top', padding: '2.5px 0', textAlign: 'right', fontWeight: 900, fontSize: paperWidth === '58mm' ? '12px' : '13px', color: '#000' }}>
-                            {formatCOP(i.unit_price * i.quantity)}
-                          </td>
-                        </tr>
-                      ))}
+                      {(generatedInvoice.items || []).map((i, idx) => {
+                        const rawMods = i.modifiers || i.modifiers_json;
+                        let parsedMods = [];
+                        if (rawMods) {
+                          try {
+                            parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+                          } catch (e) {
+                            parsedMods = Array.isArray(rawMods) ? rawMods : [];
+                          }
+                        }
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #000' }}>
+                            <td style={{ verticalAlign: 'top', padding: '2.5px 0', fontWeight: 900, fontSize: paperWidth === '58mm' ? '12px' : '13px', color: '#000' }}>{i.quantity}x</td>
+                            <td style={{ verticalAlign: 'top', padding: '2.5px 0', color: '#000' }}>
+                              <div style={{ fontWeight: 800, fontSize: paperWidth === '58mm' ? '12px' : '13.5px', textTransform: 'uppercase' }}>{i.name}</div>
+                              <div style={{ fontSize: paperWidth === '58mm' ? '11px' : '12px', fontWeight: 400, color: '#000' }}>Unit: {formatCOP(i.unit_price)}</div>
+                              {Array.isArray(parsedMods) && parsedMods.length > 0 && (
+                                <div style={{ fontSize: paperWidth === '58mm' ? '10.5px' : '11.5px', color: '#000', marginTop: '2px', paddingLeft: '4px', borderLeft: '2px solid #333' }}>
+                                  {parsedMods.map((m, mIdx) => {
+                                    const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+                                    const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
+                                    return <div key={mIdx}>• {m.name}{m.quantity > 1 ? ` (x${m.quantity})` : ''}{extraStr}</div>;
+                                  })}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: 'top', padding: '2.5px 0', textAlign: 'right', fontWeight: 900, fontSize: paperWidth === '58mm' ? '12px' : '13px', color: '#000' }}>
+                              {formatCOP(i.unit_price * i.quantity)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
 
@@ -1219,15 +1309,54 @@ export const BillingPage = () => {
                   )}
 
                   <div style={{ borderTop: '2px solid #000', margin: '5px 0' }}></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '14px' : '16px', color: '#000' }}>
-                    <span>TOTAL PAGADO:</span>
-                    <span>{formatCOP(generatedInvoice.total)}</span>
-                  </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', marginTop: '3px', color: '#000' }}>
-                    <span>Forma de Pago:</span>
-                    <span style={{ textTransform: 'capitalize', fontWeight: 800 }}>{generatedInvoice.payment_method || 'Efectivo'}</span>
-                  </div>
+                  {(() => {
+                    const isCredit = generatedInvoice.payment_method === 'credito' || parseFloat(generatedInvoice.credit_balance || generatedInvoice.credit_amount || 0) > 0;
+                    const creditBalance = parseFloat(generatedInvoice.credit_balance !== undefined ? generatedInvoice.credit_balance : (generatedInvoice.credit_amount || (generatedInvoice.payment_method === 'credito' ? generatedInvoice.total : 0)));
+                    const paidInitial = Math.max(0, parseFloat(generatedInvoice.total || 0) - creditBalance);
+
+                    if (isCredit && creditBalance > 0) {
+                      return (
+                        <div style={{ border: '1.5px solid #000', padding: '6px 8px', margin: '4px 0', background: '#fafafa' }}>
+                          <div style={{ textAlign: 'center', fontWeight: 800, fontSize: paperWidth === '58mm' ? '12px' : '13px', color: '#000' }}>
+                            *** CONDICIÓN DE PAGO: CRÉDITO ***
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px', marginTop: '4px', color: '#000' }}>
+                            <span>Total Factura:</span>
+                            <span style={{ fontWeight: 800 }}>{formatCOP(generatedInvoice.total)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px', color: '#000' }}>
+                            <span>Abono Inicial Recibido:</span>
+                            <span style={{ fontWeight: 800 }}>{formatCOP(paidInitial)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '13px' : '14.5px', color: '#000', marginTop: '3px', borderTop: '1px dashed #000', paddingTop: '3px' }}>
+                            <span>VALOR ADEUDADO:</span>
+                            <span>{formatCOP(creditBalance)}</span>
+                          </div>
+                          {generatedInvoice.credit_due_date && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '10.5px' : '11.5px', marginTop: '2px', color: '#000' }}>
+                              <span>Fecha Límite Pago:</span>
+                              <span>{generatedInvoice.credit_due_date}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '14px' : '16px', color: '#000' }}>
+                          <span>TOTAL PAGADO:</span>
+                          <span>{formatCOP(generatedInvoice.total)}</span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', marginTop: '3px', color: '#000' }}>
+                          <span>Forma de Pago:</span>
+                          <span style={{ textTransform: 'capitalize', fontWeight: 800 }}>{generatedInvoice.payment_method || 'Efectivo'}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
 
                   {generatedInvoice.notes && (
                     <div style={{ borderTop: '1px solid #000', margin: '4px 0', paddingTop: '4px', fontSize: paperWidth === '58mm' ? '11.5px' : '12px', color: '#000' }}>

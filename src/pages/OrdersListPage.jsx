@@ -4,7 +4,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ListOrdered, UtensilsCrossed, Bike, ShoppingBag, Search, Filter,
   Plus, FileText, CheckCircle2, Clock, XCircle, DollarSign,
-  User, Phone, MapPin, Printer, CreditCard, ChevronRight, Eye,
+  User, Phone, MapPin, Printer, CreditCard, ChevronRight, ChevronLeft, Eye,
   AlertCircle, RotateCcw, Calendar, Percent, ShieldCheck, Tag,
   ArrowRight, UserPlus, Check, Sparkles, Receipt, Trash2, Send,
   HelpCircle, RefreshCw, Layers, Edit3, Save, X, Ban, Utensils,
@@ -21,6 +21,7 @@ import { useUiStore } from '../store/uiStore';
 import { useAuth } from '../hooks/useAuth';
 import { useSocket } from '../hooks/useSocket';
 import { printKitchenTicket, printPreFactura, printInvoiceReceipt, getCleanTableOrType } from '../utils/printUtils';
+import { ProductModifiersModal } from '../components/ProductModifiersModal';
 
 // =========================================================================
 // SUB-COMPONENTE: SELECTOR / BUSCADOR INTELIGENTE DE CLIENTES (PREDICTIVO)
@@ -299,6 +300,158 @@ const CustomerSearchSelector = ({
   );
 };
 
+// =========================================================================
+// SUB-COMPONENTE: BARRA DESLIZANTE DE CATEGORÍAS ELEGANTE (SIN SCROLLBAR FEA)
+// =========================================================================
+const CategoryChipsBar = ({
+  categories = [],
+  selectedCategory = 'all',
+  onSelectCategory
+}) => {
+  const scrollRef = useRef(null);
+
+  const handleScroll = (offset) => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%', maxWidth: '100%', margin: '2px 0' }}>
+      {/* Botón Scroll Izquierda */}
+      <button
+        type="button"
+        onClick={() => handleScroll(-140)}
+        aria-label="Desplazar a la izquierda"
+        style={{
+          flexShrink: 0,
+          width: '22px',
+          height: '22px',
+          borderRadius: '50%',
+          border: '1px solid var(--border-color)',
+          background: 'var(--bg-primary)',
+          color: 'var(--text-secondary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          marginRight: '4px',
+          transition: 'all 0.15s ease',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = '#fff';
+          e.currentTarget.style.borderColor = 'var(--accent-primary)';
+          e.currentTarget.style.background = 'var(--bg-elevated)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = 'var(--text-secondary)';
+          e.currentTarget.style.borderColor = 'var(--border-color)';
+          e.currentTarget.style.background = 'var(--bg-primary)';
+        }}
+      >
+        <ChevronLeft size={13} />
+      </button>
+
+      {/* Contenedor Deslizable de Pills (Sin scrollbar nativa) */}
+      <div
+        ref={scrollRef}
+        className="no-scrollbar"
+        style={{
+          display: 'flex',
+          gap: '5px',
+          overflowX: 'auto',
+          scrollBehavior: 'smooth',
+          padding: '2px 0',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          flex: 1
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => onSelectCategory('all')}
+          style={{
+            padding: '3px 10px',
+            borderRadius: '16px',
+            fontSize: '11px',
+            fontWeight: selectedCategory === 'all' ? 800 : 500,
+            border: selectedCategory === 'all' ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+            background: selectedCategory === 'all' ? 'var(--accent-primary)' : 'var(--bg-primary)',
+            color: selectedCategory === 'all' ? '#fff' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.15s ease',
+            boxShadow: selectedCategory === 'all' ? '0 2px 8px rgba(99, 102, 241, 0.35)' : 'none'
+          }}
+        >
+          Todos
+        </button>
+        {categories.map(c => {
+          const isSelected = selectedCategory === c.id.toString();
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onSelectCategory(c.id.toString())}
+              style={{
+                padding: '3px 10px',
+                borderRadius: '16px',
+                fontSize: '11px',
+                fontWeight: isSelected ? 800 : 500,
+                border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                background: isSelected ? 'var(--accent-primary)' : 'var(--bg-primary)',
+                color: isSelected ? '#fff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s ease',
+                boxShadow: isSelected ? '0 2px 8px rgba(99, 102, 241, 0.35)' : 'none'
+              }}
+            >
+              {c.name}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Botón Scroll Derecha */}
+      <button
+        type="button"
+        onClick={() => handleScroll(140)}
+        aria-label="Desplazar a la derecha"
+        style={{
+          flexShrink: 0,
+          width: '22px',
+          height: '22px',
+          borderRadius: '50%',
+          border: '1px solid var(--border-color)',
+          background: 'var(--bg-primary)',
+          color: 'var(--text-secondary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          marginLeft: '4px',
+          transition: 'all 0.15s ease',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = '#fff';
+          e.currentTarget.style.borderColor = 'var(--accent-primary)';
+          e.currentTarget.style.background = 'var(--bg-elevated)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = 'var(--text-secondary)';
+          e.currentTarget.style.borderColor = 'var(--border-color)';
+          e.currentTarget.style.background = 'var(--bg-primary)';
+        }}
+      >
+        <ChevronRight size={13} />
+      </button>
+    </div>
+  );
+};
+
 export const OrdersListPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -405,6 +558,12 @@ export const OrdersListPage = () => {
   const [editSendToKitchen, setEditSendToKitchen] = useState(true);
   const [editProductCategory, setEditProductCategory] = useState('all');
   const [editProductSearch, setEditProductSearch] = useState('');
+
+  // Modificadores / Sabores / Toppings en Edición de Orden
+  const [editModifiersModalOpen, setEditModifiersModalOpen] = useState(false);
+  const [selectedProdForModifiers, setSelectedProdForModifiers] = useState(null);
+  const [editingItemIdx, setEditingItemIdx] = useState(null);
+  const [editingInitialModifiers, setEditingInitialModifiers] = useState([]);
 
   // Modal Cancelar Orden
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -777,15 +936,27 @@ export const OrdersListPage = () => {
   };
 
   const loadEditState = (order) => {
-    setEditOrderItems((order.items || []).map(it => ({
-      id: it.id,
-      product_id: it.product_id,
-      name: it.name,
-      unit_price: parseFloat(it.unit_price),
-      quantity: parseInt(it.quantity, 10) || 1,
-      notes: it.notes || '',
-      status: it.status || 'pendiente'
-    })));
+    setEditOrderItems((order.items || []).map(it => {
+      let parsedMods = [];
+      const rawMods = it.modifiers || it.modifiers_json;
+      if (rawMods) {
+        try {
+          parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+        } catch (e) {
+          parsedMods = Array.isArray(rawMods) ? rawMods : [];
+        }
+      }
+      return {
+        id: it.id,
+        product_id: it.product_id,
+        name: it.name,
+        unit_price: parseFloat(it.unit_price),
+        quantity: parseInt(it.quantity, 10) || 1,
+        notes: it.notes || '',
+        status: it.status || 'pendiente',
+        modifiers: Array.isArray(parsedMods) ? parsedMods : []
+      };
+    }));
     setEditCustomerId(order.customer_id ? order.customer_id.toString() : '');
     setEditOrderType(order.order_type || 'para_llevar');
     setEditDeliveryAddress(order.delivery_address || '');
@@ -797,25 +968,68 @@ export const OrdersListPage = () => {
     setEditSendToKitchen(true);
   };
 
-  // Manejo de ítems en Modo Edición
+  // Manejo de ítems y modificadores en Modo Edición
   const handleEditAddProduct = (prod) => {
-    setEditOrderItems(prev => {
-      const existing = prev.find(it => it.product_id === prod.id && !it.id);
-      if (existing) {
-        return prev.map(it => it.product_id === prod.id && !it.id ? { ...it, quantity: it.quantity + 1 } : it);
-      }
-      return [
-        ...prev,
-        {
-          product_id: prod.id,
-          name: prod.name,
-          unit_price: parseFloat(prod.price),
-          quantity: 1,
-          notes: '',
-          status: 'pendiente'
+    setEditingItemIdx(null);
+    setEditingInitialModifiers([]);
+    setSelectedProdForModifiers(prod);
+    setEditModifiersModalOpen(true);
+  };
+
+  const handleOpenEditItemModifiers = (index) => {
+    const item = editOrderItems[index];
+    if (!item) return;
+    const prod = products.find(p => p.id === item.product_id) || { id: item.product_id, name: item.name, price: item.unit_price };
+    setEditingItemIdx(index);
+    setEditingInitialModifiers(item.modifiers || []);
+    setSelectedProdForModifiers(prod);
+    setEditModifiersModalOpen(true);
+  };
+
+  const handleConfirmEditModifiers = (product, selectedModifiers, finalUnitPrice) => {
+    const unitPrice = finalUnitPrice !== undefined ? finalUnitPrice : parseFloat(product.price);
+    const modString = JSON.stringify(selectedModifiers || []);
+
+    if (editingItemIdx !== null && editingItemIdx >= 0) {
+      setEditOrderItems(prev => {
+        const copy = [...prev];
+        if (copy[editingItemIdx]) {
+          copy[editingItemIdx] = {
+            ...copy[editingItemIdx],
+            unit_price: unitPrice,
+            modifiers: selectedModifiers || []
+          };
         }
-      ];
-    });
+        return copy;
+      });
+      setEditingItemIdx(null);
+      setEditingInitialModifiers([]);
+    } else {
+      setEditOrderItems(prev => {
+        const existingIndex = prev.findIndex(it =>
+          it.product_id === product.id &&
+          !it.id &&
+          JSON.stringify(it.modifiers || []) === modString
+        );
+        if (existingIndex > -1) {
+          const copy = [...prev];
+          copy[existingIndex].quantity += 1;
+          return copy;
+        }
+        return [
+          ...prev,
+          {
+            product_id: product.id,
+            name: product.name,
+            unit_price: unitPrice,
+            quantity: 1,
+            notes: '',
+            status: 'pendiente',
+            modifiers: selectedModifiers || []
+          }
+        ];
+      });
+    }
   };
 
   const handleEditItemQty = (index, delta) => {
@@ -875,7 +1089,8 @@ export const OrdersListPage = () => {
           product_id: it.product_id,
           quantity: it.quantity,
           unit_price: it.unit_price,
-          notes: it.notes || null
+          notes: it.notes || null,
+          modifiers: it.modifiers || []
         })),
         send_to_kitchen: editSendToKitchen
       };
@@ -2071,18 +2286,11 @@ export const OrdersListPage = () => {
                       <td style={{ padding: '12px 14px' }}>
                         {o.cash_shift_id || o.cash_register_id ? (
                           <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '2px 8px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            background: o.shift_status === 'abierta' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(99, 102, 241, 0.1)',
-                            color: o.shift_status === 'abierta' ? '#10b981' : 'var(--accent-primary)',
-                            border: `1px solid ${o.shift_status === 'abierta' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(99, 102, 241, 0.2)'}`
+                            fontSize: '12px',
+                            fontWeight: o.shift_status === 'abierta' ? 700 : 600,
+                            color: o.shift_status === 'abierta' ? '#10b981' : '#FFFFFF'
                           }}>
-                            <Wallet size={11} /> Turno #{o.cash_shift_id || o.cash_register_id}
+                            Turno #{o.cash_shift_id || o.cash_register_id}
                           </span>
                         ) : (
                           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>—</span>
@@ -2162,7 +2370,7 @@ export const OrdersListPage = () => {
 
                       {/* Monto Total */}
                       <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 800, color: isPaid ? '#10b981' : isCancelled ? 'var(--text-muted)' : 'var(--accent-primary)' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 800, color: isPaid ? '#10b981' : isCancelled ? 'var(--text-muted)' : '#FFFFFF' }}>
                           {formatCOP(orderTotal)}
                         </span>
                       </td>
@@ -2248,12 +2456,17 @@ export const OrdersListPage = () => {
       {/* ========================================================= */}
       {/* MODAL: DETALLE, EDICIÓN & FACTURACIÓN POS                 */}
       {/* ========================================================= */}
-      {orderModalOpen && selectedOrder && (
+      {orderModalOpen && selectedOrder && (() => {
+        const hasPendingCredit = parseFloat(selectedOrder.credit_balance || 0) > 0;
+        const isOrderClosedOrInvoiced = selectedOrder.status === 'cerrada' || !!selectedOrder.invoice_number;
+        const isSingleColumnModal = isOrderClosedOrInvoiced && !hasPendingCredit && activeOrderTab !== 'edit';
+
+        return (
         <Modal
           isOpen={orderModalOpen}
           onClose={() => setOrderModalOpen(false)}
           title={`Orden #${selectedOrder.id} — ${selectedOrder.order_type === 'delivery' ? 'Domicilio' : selectedOrder.order_type === 'para_llevar' ? 'Para Llevar' : ((selectedOrder.table_number || '').toString().replace(/^mesa\s*/i, '').trim() ? `Mesa ${(selectedOrder.table_number || '').toString().replace(/^mesa\s*/i, '').trim()}` : 'Mesa')}`}
-          maxWidth="1020px"
+          maxWidth={isSingleColumnModal ? "580px" : "960px"}
         >
           {/* Barra Superior con Pestañas y Botones de Impresión */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
@@ -2331,9 +2544,9 @@ export const OrdersListPage = () => {
 
           {/* MODO 1: FACTURACIÓN & COBRO */}
           {activeOrderTab === 'billing' || selectedOrder.status === 'cerrada' || selectedOrder.status === 'cancelada' ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isSingleColumnModal ? '1fr' : 'minmax(0, 1.2fr) minmax(0, 1fr)', gap: '16px' }}>
               {/* Columna Izquierda: Detalle de la Orden e Ítems */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0 }}>
                 {/* Cabecera Info Orden */}
                 <div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11.5px' }}>
                   <div>
@@ -2377,20 +2590,58 @@ export const OrdersListPage = () => {
                         No hay productos registrados en esta orden.
                       </div>
                     ) : (
-                      selectedOrder.items.map((it, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px dashed var(--border-color)', paddingBottom: '4px', fontSize: '12px' }}>
-                          <div>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                              <span style={{ color: 'var(--accent-primary)', fontWeight: 800 }}>{it.quantity}x</span> {it.name}
+                      selectedOrder.items.map((it, idx) => {
+                        const rawMods = it.modifiers || it.modifiers_json;
+                        let parsedMods = [];
+                        if (rawMods) {
+                          try {
+                            parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+                          } catch (e) {
+                            parsedMods = Array.isArray(rawMods) ? rawMods : [];
+                          }
+                        }
+                        return (
+                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderBottom: '1px dashed var(--border-color)', paddingBottom: '4px', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div>
+                                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                  <span style={{ color: 'var(--accent-primary)', fontWeight: 800 }}>{it.quantity}x</span> {it.name}
+                                </div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Unit: {formatCOP(it.unit_price)}</div>
+                              </div>
+                              <div style={{ fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                                {formatCOP(parseFloat(it.unit_price) * parseFloat(it.quantity))}
+                              </div>
                             </div>
-                            {it.notes && <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Nota: {it.notes}</div>}
-                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Unit: {formatCOP(it.unit_price)}</div>
+
+                            {/* Sabores y Toppings elegidos */}
+                            {Array.isArray(parsedMods) && parsedMods.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '2px' }}>
+                                {parsedMods.map((m, mIdx) => {
+                                  const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+                                  return (
+                                    <span
+                                      key={mIdx}
+                                      style={{
+                                        fontSize: '10px',
+                                        background: 'var(--bg-primary)',
+                                        border: '1px solid var(--border-color)',
+                                        padding: '1px 5px',
+                                        borderRadius: '4px',
+                                        color: 'var(--text-secondary)'
+                                      }}
+                                    >
+                                      🍨 {m.name} {m.quantity > 1 ? `(x${m.quantity})` : ''} {extra > 0 ? `(+${formatCOP(extra)})` : ''}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {it.notes && <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '1px' }}>Nota: {it.notes}</div>}
                           </div>
-                          <div style={{ fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                            {formatCOP(parseFloat(it.unit_price) * parseFloat(it.quantity))}
-                          </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -2422,6 +2673,15 @@ export const OrdersListPage = () => {
                     <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>
                       Total Facturado: {formatCOP(selectedOrder.final_total || selectedOrder.invoice_total || 0)}
                     </div>
+                  </div>
+                )}
+
+                {/* Botón Cerrar si la orden está al día y no requiere panel lateral */}
+                {isSingleColumnModal && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                    <Button variant="secondary" size="sm" onClick={() => setOrderModalOpen(false)}>
+                      Cerrar Comprobante
+                    </Button>
                   </div>
                 )}
               </div>
@@ -2893,16 +3153,27 @@ export const OrdersListPage = () => {
                       icon={<CheckCircle2 size={16} />}
                       style={{ background: '#10b981', borderColor: '#10b981', color: '#fff', fontWeight: 800 }}
                     >
-                      {paymentMethod === 'credito'
-                        ? `Emitir Factura a Crédito (${formatCOP(billingCalculations.totalSinPropina)})`
-                        : `Emitir Factura POS (${formatCOP(billingCalculations.grandTotal)})`
-                      }
+                      {(() => {
+                        if (paymentMethod === 'credito') {
+                          return `Emitir Factura a Crédito (${formatCOP(billingCalculations.totalSinPropina)})`;
+                        }
+                        if (paymentDiff.isUnderpaid) {
+                          if (recordRemainingAsCredit) {
+                            return `Emitir Factura (Recibir ${formatCOP(paymentDiff.received)} + ${formatCOP(paymentDiff.missingAmount)} Crédito)`;
+                          }
+                          return `Emitir Factura POS (Faltan ${formatCOP(paymentDiff.missingAmount)})`;
+                        }
+                        if (paymentDiff.change > 0) {
+                          return `Emitir Factura POS (${formatCOP(billingCalculations.grandTotal)} | Cambio: ${formatCOP(paymentDiff.change)})`;
+                        }
+                        return `Emitir Factura POS (${formatCOP(paymentDiff.received > 0 ? paymentDiff.received : billingCalculations.grandTotal)})`;
+                      })()}
                     </Button>
                   </div>
                 </div>
-              ) : (selectedOrder.status === 'cerrada' || selectedOrder.invoice_number) ? (
-                /* GESTIÓN DIRECTA DE SALDO & CARTERA CXC AL ABRIR LA ORDEN */
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-secondary)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              ) : hasPendingCredit ? (
+                /* GESTIÓN DIRECTA DE SALDO & CARTERA CXC (Solo visible si hay saldo pendiente > 0) */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-secondary)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)', minWidth: 0 }}>
                   <h3 style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Landmark size={16} color="var(--accent-primary)" /> Gestión de Cartera & Saldo Pendiente
                   </h3>
@@ -3195,9 +3466,9 @@ export const OrdersListPage = () => {
             /* ========================================================= */
             /* MODO 2: EDICIÓN EN VIVO DEL PEDIDO & ÍTEMS                */
             /* ========================================================= */
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 1fr)', gap: '16px' }}>
               {/* Lado Izquierdo: Catálogo de Productos y Datos Básicos de la Orden */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0 }}>
                 {/* Selector Inteligente de Cliente */}
                 <CustomerSearchSelector
                   customers={customers}
@@ -3270,66 +3541,71 @@ export const OrdersListPage = () => {
                 </div>
 
                 {/* Catálogo de Productos para Agregar Más Ítems */}
-                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>AGREGAR MÁS PRODUCTOS AL PEDIDO</span>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>
+                      AGREGAR PRODUCTOS ({filteredEditCatalogProducts.length})
+                    </span>
                     <input
                       type="text"
                       placeholder="Buscar plato o bebida..."
                       value={editProductSearch}
                       onChange={(e) => setEditProductSearch(e.target.value)}
-                      style={{ padding: '4px 8px', fontSize: '11px', width: '180px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
+                      style={{ padding: '4px 8px', fontSize: '11px', width: '160px', maxWidth: '45%', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
                     />
                   </div>
 
-                  {/* Categorías */}
-                  <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', paddingBottom: '4px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setEditProductCategory('all')}
-                      style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '10.5px', border: 'none', background: editProductCategory === 'all' ? 'var(--accent-primary)' : 'var(--bg-primary)', color: editProductCategory === 'all' ? '#fff' : 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      Todos
-                    </button>
-                    {categories.map(c => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setEditProductCategory(c.id.toString())}
-                        style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '10.5px', border: 'none', background: editProductCategory === c.id.toString() ? 'var(--accent-primary)' : 'var(--bg-primary)', color: editProductCategory === c.id.toString() ? '#fff' : 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Categorías con navegación estilizada sin barra nativa */}
+                  <CategoryChipsBar
+                    categories={categories}
+                    selectedCategory={editProductCategory}
+                    onSelectCategory={setEditProductCategory}
+                  />
 
-                  {/* Grid de Productos */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
-                    {filteredEditCatalogProducts.map(p => (
-                      <div
-                        key={p.id}
-                        onClick={() => handleEditAddProduct(p)}
-                        style={{
-                          background: 'var(--bg-primary)', padding: '6px 8px', borderRadius: '6px',
-                          border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-                          justifyContent: 'space-between', transition: 'transform 0.1s, border-color 0.1s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent-primary)'}
-                        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
-                      >
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2, marginBottom: '4px' }}>
-                          {p.name}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '11px', color: 'var(--accent-primary)', fontWeight: 800 }}>
-                            {formatCOP(p.price)}
-                          </span>
-                          <span style={{ fontSize: '10px', background: 'rgba(99, 102, 241, 0.15)', color: 'var(--accent-primary)', padding: '2px 5px', borderRadius: '4px', fontWeight: 800 }}>
-                            + Agregar
-                          </span>
-                        </div>
+                  {/* Grid de Productos Práctico (2 columnas) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px', maxHeight: '250px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '2px' }}>
+                    {filteredEditCatalogProducts.length === 0 ? (
+                      <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '24px 8px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                        No se encontraron productos disponibles.
                       </div>
-                    ))}
+                    ) : (
+                      filteredEditCatalogProducts.map(p => (
+                        <div
+                          key={p.id}
+                          onClick={() => handleEditAddProduct(p)}
+                          style={{
+                            background: 'var(--bg-primary)', padding: '7px 9px', borderRadius: '6px',
+                            border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                            justifyContent: 'space-between', gap: '5px', minHeight: '60px', transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = 'var(--border-color)';
+                            e.currentTarget.style.transform = 'none';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          <div style={{
+                            fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.25,
+                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+                          }}>
+                            {p.name}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--accent-primary)', fontWeight: 800 }}>
+                              {formatCOP(p.price)}
+                            </span>
+                            <span style={{ fontSize: '9.5px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', padding: '2px 5px', borderRadius: '4px', fontWeight: 800 }}>
+                              + Agregar
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -3360,16 +3636,61 @@ export const OrdersListPage = () => {
                             </span>
                           </div>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          {/* Sabores y Toppings configurados */}
+                          {Array.isArray(it.modifiers) && it.modifiers.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '1px' }}>
+                              {it.modifiers.map((m, mIdx) => {
+                                const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+                                return (
+                                  <span
+                                    key={mIdx}
+                                    style={{
+                                      fontSize: '9.5px',
+                                      background: 'var(--bg-secondary)',
+                                      border: '1px solid var(--border-color)',
+                                      padding: '1px 4px',
+                                      borderRadius: '3px',
+                                      color: 'var(--text-secondary)'
+                                    }}
+                                  >
+                                    🍨 {m.name} {m.quantity > 1 ? `(x${m.quantity})` : ''} {extra > 0 ? `(+${formatCOP(extra)})` : ''}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', flexWrap: 'wrap', gap: '4px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditItemModifiers(idx)}
+                              style={{
+                                background: 'rgba(139, 92, 246, 0.1)',
+                                border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                fontSize: '10px',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              title="Editar sabores y toppings de este ítem"
+                            >
+                              <Sparkles size={11} /> {Array.isArray(it.modifiers) && it.modifiers.length > 0 ? 'Editar Sabores/Toppings' : '+ Sabores/Toppings'}
+                            </button>
+
                             <input
                               type="text"
-                              placeholder="Notas (ej. sin sal)..."
+                              placeholder="Notas..."
                               value={it.notes || ''}
                               onChange={(e) => handleEditItemNotes(idx, e.target.value)}
-                              style={{ padding: '2px 6px', fontSize: '10px', width: '130px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
+                              style={{ padding: '2px 6px', fontSize: '10px', width: '100px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
                             />
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                               <button
                                 type="button"
                                 onClick={() => handleEditItemQty(idx, -1)}
@@ -3449,7 +3770,8 @@ export const OrdersListPage = () => {
             </div>
           )}
         </Modal>
-      )}
+        );
+      })()}
 
       {/* ========================================================= */}
       {/* MODAL: CANCELAR / ANULAR ORDEN                            */}
@@ -3500,7 +3822,7 @@ export const OrdersListPage = () => {
           isOpen={newOrderModalOpen}
           onClose={() => setNewOrderModalOpen(false)}
           title={newOrderStep === 1 ? "Crear Nueva Orden — Selecciona la Modalidad (Paso 1/2)" : `Nueva Orden POS (${newOrderType === 'delivery' ? 'Domicilio' : 'Para Llevar'}) — Paso 2/2`}
-          maxWidth={newOrderStep === 1 ? "660px" : "1100px"}
+          maxWidth={newOrderStep === 1 ? "580px" : "960px"}
         >
           {newOrderStep === 1 ? (
             <div style={{ padding: '20px 8px', textAlign: 'center' }}>
@@ -3621,9 +3943,9 @@ export const OrdersListPage = () => {
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.15fr) minmax(0, 1fr)', gap: '16px' }}>
                 {/* Columna Izquierda: Selección de Tipo, Cliente, Delivery y Catálogo de Productos */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0 }}>
                   {/* Selector Inteligente de Cliente con Búsqueda Predictiva */}
                   <CustomerSearchSelector
                   customers={customers}
@@ -3717,66 +4039,71 @@ export const OrdersListPage = () => {
                 )}
 
                 {/* Paso 4: Selector Visual de Productos del Menú */}
-                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>CATÁLOGO DE PRODUCTOS</span>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>
+                      CATÁLOGO DE PRODUCTOS ({filteredCatalogProducts.length})
+                    </span>
                     <input
                       type="text"
                       placeholder="Buscar plato o bebida..."
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
-                      style={{ padding: '4px 8px', fontSize: '11px', width: '180px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
+                      style={{ padding: '4px 8px', fontSize: '11px', width: '160px', maxWidth: '45%', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
                     />
                   </div>
 
-                  {/* Categorías */}
-                  <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', paddingBottom: '4px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCategory('all')}
-                      style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '10.5px', border: 'none', background: selectedCategory === 'all' ? 'var(--accent-primary)' : 'var(--bg-primary)', color: selectedCategory === 'all' ? '#fff' : 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      Todos
-                    </button>
-                    {categories.map(c => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setSelectedCategory(c.id.toString())}
-                        style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '10.5px', border: 'none', background: selectedCategory === c.id.toString() ? 'var(--accent-primary)' : 'var(--bg-primary)', color: selectedCategory === c.id.toString() ? '#fff' : 'var(--text-secondary)', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                      >
-                        {c.name}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Categorías con navegación estilizada sin barra nativa */}
+                  <CategoryChipsBar
+                    categories={categories}
+                    selectedCategory={selectedCategory}
+                    onSelectCategory={setSelectedCategory}
+                  />
 
-                  {/* Grid de Productos */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '6px', maxHeight: '190px', overflowY: 'auto' }}>
-                    {filteredCatalogProducts.map(p => (
-                      <div
-                        key={p.id}
-                        onClick={() => handleAddProductToCart(p)}
-                        style={{
-                          background: 'var(--bg-primary)', padding: '6px 8px', borderRadius: '6px',
-                          border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-                          justifyContent: 'space-between', transition: 'transform 0.1s, border-color 0.1s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent-primary)'}
-                        onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
-                      >
-                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2, marginBottom: '4px' }}>
-                          {p.name}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '11px', color: 'var(--accent-primary)', fontWeight: 800 }}>
-                            {formatCOP(p.price)}
-                          </span>
-                          <span style={{ fontSize: '10px', background: 'rgba(99, 102, 241, 0.15)', color: 'var(--accent-primary)', padding: '2px 5px', borderRadius: '4px', fontWeight: 800 }}>
-                            + Agregar
-                          </span>
-                        </div>
+                  {/* Grid de Productos Práctico (2 columnas) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '6px', maxHeight: '250px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '2px' }}>
+                    {filteredCatalogProducts.length === 0 ? (
+                      <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '24px 8px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                        No se encontraron productos en esta categoría o búsqueda.
                       </div>
-                    ))}
+                    ) : (
+                      filteredCatalogProducts.map(p => (
+                        <div
+                          key={p.id}
+                          onClick={() => handleAddProductToCart(p)}
+                          style={{
+                            background: 'var(--bg-primary)', padding: '7px 9px', borderRadius: '6px',
+                            border: '1px solid var(--border-color)', cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                            justifyContent: 'space-between', gap: '5px', minHeight: '60px', transition: 'all 0.15s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = 'var(--border-color)';
+                            e.currentTarget.style.transform = 'none';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          <div style={{
+                            fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.25,
+                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+                          }}>
+                            {p.name}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--accent-primary)', fontWeight: 800 }}>
+                              {formatCOP(p.price)}
+                            </span>
+                            <span style={{ fontSize: '9.5px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', padding: '2px 5px', borderRadius: '4px', fontWeight: 800 }}>
+                              + Agregar
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -4158,18 +4485,38 @@ export const OrdersListPage = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {(generatedInvoice.items || []).map((it, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid #000' }}>
-                        <td style={{ fontWeight: 900, fontSize: paperWidth === '58mm' ? '12px' : '13px', padding: '2.5px 0', verticalAlign: 'top', color: '#000' }}>{it.quantity}x</td>
-                        <td style={{ padding: '2.5px 0', verticalAlign: 'top', color: '#000' }}>
-                          <div style={{ fontWeight: 800, fontSize: paperWidth === '58mm' ? '12px' : '13.5px', textTransform: 'uppercase' }}>{it.name}</div>
-                          <div style={{ fontSize: paperWidth === '58mm' ? '11px' : '12px', fontWeight: 400, color: '#000' }}>Unit: {formatCOP(it.unit_price)}</div>
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 900, fontSize: paperWidth === '58mm' ? '12px' : '13px', padding: '2.5px 0', verticalAlign: 'top', color: '#000' }}>
-                          {formatCOP(parseFloat(it.unit_price) * parseFloat(it.quantity))}
-                        </td>
-                      </tr>
-                    ))}
+                    {(generatedInvoice.items || []).map((it, i) => {
+                      const rawMods = it.modifiers || it.modifiers_json;
+                      let parsedMods = [];
+                      if (rawMods) {
+                        try {
+                          parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+                        } catch (e) {
+                          parsedMods = Array.isArray(rawMods) ? rawMods : [];
+                        }
+                      }
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid #000' }}>
+                          <td style={{ fontWeight: 900, fontSize: paperWidth === '58mm' ? '12px' : '13px', padding: '2.5px 0', verticalAlign: 'top', color: '#000' }}>{it.quantity}x</td>
+                          <td style={{ padding: '2.5px 0', verticalAlign: 'top', color: '#000' }}>
+                            <div style={{ fontWeight: 800, fontSize: paperWidth === '58mm' ? '12px' : '13.5px', textTransform: 'uppercase' }}>{it.name}</div>
+                            <div style={{ fontSize: paperWidth === '58mm' ? '11px' : '12px', fontWeight: 400, color: '#000' }}>Unit: {formatCOP(it.unit_price)}</div>
+                            {Array.isArray(parsedMods) && parsedMods.length > 0 && (
+                              <div style={{ fontSize: paperWidth === '58mm' ? '10.5px' : '11.5px', color: '#000', marginTop: '2px', paddingLeft: '4px', borderLeft: '2px solid #333' }}>
+                                {parsedMods.map((m, mIdx) => {
+                                  const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+                                  const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
+                                  return <div key={mIdx}>• {m.name}{m.quantity > 1 ? ` (x${m.quantity})` : ''}{extraStr}</div>;
+                                })}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 900, fontSize: paperWidth === '58mm' ? '12px' : '13px', padding: '2.5px 0', verticalAlign: 'top', color: '#000' }}>
+                            {formatCOP(parseFloat(it.unit_price) * parseFloat(it.quantity))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
 
@@ -4203,16 +4550,54 @@ export const OrdersListPage = () => {
                   </div>
                 )}
 
-                <div style={{ borderTop: '2px solid #000', margin: '5px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '14px' : '16px', color: '#000' }}>
-                  <span>TOTAL PAGADO:</span>
-                  <span>{formatCOP(generatedInvoice.total)}</span>
-                </div>
+                {/* Recuadro de Crédito vs Pago Total */}
+                {(() => {
+                  const isCredit = generatedInvoice.payment_method === 'credito' || parseFloat(generatedInvoice.credit_balance || generatedInvoice.credit_amount || 0) > 0;
+                  const creditBalance = parseFloat(generatedInvoice.credit_balance !== undefined ? generatedInvoice.credit_balance : (generatedInvoice.credit_amount || (generatedInvoice.payment_method === 'credito' ? generatedInvoice.total : 0)));
+                  const paidInitial = Math.max(0, parseFloat(generatedInvoice.total || 0) - creditBalance);
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', marginTop: '3px', color: '#000' }}>
-                  <span>Forma de Pago:</span>
-                  <span style={{ textTransform: 'capitalize', fontWeight: 800 }}>{generatedInvoice.payment_method || 'Efectivo'}</span>
-                </div>
+                  if (isCredit && creditBalance > 0) {
+                    return (
+                      <div style={{ border: '1.5px dashed #000', padding: '6px 8px', margin: '6px 0', background: '#f9f9f9', borderRadius: '4px' }}>
+                        <div style={{ textAlign: 'center', fontWeight: 900, fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                          *** CONDICIÓN DE PAGO: CRÉDITO ***
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px' }}>
+                          <span>Total Factura:</span>
+                          <span style={{ fontWeight: 800 }}>{formatCOP(generatedInvoice.total)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px' }}>
+                          <span>Abono Inicial Recibido:</span>
+                          <span style={{ fontWeight: 800 }}>{formatCOP(paidInitial)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '13px' : '14.5px', marginTop: '3px', borderTop: '1px dashed #000', paddingTop: '3px', color: '#000' }}>
+                          <span>VALOR ADEUDADO:</span>
+                          <span>{formatCOP(creditBalance)}</span>
+                        </div>
+                        {generatedInvoice.credit_due_date && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '10.5px' : '11.5px', marginTop: '2px' }}>
+                            <span>Fecha Límite Pago:</span>
+                            <span>{generatedInvoice.credit_due_date}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      <div style={{ borderTop: '2px solid #000', margin: '5px 0' }} />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '14px' : '16px', color: '#000' }}>
+                        <span>TOTAL PAGADO:</span>
+                        <span>{formatCOP(generatedInvoice.total)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', marginTop: '3px', color: '#000' }}>
+                        <span>Forma de Pago:</span>
+                        <span style={{ textTransform: 'capitalize', fontWeight: 800 }}>{generatedInvoice.payment_method || 'Efectivo'}</span>
+                      </div>
+                    </>
+                  );
+                })()}
 
                 {generatedInvoice.notes && (
                   <div style={{ borderTop: '1px solid #000', margin: '4px 0', paddingTop: '4px', fontSize: paperWidth === '58mm' ? '11.5px' : '12px', color: '#000' }}>
@@ -4237,6 +4622,20 @@ export const OrdersListPage = () => {
           </div>
         </Modal>
       )}
+
+      {/* Modal Selección y Edición de Sabores & Toppings */}
+      <ProductModifiersModal
+        isOpen={editModifiersModalOpen}
+        onClose={() => {
+          setEditModifiersModalOpen(false);
+          setSelectedProdForModifiers(null);
+          setEditingItemIdx(null);
+          setEditingInitialModifiers([]);
+        }}
+        product={selectedProdForModifiers}
+        initialModifiers={editingInitialModifiers}
+        onConfirm={handleConfirmEditModifiers}
+      />
     </div>
   );
 };

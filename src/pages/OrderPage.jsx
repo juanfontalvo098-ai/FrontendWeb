@@ -7,6 +7,7 @@ import { getSocket } from '../api/socket';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
+import { ProductModifiersModal } from '../components/ProductModifiersModal';
 import { useUiStore } from '../store/uiStore';
 import { useAuth } from '../hooks/useAuth';
 import { printKitchenTicket, printPreFactura } from '../utils/printUtils';
@@ -34,6 +35,11 @@ export const OrderPage = () => {
   const [editPriceModalOpen, setEditPriceModalOpen] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState(null);
   const [customPriceInput, setCustomPriceInput] = useState('');
+
+  const [modifiersModalOpen, setModifiersModalOpen] = useState(false);
+  const [selectedProductForModifiers, setSelectedProductForModifiers] = useState(null);
+  const [editingItemIndexForModifiers, setEditingItemIndexForModifiers] = useState(null);
+  const [initialModifiersForModal, setInitialModifiersForModal] = useState([]);
 
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -67,13 +73,22 @@ export const OrderPage = () => {
       if (activeOrder) {
         const fullOrder = await api.get(`/orders/${activeOrder.id}`);
         setCurrentOrder(fullOrder);
-        const mappedItems = (fullOrder.items || []).map(item => ({
-          dbId: item.id,
-          product: { id: item.product_id, name: item.name, price: item.unit_price, tax_rate: item.tax_rate, tax_included: item.tax_included, image_url: item.image_url },
-          qty: item.quantity,
-          note: item.notes || '',
-          status: item.status
-        }));
+        const mappedItems = (fullOrder.items || []).map(item => {
+          let parsedMods = [];
+          if (item.modifiers_json) {
+            try {
+              parsedMods = typeof item.modifiers_json === 'string' ? JSON.parse(item.modifiers_json) : item.modifiers_json;
+            } catch (e) {}
+          }
+          return {
+            dbId: item.id,
+            product: { id: item.product_id, name: item.name, price: item.unit_price, tax_rate: item.tax_rate, tax_included: item.tax_included, image_url: item.image_url },
+            qty: item.quantity,
+            note: item.notes || '',
+            status: item.status,
+            modifiers: Array.isArray(parsedMods) ? parsedMods : []
+          };
+        });
         setOrderItems(mappedItems);
       } else {
         // No crear orden en la base de datos hasta que el usuario decida 'Guardar Mesa' o 'Enviar a Cocina'
@@ -126,32 +141,73 @@ export const OrderPage = () => {
     return matchCategory && matchSearch;
   });
 
-  const addToOrder = (product) => {
-    const existingIndex = orderItems.findIndex(i => i.product.id === product.id && i.status !== 'enviado_cocina');
-    if (existingIndex > -1) {
+  const handleClickProduct = (product) => {
+    setEditingItemIndexForModifiers(null);
+    setInitialModifiersForModal([]);
+    setSelectedProductForModifiers(product);
+    setModifiersModalOpen(true);
+  };
+
+  const handleOpenEditItemModifiers = (idx) => {
+    const item = orderItems[idx];
+    if (!item) return;
+    const prod = products.find(p => p.id === item.product.id) || item.product;
+    setEditingItemIndexForModifiers(idx);
+    setInitialModifiersForModal(item.modifiers || []);
+    setSelectedProductForModifiers(prod);
+    setModifiersModalOpen(true);
+  };
+
+  const handleConfirmModifiers = (product, selectedModifiers, finalUnitPrice) => {
+    const unitPrice = finalUnitPrice !== undefined ? finalUnitPrice : parseFloat(product.price);
+    const modString = JSON.stringify(selectedModifiers || []);
+
+    if (editingItemIndexForModifiers !== null && editingItemIndexForModifiers >= 0) {
       const updated = [...orderItems];
-      updated[existingIndex].qty += 1;
+      if (updated[editingItemIndexForModifiers]) {
+        updated[editingItemIndexForModifiers] = {
+          ...updated[editingItemIndexForModifiers],
+          product: {
+            ...updated[editingItemIndexForModifiers].product,
+            price: unitPrice
+          },
+          modifiers: selectedModifiers || []
+        };
+      }
       setOrderItems(updated);
+      setEditingItemIndexForModifiers(null);
+      setInitialModifiersForModal([]);
     } else {
-      setOrderItems([...orderItems, {
-        product: { id: product.id, name: product.name, price: parseFloat(product.price), tax_rate: product.tax_rate, tax_included: product.tax_included, image_url: product.image_url },
-        qty: 1,
-        note: '',
-        status: 'pendiente'
-      }]);
+      const existingIndex = orderItems.findIndex(i =>
+        i.product.id === product.id &&
+        JSON.stringify(i.modifiers || []) === modString
+      );
+
+      if (existingIndex > -1) {
+        const updated = [...orderItems];
+        updated[existingIndex].qty += 1;
+        const item = updated[existingIndex];
+        if (item.dbId && currentOrder) {
+          api.put(`/orders/${currentOrder.id}/items/${item.dbId}/quantity`, { quantity: item.qty }).catch(() => {});
+        }
+        setOrderItems(updated);
+      } else {
+        setOrderItems([...orderItems, {
+          product: { id: product.id, name: product.name, price: unitPrice, tax_rate: product.tax_rate, tax_included: product.tax_included, image_url: product.image_url },
+          qty: 1,
+          note: '',
+          status: 'pendiente',
+          modifiers: selectedModifiers || []
+        }]);
+      }
     }
-    addToast(`${product.name} agregado`, 'info');
   };
 
   const updateQty = async (index, delta) => {
-    const item = orderItems[index];
-    if (item.dbId && item.status !== 'pendiente') {
-      addToast('Este ítem ya fue enviado a cocina y no se puede modificar', 'warning');
-      return;
-    }
-
     const newItems = [...orderItems];
     newItems[index].qty += delta;
+    const item = newItems[index];
+
     if (newItems[index].qty <= 0) {
       if (item.dbId && currentOrder) {
         try {
@@ -167,35 +223,56 @@ export const OrderPage = () => {
     setOrderItems(newItems);
   };
 
-  const updateNote = (index, note) => {
+  const updateNote = async (index, note) => {
     const newItems = [...orderItems];
     newItems[index].note = note;
     setOrderItems(newItems);
+    const item = newItems[index];
+    if (item.dbId && currentOrder) {
+      try {
+        await api.put(`/orders/${currentOrder.id}/items/${item.dbId}/notes`, { notes: note });
+      } catch (e) { console.error(e); }
+    }
   };
 
   const handleOpenEditPrice = (index) => {
     const item = orderItems[index];
-    if (item.dbId && item.status !== 'pendiente') {
-      addToast('Este ítem ya fue enviado a cocina y no se puede modificar', 'warning');
-      return;
-    }
     setEditingItemIndex(index);
     setCustomPriceInput(item.product.price.toString());
     setEditPriceModalOpen(true);
   };
 
-  const handleSaveCustomPrice = () => {
+  const handleSaveCustomPrice = async () => {
     if (editingItemIndex === null) return;
+    const item = orderItems[editingItemIndex];
+    const catalogProd = products.find(p => p.id === item.product.id);
+    const minPrice = catalogProd ? parseFloat(catalogProd.price || 0) : parseFloat(item.product.price || 0);
     const val = parseFloat(customPriceInput);
-    if (isNaN(val) || val < 0) {
-      addToast('Ingresa un precio válido', 'warning');
+
+    if (isNaN(val) || val <= 0) {
+      addToast('Ingresa un valor numérico válido', 'warning');
       return;
     }
+
+    if (val < minPrice) {
+      addToast(`Solo se permite ajustar el precio hacia arriba. El precio mínimo de catálogo es ${formatCOP(minPrice)}`, 'warning');
+      return;
+    }
+
     const updated = [...orderItems];
     updated[editingItemIndex].product.price = val;
     setOrderItems(updated);
+
+    if (item.dbId && currentOrder) {
+      try {
+        await api.put(`/orders/${currentOrder.id}/items/${item.dbId}/price`, { unit_price: val });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     setEditPriceModalOpen(false);
-    addToast('Precio especial aplicado a la comanda', 'info');
+    addToast('Precio especial actualizado en la comanda', 'info');
   };
 
   const handleCancelOrder = async () => {
@@ -243,32 +320,27 @@ export const OrderPage = () => {
         }
       }
 
+      const payloadItems = orderItems.map(i => ({
+        id: i.dbId || undefined,
+        product_id: i.product.id,
+        quantity: i.qty,
+        unit_price: parseFloat(i.product.price),
+        notes: i.note || null,
+        modifiers: i.modifiers || []
+      }));
+
       if (!activeOrder) {
         const payload = {
           table_id: parseInt(tableId, 10),
           guests: 1,
           order_type: 'mesa',
-          items: orderItems.map(i => ({
-            product_id: i.product.id,
-            quantity: i.qty,
-            unit_price: parseFloat(i.product.price),
-            notes: i.note || null
-          }))
+          items: payloadItems
         };
         await api.post('/orders', payload);
         addToast('Mesa guardada exitosamente (Comanda creada)', 'success');
       } else {
-        const unsavedItems = orderItems.filter(i => !i.dbId);
-        if (unsavedItems.length > 0) {
-          const payload = unsavedItems.map(i => ({
-            product_id: i.product.id,
-            quantity: i.qty,
-            unit_price: parseFloat(i.product.price),
-            notes: i.note || null
-          }));
-          await api.post(`/orders/${activeOrder.id}/items`, { items: payload });
-        }
-        addToast('Mesa guardada exitosamente (Comanda permanece abierta)', 'success');
+        await api.put(`/orders/${activeOrder.id}`, { items: payloadItems });
+        addToast('Comanda de la mesa actualizada y guardada con éxito', 'success');
       }
 
       await fetchData();
@@ -299,33 +371,28 @@ export const OrderPage = () => {
         }
       }
 
+      const payloadItems = orderItems.map(i => ({
+        id: i.dbId || undefined,
+        product_id: i.product.id,
+        quantity: i.qty,
+        unit_price: parseFloat(i.product.price),
+        notes: i.note || null,
+        modifiers: i.modifiers || []
+      }));
+
       if (!activeId) {
         const payload = {
           table_id: parseInt(tableId, 10),
           guests: 1,
           order_type: 'mesa',
-          items: orderItems.map(i => ({
-            product_id: i.product.id,
-            quantity: i.qty,
-            unit_price: parseFloat(i.product.price),
-            notes: i.note || null
-          })),
+          items: payloadItems,
           send_to_kitchen: true
         };
         const newOrderRes = await api.post('/orders', payload);
         activeId = newOrderRes.id || newOrderRes.order?.id;
       } else {
-        const unsavedItems = orderItems.filter(i => !i.dbId);
-        if (unsavedItems.length > 0) {
-          const payload = unsavedItems.map(i => ({
-            product_id: i.product.id,
-            quantity: i.qty,
-            unit_price: parseFloat(i.product.price),
-            notes: i.note || null
-          }));
-          await api.post(`/orders/${activeId}/items`, { items: payload });
-        }
-        await api.post(`/orders/${activeId}/send-to-kitchen`);
+        await api.put(`/orders/${activeId}`, { items: payloadItems, send_to_kitchen: true });
+        await api.post(`/orders/${activeId}/send-to-kitchen`).catch(() => {});
       }
 
       addToast('Orden enviada a cocina con éxito', 'success');
@@ -480,7 +547,7 @@ export const OrderPage = () => {
             style={{ marginBottom: 0, flexShrink: 0 }}
           />
 
-          <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', flexShrink: 0 }}>
+          <div className="no-scrollbar" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', flexShrink: 0, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             <button
               onClick={() => setActiveCategory('Todos')}
               style={{
@@ -536,7 +603,7 @@ export const OrderPage = () => {
                   transition: 'transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
                   boxShadow: '0 2px 5px rgba(0,0,0,0.15)'
                 }}
-                onClick={() => addToOrder(product)}
+                onClick={() => handleClickProduct(product)}
                 onMouseOver={(e) => { e.currentTarget.style.borderColor = 'var(--accent-primary)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
                 onMouseOut={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.transform = 'none'; }}
               >
@@ -618,17 +685,42 @@ export const OrderPage = () => {
             ) : (
               orderItems.map((item, idx) => (
                 <div key={idx} style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 'var(--radius-sm)', borderLeft: item.dbId ? '4px solid var(--accent-primary)' : '4px solid var(--accent-warning)', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                     <span style={{ fontWeight: 700, fontSize: '14px' }}>{item.product.name}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontWeight: 800, fontSize: '14px' }}>{formatCOP(item.product.price * item.qty)}</span>
-                      {(!item.dbId || item.status === 'pendiente') && (
-                        <button onClick={() => handleOpenEditPrice(idx)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: '2px' }} title="Precio especial">
-                          <Edit3 size={16} />
-                        </button>
-                      )}
+                      <button onClick={() => handleOpenEditItemModifiers(idx)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: '2px' }} title="Modificar sabores y toppings">
+                        <Sparkles size={16} />
+                      </button>
+                      <button onClick={() => handleOpenEditPrice(idx)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: '2px' }} title="Modificar precio para esta comanda">
+                        <Edit3 size={16} />
+                      </button>
                     </div>
                   </div>
+
+                  {/* Sabores y Toppings seleccionados */}
+                  {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
+                      {item.modifiers.map((m, mIdx) => (
+                        <span
+                          key={mIdx}
+                          onClick={() => handleOpenEditItemModifiers(idx)}
+                          style={{
+                            fontSize: '11px',
+                            background: 'var(--bg-primary)',
+                            border: '1px solid var(--border-color)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            color: 'var(--text-secondary)',
+                            cursor: 'pointer'
+                          }}
+                          title="Haga clic para modificar sabores / toppings"
+                        >
+                          🍨 {m.name} {m.quantity > 1 ? `(x${m.quantity})` : ''} {parseFloat(m.price_modifier || 0) > 0 ? `(+${formatCOP(m.price_modifier)})` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-input)', borderRadius: '6px', padding: '4px 8px' }}>
@@ -636,9 +728,7 @@ export const OrderPage = () => {
                       <span style={{ minWidth: '22px', textAlign: 'center', fontSize: '14px', fontWeight: 800 }}>{item.qty}</span>
                       <button onClick={() => updateQty(idx, 1)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '2px 8px' }}><Plus size={16} /></button>
                     </div>
-                    {(!item.dbId || item.status === 'pendiente') && (
-                      <button onClick={() => updateQty(idx, -item.qty)} style={{ background: 'none', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', padding: '6px' }}><Trash2 size={18} /></button>
-                    )}
+                    <button onClick={() => updateQty(idx, -item.qty)} style={{ background: 'none', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', padding: '6px' }} title="Eliminar producto"><Trash2 size={18} /></button>
                   </div>
 
                   <input
@@ -646,7 +736,6 @@ export const OrderPage = () => {
                     placeholder="Notas (ej. sin cebolla)"
                     value={item.note}
                     onChange={(e) => updateNote(idx, e.target.value)}
-                    disabled={!!item.dbId && item.status !== 'pendiente'}
                     style={{ width: '100%', marginTop: '6px', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '6px 10px', color: 'var(--text-primary)', fontSize: '13px' }}
                   />
                 </div>
@@ -736,16 +825,35 @@ export const OrderPage = () => {
       {/* Modal Modificar Precio Temporal */}
       <Modal isOpen={editPriceModalOpen} onClose={() => setEditPriceModalOpen(false)} title="Modificar Precio Especial">
         <div>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Modifica el precio unitario del producto exclusivamente para esta comanda. El catálogo general conservará su precio original.
-          </p>
-          <Input
-            label="Nuevo Precio Unitario ($)"
-            type="number"
-            value={customPriceInput}
-            onChange={(e) => setCustomPriceInput(e.target.value)}
-            style={{ fontSize: '16px' }}
-          />
+          {editingItemIndex !== null && orderItems[editingItemIndex] && (() => {
+            const item = orderItems[editingItemIndex];
+            const catalogProd = products.find(p => p.id === item.product.id);
+            const catalogPrice = catalogProd ? parseFloat(catalogProd.price || 0) : parseFloat(item.product.price || 0);
+
+            return (
+              <>
+                <div style={{ background: 'var(--bg-secondary)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '12px', fontSize: '12.5px' }}>
+                  <div style={{ fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>{item.product.name}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                    <span>Precio Catálogo Base:</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{formatCOP(catalogPrice)}</strong>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--accent-warning)', marginTop: '4px', fontWeight: 600 }}>
+                    * Solo puedes ajustar el precio hacia arriba (mínimo {formatCOP(catalogPrice)}).
+                  </div>
+                </div>
+
+                <Input
+                  label="Nuevo Precio Unitario ($)"
+                  type="number"
+                  min={catalogPrice}
+                  value={customPriceInput}
+                  onChange={(e) => setCustomPriceInput(e.target.value)}
+                  style={{ fontSize: '16px', fontWeight: 800, color: 'var(--accent-primary)' }}
+                />
+              </>
+            );
+          })()}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
             <Button variant="ghost" onClick={() => setEditPriceModalOpen(false)}>Cancelar</Button>
             <Button onClick={handleSaveCustomPrice}>Aplicar Precio Especial</Button>
@@ -763,7 +871,7 @@ export const OrderPage = () => {
             label="Motivo de la Anulación (opcional)"
             placeholder="Ej. Cliente cambió de opinión, error de tipeo"
             value={cancelReason}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => setCancelReason(e.target.value)}
             style={{ fontSize: '14px' }}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
@@ -772,6 +880,19 @@ export const OrderPage = () => {
           </div>
         </div>
       </Modal>
+      {/* Modal Selección de Sabores & Toppings */}
+      <ProductModifiersModal
+        isOpen={modifiersModalOpen}
+        onClose={() => {
+          setModifiersModalOpen(false);
+          setSelectedProductForModifiers(null);
+          setEditingItemIndexForModifiers(null);
+          setInitialModifiersForModal([]);
+        }}
+        product={selectedProductForModifiers}
+        initialModifiers={initialModifiersForModal}
+        onConfirm={handleConfirmModifiers}
+      />
     </div>
   );
 };

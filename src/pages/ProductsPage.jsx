@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, Edit2, Trash2, Upload, Image as ImageIcon,
   Layers, Package, Search, DollarSign, Barcode, Tag,
-  FileJson, Download, CheckCircle2, AlertCircle, RefreshCw, FileText
+  FileJson, Download, CheckCircle2, AlertCircle, RefreshCw, FileText, Sparkles
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
+import { ProductModifiersConfigModal } from '../components/ProductModifiersConfigModal';
 import { api, formatCOP } from '../api/client';
 import { useUiStore } from '../store/uiStore';
 
@@ -25,8 +26,11 @@ export const ProductsPage = () => {
   // Modales
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isModifiersModalOpen, setIsModifiersModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [modifyingProduct, setModifyingProduct] = useState(null);
+  const [suppliesList, setSuppliesList] = useState([]);
 
   // Form states para producto
   const [name, setName] = useState('');
@@ -62,12 +66,14 @@ export const ProductsPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [prods, cats] = await Promise.all([
+      const [prods, cats, sups] = await Promise.all([
         api.get('/products'),
-        api.get('/categories')
+        api.get('/categories'),
+        api.get('/supplies').catch(() => [])
       ]);
       setProducts(prods || []);
       setCategories(cats || []);
+      setSuppliesList(Array.isArray(sups) ? sups : []);
       if (cats && cats.length > 0 && !categoryId) {
         setCategoryId(cats[0].id.toString());
       }
@@ -118,6 +124,11 @@ export const ProductsPage = () => {
     setImageUrl(prod.image_url || '');
     setCategoryId(prod.category_id ? prod.category_id.toString() : (categories[0]?.id?.toString() || ''));
     setIsProductModalOpen(true);
+  };
+
+  const handleOpenModifiers = (prod) => {
+    setModifyingProduct(prod);
+    setIsModifiersModalOpen(true);
   };
 
   const handleProductImageUpload = (e) => {
@@ -627,9 +638,9 @@ export const ProductsPage = () => {
                           </span>
                         </td>
                         <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{formatCOP(cost)}</td>
-                        <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--accent-primary)' }}>{formatCOP(priceVal)}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 800, color: '#FFFFFF' }}>{formatCOP(priceVal)}</td>
                         <td style={{ padding: '8px 10px' }}>
-                          <span style={{ fontWeight: 700, color: margin > 50 ? 'var(--accent-primary)' : 'var(--accent-warning)' }}>
+                          <span style={{ fontWeight: 700, color: '#FFFFFF' }}>
                             {margin}%
                           </span>
                         </td>
@@ -641,6 +652,13 @@ export const ProductsPage = () => {
                         </td>
                         <td style={{ padding: '8px 10px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                            <button
+                              onClick={() => handleOpenModifiers(prod)}
+                              style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: '4px' }}
+                              title="Configurar Sabores, Toppings y Modificadores"
+                            >
+                              <Sparkles size={14} />
+                            </button>
                             <button
                               onClick={() => handleOpenEditProduct(prod)}
                               style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
@@ -904,11 +922,29 @@ export const ProductsPage = () => {
               />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: '4px' }}>
-              <Button type="button" variant="ghost" onClick={() => setIsProductModalOpen(false)}>Cancelar</Button>
-              <Button type="submit" variant="primary" disabled={submitting}>
-                {submitting ? 'Guardando...' : editingProduct ? 'Actualizar Producto' : 'Crear Producto'}
-              </Button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                {editingProduct && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon={<Sparkles size={14} />}
+                    onClick={() => {
+                      setIsProductModalOpen(false);
+                      handleOpenModifiers(editingProduct);
+                    }}
+                    style={{ fontSize: '12px', padding: '6px 10px' }}
+                  >
+                    Sabores & Toppings
+                  </Button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <Button type="button" variant="ghost" onClick={() => setIsProductModalOpen(false)}>Cancelar</Button>
+                <Button type="submit" variant="primary" disabled={submitting}>
+                  {submitting ? 'Guardando...' : editingProduct ? 'Actualizar Producto' : 'Crear Producto'}
+                </Button>
+              </div>
             </div>
           </form>
         </Modal>
@@ -1131,6 +1167,17 @@ export const ProductsPage = () => {
           </div>
         </Modal>
       )}
+
+      {/* Modal Configuración de Sabores, Toppings y Modificadores */}
+      <ProductModifiersConfigModal
+        isOpen={isModifiersModalOpen}
+        onClose={() => {
+          setIsModifiersModalOpen(false);
+          setModifyingProduct(null);
+        }}
+        product={modifyingProduct}
+        supplies={suppliesList}
+      />
     </div>
   );
 };

@@ -222,19 +222,50 @@ export const KitchenPage = () => {
                 
                 <div style={{ flex: 1 }}>
                   <ul style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 0, listStyle: 'none' }}>
-                    {(order.items || []).map((item, idx) => (
-                      <li key={idx} style={{ padding: '10px', background: 'var(--bg-hover)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-lg)' }}>
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                          <span style={{ fontWeight: 800, minWidth: '28px', color: 'var(--accent-primary)' }}>{item.quantity}x</span>
-                          <span style={{ fontWeight: 700 }}>{item.name}</span>
-                        </div>
-                        {item.notes && (
-                          <div style={{ marginTop: '4px', paddingLeft: '40px', color: 'var(--accent-warning)', fontSize: '13px', fontWeight: 600, fontStyle: 'italic' }}>
-                            * NOTA: {item.notes}
+                    {(order.items || []).map((item, idx) => {
+                      const rawMods = item.modifiers || item.modifiers_json;
+                      let parsedMods = [];
+                      if (rawMods) {
+                        try {
+                          parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+                        } catch (e) {
+                          parsedMods = Array.isArray(rawMods) ? rawMods : [];
+                        }
+                      }
+                      return (
+                        <li key={idx} style={{ padding: '10px', background: 'var(--bg-hover)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-lg)' }}>
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <span style={{ fontWeight: 800, minWidth: '28px', color: 'var(--accent-primary)' }}>{item.quantity}x</span>
+                            <span style={{ fontWeight: 700 }}>{item.name}</span>
                           </div>
-                        )}
-                      </li>
-                    ))}
+                          {Array.isArray(parsedMods) && parsedMods.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px', paddingLeft: '40px' }}>
+                              {parsedMods.map((m, mIdx) => (
+                                <span
+                                  key={mIdx}
+                                  style={{
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--border-color)',
+                                    color: 'var(--text-primary)',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px'
+                                  }}
+                                >
+                                  🍨 {m.name} {m.quantity > 1 ? `(x${m.quantity})` : ''}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {item.notes && (
+                            <div style={{ marginTop: '4px', paddingLeft: '40px', color: 'var(--accent-warning)', fontSize: '13px', fontWeight: 600, fontStyle: 'italic' }}>
+                              * NOTA: {item.notes}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
 
