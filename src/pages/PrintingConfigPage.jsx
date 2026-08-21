@@ -3,13 +3,15 @@ import React, { useState, useEffect } from 'react';
 import {
   Printer, RefreshCw, CheckCircle, AlertCircle, Download,
   Play, Trash2, Cpu, FileText, Check, UtensilsCrossed,
-  Receipt, DollarSign, Settings, ShieldCheck, Sparkles, ExternalLink
+  Receipt, DollarSign, Settings, ShieldCheck, Sparkles, ExternalLink,
+  Eye
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Select, Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
-import { api } from '../api/client';
+import { Modal } from '../components/ui/Modal';
+import { api, formatCOP, formatDateTime } from '../api/client';
 import { useUiStore } from '../store/uiStore';
 import {
   checkPrintBridgeHealth,
@@ -17,7 +19,9 @@ import {
   sendTestPrint,
   sendToThermalBridge,
   buildInvoicePlainText,
-  buildKitchenTicketPlainText
+  buildKitchenTicketPlainText,
+  printInvoiceReceipt,
+  printKitchenTicket
 } from '../utils/printUtils';
 
 export const PrintingConfigPage = () => {
@@ -46,6 +50,10 @@ export const PrintingConfigPage = () => {
   const [testingKitchen, setTestingKitchen] = useState(false);
   const [testingReceipt, setTestingReceipt] = useState(false);
   const [testingDrawer, setTestingDrawer] = useState(false);
+
+  // Modales de Vista Previa y PDF
+  const [previewInvoiceModalOpen, setPreviewInvoiceModalOpen] = useState(false);
+  const [previewKitchenModalOpen, setPreviewKitchenModalOpen] = useState(false);
 
   // 1. Cargar Settings desde Backend
   const loadSettings = async () => {
@@ -125,43 +133,86 @@ export const PrintingConfigPage = () => {
     }
   };
 
+  // Datos de demostración estructurados para pruebas y vista previa
+  const sampleInvoice = {
+    id: 482,
+    invoice_number: `${settings.invoice_prefix || 'FAC'}-00482`,
+    created_at: new Date().toISOString(),
+    customer_name: 'Carlos Mendoza',
+    customer_document: '1098765432',
+    customer_phone: '310 987 6543',
+    customer_address: 'Calle 45 # 12-34',
+    customer_city: 'Bogotá, D.C.',
+    cashier_name: 'Cajero Principal',
+    waiter_name: 'Laura Gómez',
+    table_number: 'Mesa 4',
+    payment_method: 'efectivo',
+    subtotal: 42000,
+    discount_amount: 2000,
+    delivery_fee: 0,
+    tip_amount: 4000,
+    tax_total: 3360,
+    total: 44000,
+    items: [
+      {
+        name: 'Hamburguesa Doble Especial',
+        quantity: 2,
+        unit_price: 18000,
+        modifiers: [
+          { name: 'Tocineta Extra', quantity: 1, price_modifier: 3000 },
+          { name: 'Queso Cheddar', quantity: 1, price_modifier: 0 }
+        ]
+      },
+      {
+        name: 'Limonada de Coco Natural',
+        quantity: 1,
+        unit_price: 8000,
+        modifiers: [
+          { name: 'Poco Hielo', quantity: 1, price_modifier: 0 }
+        ]
+      }
+    ]
+  };
+
+  const sampleKitchenOrder = {
+    id: '00482',
+    table_number: 'Mesa 4',
+    customer_name: 'Carlos Mendoza',
+    waiter_name: 'Laura Gómez'
+  };
+
+  const sampleKitchenItems = [
+    {
+      name: 'Hamburguesa Doble Especial',
+      quantity: 2,
+      notes: 'Sin cebolla, carne término medio',
+      modifiers: [
+        { name: 'Tocineta Extra', quantity: 1 },
+        { name: 'Queso Cheddar', quantity: 1 }
+      ]
+    },
+    {
+      name: 'Limonada de Coco Natural',
+      quantity: 1,
+      notes: 'Poco hielo',
+      modifiers: []
+    }
+  ];
+
   // 4. Pruebas de Impresión con Formato Real
   const handleTestKitchen = async () => {
     setTestingKitchen(true);
     try {
-      const sampleOrder = {
-        id: 'TEST-01',
-        table_number: 'Mesa 4',
-        customer_name: 'Carlos Mendoza'
-      };
-      const sampleItems = [
-        {
-          name: 'Hamburguesa Doble Especial',
-          quantity: 2,
-          notes: 'Sin cebolla, carne término medio',
-          modifiers: [
-            { name: 'Tocineta Extra', quantity: 1 },
-            { name: 'Queso Cheddar', quantity: 1 }
-          ]
-        },
-        {
-          name: 'Limonada de Coco Natural',
-          quantity: 1,
-          notes: 'Poco hielo',
-          modifiers: []
-        }
-      ];
-
       const plainText = buildKitchenTicketPlainText(
-        sampleOrder,
-        sampleItems,
+        sampleKitchenOrder,
+        sampleKitchenItems,
         'Mesa VIP - Entregar todo junto',
-        'Laura Gómez'
+        sampleKitchenOrder.waiter_name
       );
 
       const res = await sendToThermalBridge(plainText, printerKitchenName, bridgeUrl);
       if (res && res.success) {
-        addToast('Comanda de prueba completa enviada a la impresora de Cocina', 'success');
+        addToast('Comanda de prueba enviada a la impresora de Cocina', 'success');
       } else {
         addToast(res?.error || 'No se pudo enviar a la impresora de Cocina. Verifica que el Print Bridge esté activo.', 'warning');
       }
@@ -175,44 +226,6 @@ export const PrintingConfigPage = () => {
   const handleTestReceipt = async () => {
     setTestingReceipt(true);
     try {
-      const sampleInvoice = {
-        invoice_number: `${settings.invoice_prefix || 'FAC'}-TEST-001`,
-        created_at: new Date().toISOString(),
-        customer_name: 'Carlos Mendoza',
-        customer_document: '1098765432',
-        customer_phone: '310 987 6543',
-        customer_address: 'Calle 45 # 12-34',
-        cashier_name: 'Cajero Principal',
-        waiter_name: 'Laura Gómez',
-        table_number: 'Mesa 4',
-        payment_method: 'efectivo',
-        subtotal: 42000,
-        discount_amount: 2000,
-        delivery_fee: 0,
-        tip_amount: 4000,
-        tax_total: 3360,
-        total: 44000,
-        items: [
-          {
-            name: 'Hamburguesa Doble Especial',
-            quantity: 2,
-            unit_price: 18000,
-            modifiers: [
-              { name: 'Tocineta Extra', quantity: 1, price_modifier: 3000 },
-              { name: 'Queso Cheddar', quantity: 1, price_modifier: 0 }
-            ]
-          },
-          {
-            name: 'Limonada de Coco Natural',
-            quantity: 1,
-            unit_price: 8000,
-            modifiers: [
-              { name: 'Poco Hielo', quantity: 1, price_modifier: 0 }
-            ]
-          }
-        ]
-      };
-
       const plainText = buildInvoicePlainText(sampleInvoice, settings);
       const res = await sendToThermalBridge(plainText, printerReceiptName, bridgeUrl);
 
@@ -718,42 +731,97 @@ pause >nul\r
       <Card style={{ padding: '18px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', marginBottom: '20px' }}>
         <h3 style={{ fontSize: '15px', fontWeight: 800, margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Printer size={17} color="var(--accent-primary)" />
-          Centro de Pruebas & Diagnóstico en Tiempo Real
+          Centro de Pruebas, Vista Previa & Generador de PDF
         </h3>
-        <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 14px 0' }}>
-          Prueba el corte de papel, compatibilidad de acentos (á, é, í, ó, ú, ñ) y la apertura de gaveta en 1 solo clic.
+        <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
+          Visualiza la factura o comanda en pantalla, descárgala en PDF de alta resolución con 1 clic, o prueba la impresión silenciosa directa.
         </p>
 
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <Button
-            type="button"
-            variant="secondary"
-            icon={<UtensilsCrossed size={15} />}
-            onClick={handleTestKitchen}
-            disabled={testingKitchen || bridgeStatus !== 'online'}
-          >
-            {testingKitchen ? 'Imprimiendo...' : '🍳 Probar Ticket en Cocina'}
-          </Button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+          
+          {/* Tarjeta 1: Factura de Caja */}
+          <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '13.5px' }}>
+              <Receipt size={16} color="var(--accent-primary)" />
+              Factura de Venta POS (Caja)
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              Encabezado fiscal, productos, adicionales, impuestos, propina y total a pagar.
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', flexWrap: 'wrap' }}>
+              <Button
+                size="sm"
+                variant="primary"
+                icon={<Eye size={14} />}
+                onClick={() => setPreviewInvoiceModalOpen(true)}
+              >
+                👁️ Ver Factura & PDF
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Printer size={14} />}
+                onClick={handleTestReceipt}
+                disabled={testingReceipt || bridgeStatus !== 'online'}
+              >
+                {testingReceipt ? 'Enviando...' : '⚡ Imprimir Térmica'}
+              </Button>
+            </div>
+          </div>
 
-          <Button
-            type="button"
-            variant="secondary"
-            icon={<Receipt size={15} />}
-            onClick={handleTestReceipt}
-            disabled={testingReceipt || bridgeStatus !== 'online'}
-          >
-            {testingReceipt ? 'Imprimiendo...' : '🧾 Probar Factura en Caja'}
-          </Button>
+          {/* Tarjeta 2: Comanda de Cocina */}
+          <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '13.5px' }}>
+              <UtensilsCrossed size={16} color="var(--accent-primary)" />
+              Comanda Operativa (Cocina / Bar)
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              Número de mesa, orden de preparación, notas especiales y modificadores.
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: 'auto', flexWrap: 'wrap' }}>
+              <Button
+                size="sm"
+                variant="primary"
+                icon={<Eye size={14} />}
+                onClick={() => setPreviewKitchenModalOpen(true)}
+              >
+                👁️ Ver Comanda & PDF
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Printer size={14} />}
+                onClick={handleTestKitchen}
+                disabled={testingKitchen || bridgeStatus !== 'online'}
+              >
+                {testingKitchen ? 'Enviando...' : '⚡ Imprimir Térmica'}
+              </Button>
+            </div>
+          </div>
 
-          <Button
-            type="button"
-            variant="secondary"
-            icon={<DollarSign size={15} />}
-            onClick={handleTestDrawer}
-            disabled={testingDrawer || bridgeStatus !== 'online'}
-          >
-            {testingDrawer ? 'Enviando pulso...' : '💵 Probar Apertura de Gaveta'}
-          </Button>
+          {/* Tarjeta 3: Gaveta Monedero */}
+          <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 800, fontSize: '13.5px' }}>
+              <DollarSign size={16} color="var(--accent-success)" />
+              Cajón Monedero / Gaveta
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              Prueba el pulso eléctrico ESC/POS (puerto RJ11) para expulsar la caja de dinero.
+            </div>
+            <div style={{ marginTop: 'auto' }}>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<DollarSign size={14} />}
+                onClick={handleTestDrawer}
+                disabled={testingDrawer || bridgeStatus !== 'online'}
+                style={{ width: '100%' }}
+              >
+                {testingDrawer ? 'Enviando pulso...' : '💵 Probar Apertura de Gaveta'}
+              </Button>
+            </div>
+          </div>
+
         </div>
       </Card>
 
@@ -808,6 +876,265 @@ pause >nul\r
 
         </div>
       </Card>
+
+      {/* MODAL 1: VISTA PREVIA FACTURA DE VENTA POS & GENERADOR PDF */}
+      <Modal
+        isOpen={previewInvoiceModalOpen}
+        onClose={() => setPreviewInvoiceModalOpen(false)}
+        title="🧾 Vista Previa de Factura POS & Exportar PDF"
+        maxWidth="480px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+          
+          {/* Ticket Visual */}
+          <div style={{
+            width: paperWidth === '58mm' ? '290px' : '360px',
+            background: '#ffffff',
+            color: '#111827',
+            fontFamily: "'Courier New', Courier, monospace, sans-serif",
+            fontSize: paperWidth === '58mm' ? '11px' : '12px',
+            padding: '20px 16px',
+            borderRadius: '6px',
+            border: '1px dashed #9ca3af',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+            lineHeight: 1.35
+          }}>
+            {settings?.logo_url && (
+              <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+                <img src={settings.logo_url} alt="Logo" style={{ maxHeight: '50px', maxWidth: '140px', objectFit: 'contain' }} />
+              </div>
+            )}
+            <div style={{ textAlign: 'center', fontWeight: 900, fontSize: paperWidth === '58mm' ? '13px' : '15px', textTransform: 'uppercase' }}>
+              {settings?.business_name || 'KAMIA RESTAURANTE'}
+            </div>
+            {settings?.nit && <div style={{ textAlign: 'center', fontWeight: 700, fontSize: '11px' }}>NIT: {settings.nit}</div>}
+            {settings?.address && <div style={{ textAlign: 'center', fontSize: '11px' }}>{settings.address}</div>}
+            {settings?.phone && <div style={{ textAlign: 'center', fontSize: '11px' }}>Tel: {settings.phone}</div>}
+            
+            <div style={{ borderTop: '2px solid #111827', margin: '8px 0' }} />
+            <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '13px' }}>FACTURA DE VENTA POS</div>
+            <div style={{ textAlign: 'center', fontWeight: 700 }}>N° {sampleInvoice.invoice_number}</div>
+            <div style={{ borderTop: '1px solid #111827', margin: '6px 0' }} />
+
+            <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Fecha:</span>
+                <span>{new Date().toLocaleDateString('es-CO')} {new Date().toLocaleTimeString('es-CO')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Cajero:</span>
+                <span style={{ fontWeight: 700 }}>{sampleInvoice.cashier_name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Mesero:</span>
+                <span>{sampleInvoice.waiter_name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Mesa:</span>
+                <span style={{ fontWeight: 700 }}>{sampleInvoice.table_number}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Cliente:</span>
+                <span style={{ fontWeight: 700 }}>{sampleInvoice.customer_name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>NIT / CC:</span>
+                <span>{sampleInvoice.customer_document}</span>
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid #111827', margin: '8px 0' }} />
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #111827', textAlign: 'left', fontWeight: 800 }}>
+                  <th style={{ paddingBottom: '3px', width: '15%' }}>Cant</th>
+                  <th style={{ paddingBottom: '3px' }}>Producto</th>
+                  <th style={{ paddingBottom: '3px', textAlign: 'right' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sampleInvoice.items.map((it, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px dashed #e5e7eb' }}>
+                    <td style={{ fontWeight: 800, padding: '4px 0', verticalAlign: 'top' }}>{it.quantity}x</td>
+                    <td style={{ padding: '4px 0', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700, textTransform: 'uppercase' }}>{it.name}</div>
+                      {it.modifiers?.map((m, mIdx) => (
+                        <div key={mIdx} style={{ fontSize: '10.5px', color: '#374151', paddingLeft: '4px' }}>
+                          + {m.name} {m.price_modifier > 0 ? `(+${formatCOP(m.price_modifier)})` : ''}
+                        </div>
+                      ))}
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 800, padding: '4px 0', verticalAlign: 'top' }}>
+                      {formatCOP(it.quantity * it.unit_price)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ borderTop: '1px solid #111827', margin: '8px 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Subtotal:</span>
+              <span style={{ fontWeight: 700 }}>{formatCOP(sampleInvoice.subtotal)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Descuento:</span>
+              <span style={{ fontWeight: 700 }}>-{formatCOP(sampleInvoice.discount_amount)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Propina Sugerida:</span>
+              <span style={{ fontWeight: 700 }}>+{formatCOP(sampleInvoice.tip_amount)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Impuestos Inc.:</span>
+              <span>{formatCOP(sampleInvoice.tax_total)}</span>
+            </div>
+            
+            <div style={{ borderTop: '2px solid #111827', margin: '6px 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: '14px' }}>
+              <span>TOTAL A PAGAR:</span>
+              <span>{formatCOP(sampleInvoice.total)}</span>
+            </div>
+            <div style={{ borderTop: '1px solid #111827', margin: '8px 0' }} />
+            
+            <div style={{ textAlign: 'center', fontWeight: 700, marginTop: '4px' }}>
+              {settings?.receipt_footer || '¡Gracias por su visita y preferencia!'}
+            </div>
+            <div style={{ textAlign: 'center', fontSize: '9.5px', color: '#6b7280', marginTop: '4px' }}>
+              Software POS & ERP: KAMIA by JF
+            </div>
+          </div>
+
+          {/* Botones de Acción */}
+          <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Button
+              variant="primary"
+              icon={<Download size={15} />}
+              onClick={() => printInvoiceReceipt(sampleInvoice, { ...settings, enable_silent_printing: false }, paperWidth)}
+            >
+              📥 Guardar PDF / Imprimir en Navegador
+            </Button>
+            <Button
+              variant="secondary"
+              icon={<Printer size={15} />}
+              onClick={handleTestReceipt}
+              disabled={testingReceipt || bridgeStatus !== 'online'}
+            >
+              ⚡ Enviar a Impresora Térmica (ESC/POS)
+            </Button>
+          </div>
+
+        </div>
+      </Modal>
+
+      {/* MODAL 2: VISTA PREVIA COMANDA DE COCINA & EXPORTAR PDF */}
+      <Modal
+        isOpen={previewKitchenModalOpen}
+        onClose={() => setPreviewKitchenModalOpen(false)}
+        title="🍳 Vista Previa de Comanda de Cocina & Exportar PDF"
+        maxWidth="480px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+          
+          {/* Ticket Visual Cocina */}
+          <div style={{
+            width: paperWidth === '58mm' ? '290px' : '360px',
+            background: '#ffffff',
+            color: '#111827',
+            fontFamily: "'Courier New', Courier, monospace, sans-serif",
+            fontSize: paperWidth === '58mm' ? '11px' : '12px',
+            padding: '20px 16px',
+            borderRadius: '6px',
+            border: '1px dashed #9ca3af',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+            lineHeight: 1.35
+          }}>
+            <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '13px' }}>*** COMANDA DE COCINA ***</div>
+            <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '18px', margin: '4px 0', textTransform: 'uppercase' }}>
+              {sampleKitchenOrder.table_number}
+            </div>
+            <div style={{ borderTop: '2px solid #111827', margin: '6px 0' }} />
+
+            <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Orden N°:</span>
+                <span style={{ fontWeight: 800 }}>#{sampleKitchenOrder.id}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Responsable:</span>
+                <span>{sampleKitchenOrder.waiter_name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Hora / Fecha:</span>
+                <span>{new Date().toLocaleTimeString('es-CO')} ({new Date().toLocaleDateString('es-CO')})</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Cliente:</span>
+                <span style={{ fontWeight: 700 }}>{sampleKitchenOrder.customer_name}</span>
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid #111827', margin: '8px 0' }} />
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #111827', textAlign: 'left', fontWeight: 900 }}>
+                  <th style={{ paddingBottom: '3px', width: '18%' }}>Cant</th>
+                  <th style={{ paddingBottom: '3px' }}>Producto / Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sampleKitchenItems.map((it, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <td style={{ fontWeight: 900, fontSize: '15px', padding: '6px 0', verticalAlign: 'top' }}>{it.quantity}x</td>
+                    <td style={{ padding: '6px 0', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 800, textTransform: 'uppercase' }}>{it.name}</div>
+                      {it.modifiers?.map((m, mIdx) => (
+                        <div key={mIdx} style={{ fontSize: '11px', color: '#111827', fontWeight: 600 }}>
+                          • {m.name}
+                        </div>
+                      ))}
+                      {it.notes && (
+                        <div style={{ fontSize: '11px', fontWeight: 800, border: '1px solid #111827', padding: '1px 5px', marginTop: '3px', display: 'inline-block' }}>
+                          NOTA: {it.notes}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ borderTop: '1px solid #111827', margin: '8px 0' }} />
+            <div style={{ fontSize: '11px', fontWeight: 700 }}>
+              OBSERVACIONES: Mesa VIP - Entregar todo junto
+            </div>
+            <div style={{ borderTop: '1px solid #111827', margin: '8px 0' }} />
+            <div style={{ textAlign: 'center', fontSize: '10px', color: '#6b7280' }}>
+              (Comanda Operativa para Producción / Bar / Cocina)
+            </div>
+          </div>
+
+          {/* Botones de Acción */}
+          <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Button
+              variant="primary"
+              icon={<Download size={15} />}
+              onClick={() => printKitchenTicket(sampleKitchenOrder, sampleKitchenItems, { ...settings, enable_silent_printing: false }, paperWidth)}
+            >
+              📥 Guardar PDF / Imprimir en Navegador
+            </Button>
+            <Button
+              variant="secondary"
+              icon={<Printer size={15} />}
+              onClick={handleTestKitchen}
+              disabled={testingKitchen || bridgeStatus !== 'online'}
+            >
+              ⚡ Enviar a Impresora Térmica (ESC/POS)
+            </Button>
+          </div>
+
+        </div>
+      </Modal>
 
     </div>
   );
