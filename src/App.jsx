@@ -18,6 +18,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { UsersPage } from './pages/UsersPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { PrintingConfigPage } from './pages/PrintingConfigPage';
 import { BusinessesPage } from './pages/BusinessesPage';
 
 // ERP Pages
@@ -59,6 +60,7 @@ function App() {
           <Route path="/reportes" element={<ReportsPage />} />
           <Route path="/productos" element={<ProductsPage />} />
           <Route path="/usuarios" element={<UsersPage />} />
+          <Route path="/configuracion-impresion" element={<PrintingConfigPage />} />
           <Route path="/configuracion" element={<SettingsPage />} />
 
           {/* Rutas ERP */}

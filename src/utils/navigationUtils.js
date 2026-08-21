@@ -3,7 +3,7 @@ import {
   LayoutDashboard, UtensilsCrossed, ChefHat, Wallet, FileText,
   Package, Users, Settings, FileSpreadsheet, Building2,
   Bike, ShoppingBag, Layers, ClipboardList, Percent, Landmark, UserCheck,
-  Truck, Boxes, ListOrdered
+  Truck, Boxes, ListOrdered, Printer
 } from 'lucide-react';
 
 export const MENU_CATEGORIES = [
@@ -61,7 +61,8 @@ export const MENU_CATEGORIES = [
     title: 'Configuración & Sistema',
     items: [
       { path: '/usuarios', label: 'Usuarios & Permisos', icon: Users, defaultRoles: ['super_admin', 'admin'] },
-      { path: '/configuracion', label: 'Configuración', icon: Settings, defaultRoles: ['super_admin', 'admin', 'gerente'] },
+      { path: '/configuracion-impresion', label: 'Configuración de Impresión', icon: Printer, defaultRoles: ['super_admin', 'admin', 'gerente'] },
+      { path: '/configuracion', label: 'Configuración General', icon: Settings, defaultRoles: ['super_admin', 'admin', 'gerente'] },
     ]
   }
 ];

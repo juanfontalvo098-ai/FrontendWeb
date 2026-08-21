@@ -57,7 +57,7 @@ export const getPrintBridgePrinters = async (bridgeUrl = 'http://localhost:8088'
   try {
     const url = (bridgeUrl || 'http://localhost:8088').replace(/\/+$/, '');
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
     const res = await fetch(`${url}/printers`, { signal: controller.signal });
     clearTimeout(timeoutId);
@@ -69,6 +69,33 @@ export const getPrintBridgePrinters = async (bridgeUrl = 'http://localhost:8088'
     // Offline
   }
   return [];
+};
+
+/**
+ * Envía un ticket de prueba con formateo ESC/POS al Print Bridge
+ */
+export const sendTestPrint = async (printerName = null, type = 'comanda', bridgeUrl = 'http://localhost:8088') => {
+  try {
+    const url = (bridgeUrl || 'http://localhost:8088').replace(/\/+$/, '');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const res = await fetch(`${url}/test-print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ printerName, type }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      return { success: true, data };
+    }
+  } catch (err) {
+    console.error('Error al enviar test-print al Print Bridge:', err);
+  }
+  return { success: false };
 };
 
 /**

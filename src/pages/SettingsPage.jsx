@@ -1,14 +1,15 @@
 // src/pages/SettingsPage.jsx
 import React, { useState, useEffect } from 'react';
-import { Settings, Store, FileText, Upload, Check, Landmark, Printer, Zap, RefreshCw, AlertCircle, CheckCircle, Download, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Settings, Store, FileText, Upload, Check, Landmark, Printer, Zap, RefreshCw, AlertCircle, CheckCircle, Download, Trash2, ArrowRight } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { api } from '../api/client';
 import { useUiStore } from '../store/uiStore';
-import { checkPrintBridgeHealth, getPrintBridgePrinters } from '../utils/printUtils';
 
 export const SettingsPage = () => {
+  const navigate = useNavigate();
   const addToast = useUiStore((state) => state.addToast);
 
   const [businessName, setBusinessName] = useState('');
@@ -460,132 +461,52 @@ pause >nul\r
             />
           </div>
 
-          {/* Impresión Silenciosa Directa & Auto-Impresión Remota */}
+          {/* Tarjeta de Acceso a Configuración de Impresión */}
           <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '16px', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-              <h3 style={{ fontSize: '15px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Printer size={18} color="#10b981" /> Impresión Directa Silenciosa (Print Bridge con .bat) & Auto-Impresión
-              </h3>
-
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <Button type="button" size="sm" variant="secondary" icon={<RefreshCw size={14} />} onClick={testBridgeConnection}>
-                  Detectar Impresoras
-                </Button>
-                <Button type="button" size="sm" variant="primary" icon={<Download size={14} />} onClick={downloadUnifiedInstallerBat}>
-                  Instalar Print Bridge (.bat)
-                </Button>
-                <Button type="button" size="sm" variant="danger" icon={<Trash2 size={14} />} onClick={downloadUninstallerBat}>
-                  Desinstalar Print Bridge (.bat)
-                </Button>
-              </div>
-            </div>
-
-            <div style={{ background: 'var(--bg-secondary)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '14px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                
-                {/* Switch 1: Impresión Silenciosa */}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox"
-                    checked={enableSilentPrinting}
-                    onChange={(e) => setEnableSilentPrinting(e.target.checked)}
-                    style={{ accentColor: '#10b981', width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <div>
-                    <strong style={{ fontSize: '13px' }}>Habilitar Impresión Silenciosa Directa (ESC/POS)</strong>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Imprime comandas y facturas de inmediato a la impresora térmica sin abrir la ventana ni cuadro de diálogo de Windows.
-                    </div>
-                  </div>
-                </label>
-
-                {/* Switch 2: Auto-imprimir comanda desde celular */}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox"
-                    checked={autoPrintKitchenTickets}
-                    onChange={(e) => setAutoPrintKitchenTickets(e.target.checked)}
-                    style={{ accentColor: '#10b981', width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <div>
-                    <strong style={{ fontSize: '13px' }}>Auto-imprimir comandas enviadas desde celulares de meseros</strong>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Cuando una mesera presione "Enviar a Cocina" desde su teléfono, la comanda saldrá expulsada automáticamente en esta estación/computador.
-                    </div>
-                  </div>
-                </label>
-
-                {/* Switch 3: Auto-imprimir factura al cobrar */}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox"
-                    checked={autoPrintInvoices}
-                    onChange={(e) => setAutoPrintInvoices(e.target.checked)}
-                    style={{ accentColor: '#10b981', width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <div>
-                    <strong style={{ fontSize: '13px' }}>Auto-imprimir recibo de factura al cerrar/cobrar orden</strong>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      Imprime el recibo automáticamente apenas se procese el pago en la caja.
-                    </div>
-                  </div>
-                </label>
-
-              </div>
-            </div>
-
-            {/* Selección Inteligente de Impresoras Detectadas */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
-              <div>
-                <Select 
-                  label="Impresora de Cocina / Bar (Térmica)"
-                  value={printerKitchenName}
-                  onChange={(e) => setPrinterKitchenName(e.target.value)}
-                  options={printerOptions}
-                />
-                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                  {detectedPrinters.length > 0 ? `${detectedPrinters.length} impresoras detectadas en Windows` : 'Abre el Print Bridge para listar automáticamente tus impresoras'}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.04) 100%)',
+              border: '1px solid rgba(99, 102, 241, 0.25)',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '14px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '10px',
+                  background: 'var(--accent-primary)',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <Printer size={22} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800 }}>
+                    Configuración de Impresión Térmica & Print Bridge (Node.js)
+                  </h4>
+                  <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Asignación de impresoras de Cocina/Caja, formato 80mm/58mm, instalador de Node.js y pruebas en vivo.
+                  </p>
                 </div>
               </div>
 
-              <div>
-                <Select 
-                  label="Impresora de Caja / Facturación (Térmica)"
-                  value={printerReceiptName}
-                  onChange={(e) => setPrinterReceiptName(e.target.value)}
-                  options={printerOptions}
-                />
-                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                  {detectedPrinters.length > 0 ? `${detectedPrinters.length} impresoras detectadas en Windows` : 'Abre el Print Bridge para listar automáticamente tus impresoras'}
-                </div>
-              </div>
+              <Button
+                type="button"
+                variant="primary"
+                icon={<ArrowRight size={15} />}
+                onClick={() => navigate('/configuracion-impresion')}
+              >
+                Abrir Configuración de Impresión
+              </Button>
             </div>
-
-            {/* Estado del bridge */}
-            <div style={{ marginTop: '14px', padding: '12px 14px', borderRadius: '8px', fontSize: '12px', background: bridgeStatus === 'online' ? 'rgba(16, 185, 129, 0.12)' : (bridgeStatus === 'offline' ? 'rgba(239, 68, 68, 0.12)' : 'var(--bg-primary)'), border: '1px solid var(--border-color)' }}>
-              {bridgeStatus === 'online' && (
-                <div style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
-                  <CheckCircle size={17} /> Print Bridge activo y en línea. Impresoras listas: {detectedPrinters.map(p => p.name).join(', ') || 'Impresora Predeterminada de Windows'}.
-                </div>
-              )}
-              {bridgeStatus === 'offline' && (
-                <div style={{ color: '#ef4444', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                  <AlertCircle size={17} style={{ flexShrink: 0, marginTop: '2px' }} />
-                  <div>
-                    <strong>Print Bridge no detectado en esta computadora.</strong>
-                    <div style={{ marginTop: '2px', color: 'var(--text-secondary)' }}>
-                      Haz clic en <strong>"Instalar Print Bridge (.bat)"</strong> y ábrelo con doble clic. Se configurará e iniciará automáticamente en segundo plano para encender siempre con Windows (sin instalar Node.js ni programas adicionales).
-                    </div>
-                  </div>
-                </div>
-              )}
-              {!bridgeStatus && (
-                <div style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  Para activar la impresión directa sin ventanas de Windows, haz clic en <strong>"Instalar Print Bridge (.bat)"</strong>.
-                </div>
-              )}
-            </div>
-
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
