@@ -190,7 +190,7 @@ export const ProductModifiersModal = ({ isOpen, onClose, product, onConfirm, ini
     onClose();
   };
 
-  if (!isOpen || !product) return null;
+  if (!isOpen || !product || loading || groups.length === 0) return null;
 
   return (
     <Modal

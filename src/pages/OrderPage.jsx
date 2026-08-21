@@ -141,11 +141,22 @@ export const OrderPage = () => {
     return matchCategory && matchSearch;
   });
 
-  const handleClickProduct = (product) => {
-    setEditingItemIndexForModifiers(null);
-    setInitialModifiersForModal([]);
-    setSelectedProductForModifiers(product);
-    setModifiersModalOpen(true);
+  const handleClickProduct = async (product) => {
+    try {
+      const data = await api.get(`/modifiers/products/${product.id}`).catch(() => []);
+      const activeGroups = (Array.isArray(data) ? data : []).filter(g => g.options && g.options.length > 0);
+
+      if (activeGroups.length > 0) {
+        setEditingItemIndexForModifiers(null);
+        setInitialModifiersForModal([]);
+        setSelectedProductForModifiers(product);
+        setModifiersModalOpen(true);
+      } else {
+        handleConfirmModifiers(product, [], parseFloat(product.price));
+      }
+    } catch (err) {
+      handleConfirmModifiers(product, [], parseFloat(product.price));
+    }
   };
 
   const handleOpenEditItemModifiers = (idx) => {

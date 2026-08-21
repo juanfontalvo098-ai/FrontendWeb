@@ -975,11 +975,22 @@ export const OrdersListPage = () => {
   };
 
   // Manejo de ítems y modificadores en Modo Edición
-  const handleEditAddProduct = (prod) => {
-    setEditingItemIdx(null);
-    setEditingInitialModifiers([]);
-    setSelectedProdForModifiers(prod);
-    setEditModifiersModalOpen(true);
+  const handleEditAddProduct = async (prod) => {
+    try {
+      const data = await api.get(`/modifiers/products/${prod.id}`).catch(() => []);
+      const activeGroups = (Array.isArray(data) ? data : []).filter(g => g.options && g.options.length > 0);
+
+      if (activeGroups.length > 0) {
+        setEditingItemIdx(null);
+        setEditingInitialModifiers([]);
+        setSelectedProdForModifiers(prod);
+        setEditModifiersModalOpen(true);
+      } else {
+        handleConfirmEditModifiers(prod, [], parseFloat(prod.price));
+      }
+    } catch (err) {
+      handleConfirmEditModifiers(prod, [], parseFloat(prod.price));
+    }
   };
 
   const handleOpenEditItemModifiers = (index) => {
@@ -1555,11 +1566,22 @@ export const OrdersListPage = () => {
   };
 
   // Carrito en Nueva Orden con soporte para Sabores y Toppings
-  const handleAddProductToCart = (prod) => {
-    setEditingCartItemIndex(null);
-    setEditingCartInitialModifiers([]);
-    setSelectedCartProduct(prod);
-    setCartModifiersModalOpen(true);
+  const handleAddProductToCart = async (prod) => {
+    try {
+      const data = await api.get(`/modifiers/products/${prod.id}`).catch(() => []);
+      const activeGroups = (Array.isArray(data) ? data : []).filter(g => g.options && g.options.length > 0);
+
+      if (activeGroups.length > 0) {
+        setEditingCartItemIndex(null);
+        setEditingCartInitialModifiers([]);
+        setSelectedCartProduct(prod);
+        setCartModifiersModalOpen(true);
+      } else {
+        handleConfirmCartModifiers(prod, [], parseFloat(prod.price));
+      }
+    } catch (err) {
+      handleConfirmCartModifiers(prod, [], parseFloat(prod.price));
+    }
   };
 
   const handleOpenEditCartItemModifiers = (index) => {
