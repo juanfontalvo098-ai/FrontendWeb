@@ -565,6 +565,12 @@ export const OrdersListPage = () => {
   const [editingItemIdx, setEditingItemIdx] = useState(null);
   const [editingInitialModifiers, setEditingInitialModifiers] = useState([]);
 
+  // Modificadores / Sabores / Toppings en Modal Nueva Orden (Domicilio / Para Llevar)
+  const [cartModifiersModalOpen, setCartModifiersModalOpen] = useState(false);
+  const [selectedCartProduct, setSelectedCartProduct] = useState(null);
+  const [editingCartItemIndex, setEditingCartItemIndex] = useState(null);
+  const [editingCartInitialModifiers, setEditingCartInitialModifiers] = useState([]);
+
   // Modal Cancelar Orden
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -1548,46 +1554,96 @@ export const OrdersListPage = () => {
     }
   };
 
-  // Carrito en Nueva Orden
+  // Carrito en Nueva Orden con soporte para Sabores y Toppings
   const handleAddProductToCart = (prod) => {
+    setEditingCartItemIndex(null);
+    setEditingCartInitialModifiers([]);
+    setSelectedCartProduct(prod);
+    setCartModifiersModalOpen(true);
+  };
+
+  const handleOpenEditCartItemModifiers = (index) => {
+    const item = cartItems[index];
+    if (!item) return;
+    const prod = products.find(p => p.id === item.product_id) || { id: item.product_id, name: item.name, price: item.price };
+    setEditingCartItemIndex(index);
+    setEditingCartInitialModifiers(item.modifiers || []);
+    setSelectedCartProduct(prod);
+    setCartModifiersModalOpen(true);
+  };
+
+  const handleConfirmCartModifiers = (product, selectedModifiers, finalUnitPrice) => {
+    const unitPrice = finalUnitPrice !== undefined ? finalUnitPrice : parseFloat(product.price);
+    const modString = JSON.stringify(selectedModifiers || []);
+
+    if (editingCartItemIndex !== null && editingCartItemIndex >= 0) {
+      setCartItems(prev => {
+        const copy = [...prev];
+        if (copy[editingCartItemIndex]) {
+          copy[editingCartItemIndex] = {
+            ...copy[editingCartItemIndex],
+            price: unitPrice,
+            modifiers: selectedModifiers || []
+          };
+        }
+        return copy;
+      });
+      setEditingCartItemIndex(null);
+      setEditingCartInitialModifiers([]);
+    } else {
+      setCartItems(prev => {
+        const existingIndex = prev.findIndex(it =>
+          it.product_id === product.id &&
+          JSON.stringify(it.modifiers || []) === modString
+        );
+        if (existingIndex > -1) {
+          const copy = [...prev];
+          copy[existingIndex].quantity += 1;
+          return copy;
+        }
+        return [
+          ...prev,
+          {
+            product_id: product.id,
+            name: product.name,
+            price: unitPrice,
+            quantity: 1,
+            tax_rate: product.tax_rate || 0,
+            tax_included: product.tax_included !== undefined ? product.tax_included : true,
+            notes: '',
+            modifiers: selectedModifiers || []
+          }
+        ];
+      });
+    }
+  };
+
+  const handleUpdateCartQty = (index, delta) => {
     setCartItems(prev => {
-      const existing = prev.find(it => it.product_id === prod.id);
-      if (existing) {
-        return prev.map(it => it.product_id === prod.id ? { ...it, quantity: it.quantity + 1 } : it);
+      const copy = [...prev];
+      const item = copy[index];
+      if (!item) return prev;
+      const newQty = item.quantity + delta;
+      if (newQty <= 0) {
+        return copy.filter((_, i) => i !== index);
       }
-      return [
-        ...prev,
-        {
-          product_id: prod.id,
-          name: prod.name,
-          price: parseFloat(prod.price),
-          quantity: 1,
-          tax_rate: prod.tax_rate || 0,
-          tax_included: prod.tax_included !== undefined ? prod.tax_included : true,
-          notes: ''
-        }
-      ];
+      copy[index] = { ...item, quantity: newQty };
+      return copy;
     });
   };
 
-  const handleUpdateCartQty = (productId, delta) => {
+  const handleUpdateCartNotes = (index, notes) => {
     setCartItems(prev => {
-      return prev.map(it => {
-        if (it.product_id === productId) {
-          const newQty = it.quantity + delta;
-          return newQty > 0 ? { ...it, quantity: newQty } : null;
-        }
-        return it;
-      }).filter(Boolean);
+      const copy = [...prev];
+      if (copy[index]) {
+        copy[index] = { ...copy[index], notes };
+      }
+      return copy;
     });
   };
 
-  const handleUpdateCartNotes = (productId, notes) => {
-    setCartItems(prev => prev.map(it => it.product_id === productId ? { ...it, notes } : it));
-  };
-
-  const handleRemoveFromCart = (productId) => {
-    setCartItems(prev => prev.filter(it => it.product_id !== productId));
+  const handleRemoveFromCart = (index) => {
+    setCartItems(prev => prev.filter((_, i) => i !== index));
   };
 
   const cartSubtotal = useMemo(() => {
@@ -1651,7 +1707,8 @@ export const OrdersListPage = () => {
           product_id: it.product_id,
           quantity: it.quantity,
           unit_price: it.price,
-          notes: it.notes || null
+          notes: it.notes || null,
+          modifiers: it.modifiers || []
         }))
       };
 
@@ -4127,8 +4184,8 @@ export const OrdersListPage = () => {
                         Haz clic en los productos del catálogo para agregarlos a la orden.
                       </div>
                     ) : (
-                      cartItems.map((it) => (
-                        <div key={it.product_id} style={{ background: 'var(--bg-primary)', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      cartItems.map((it, idx) => (
+                        <div key={idx} style={{ background: 'var(--bg-primary)', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <strong style={{ fontSize: '11.5px', color: 'var(--text-primary)' }}>{it.name}</strong>
                             <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--accent-primary)' }}>
@@ -4136,19 +4193,64 @@ export const OrdersListPage = () => {
                             </span>
                           </div>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          {/* Sabores y Toppings configurados */}
+                          {Array.isArray(it.modifiers) && it.modifiers.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '1px' }}>
+                              {it.modifiers.map((m, mIdx) => {
+                                const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+                                return (
+                                  <span
+                                    key={mIdx}
+                                    style={{
+                                      fontSize: '9.5px',
+                                      background: 'var(--bg-secondary)',
+                                      border: '1px solid var(--border-color)',
+                                      padding: '1px 4px',
+                                      borderRadius: '3px',
+                                      color: 'var(--text-secondary)'
+                                    }}
+                                  >
+                                    🍨 {m.name} {m.quantity > 1 ? `(x${m.quantity})` : ''} {extra > 0 ? `(+${formatCOP(extra)})` : ''}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', flexWrap: 'wrap', gap: '4px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditCartItemModifiers(idx)}
+                              style={{
+                                background: 'rgba(139, 92, 246, 0.1)',
+                                border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                fontSize: '10px',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              title="Modificar sabores y toppings de este ítem"
+                            >
+                              <Sparkles size={11} /> {Array.isArray(it.modifiers) && it.modifiers.length > 0 ? 'Editar Sabores/Toppings' : '+ Sabores/Toppings'}
+                            </button>
+
                             <input
                               type="text"
                               placeholder="Nota (ej. sin cebolla)..."
                               value={it.notes}
-                              onChange={(e) => handleUpdateCartNotes(it.product_id, e.target.value)}
-                              style={{ padding: '2px 6px', fontSize: '10px', width: '130px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
+                              onChange={(e) => handleUpdateCartNotes(idx, e.target.value)}
+                              style={{ padding: '2px 6px', fontSize: '10px', width: '110px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
                             />
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                               <button
                                 type="button"
-                                onClick={() => handleUpdateCartQty(it.product_id, -1)}
+                                onClick={() => handleUpdateCartQty(idx, -1)}
                                 style={{ width: '22px', height: '22px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 800 }}
                               >
                                 -
@@ -4156,14 +4258,14 @@ export const OrdersListPage = () => {
                               <span style={{ fontSize: '11.5px', fontWeight: 800, minWidth: '16px', textAlign: 'center' }}>{it.quantity}</span>
                               <button
                                 type="button"
-                                onClick={() => handleUpdateCartQty(it.product_id, 1)}
+                                onClick={() => handleUpdateCartQty(idx, 1)}
                                 style={{ width: '22px', height: '22px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 800 }}
                               >
                                 +
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleRemoveFromCart(it.product_id)}
+                                onClick={() => handleRemoveFromCart(idx)}
                                 style={{ background: 'none', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', padding: '2px 4px' }}
                               >
                                 <Trash2 size={12} />
@@ -4635,6 +4737,19 @@ export const OrdersListPage = () => {
         product={selectedProdForModifiers}
         initialModifiers={editingInitialModifiers}
         onConfirm={handleConfirmEditModifiers}
+      />
+      {/* Modal Selección y Edición de Sabores & Toppings en Carrito Nueva Orden */}
+      <ProductModifiersModal
+        isOpen={cartModifiersModalOpen}
+        onClose={() => {
+          setCartModifiersModalOpen(false);
+          setSelectedCartProduct(null);
+          setEditingCartItemIndex(null);
+          setEditingCartInitialModifiers([]);
+        }}
+        product={selectedCartProduct}
+        initialModifiers={editingCartInitialModifiers}
+        onConfirm={handleConfirmCartModifiers}
       />
     </div>
   );
