@@ -15,7 +15,9 @@ import {
   checkPrintBridgeHealth,
   getPrintBridgePrinters,
   sendTestPrint,
-  sendToThermalBridge
+  sendToThermalBridge,
+  buildInvoicePlainText,
+  buildKitchenTicketPlainText
 } from '../utils/printUtils';
 
 export const PrintingConfigPage = () => {
@@ -123,13 +125,43 @@ export const PrintingConfigPage = () => {
     }
   };
 
-  // 4. Pruebas de Impresión
+  // 4. Pruebas de Impresión con Formato Real
   const handleTestKitchen = async () => {
     setTestingKitchen(true);
     try {
-      const res = await sendTestPrint(printerKitchenName, 'cocina', bridgeUrl);
+      const sampleOrder = {
+        id: 'TEST-01',
+        table_number: 'Mesa 4',
+        customer_name: 'Carlos Mendoza'
+      };
+      const sampleItems = [
+        {
+          name: 'Hamburguesa Doble Especial',
+          quantity: 2,
+          notes: 'Sin cebolla, carne término medio',
+          modifiers: [
+            { name: 'Tocineta Extra', quantity: 1 },
+            { name: 'Queso Cheddar', quantity: 1 }
+          ]
+        },
+        {
+          name: 'Limonada de Coco Natural',
+          quantity: 1,
+          notes: 'Poco hielo',
+          modifiers: []
+        }
+      ];
+
+      const plainText = buildKitchenTicketPlainText(
+        sampleOrder,
+        sampleItems,
+        'Mesa VIP - Entregar todo junto',
+        'Laura Gómez'
+      );
+
+      const res = await sendToThermalBridge(plainText, printerKitchenName, bridgeUrl);
       if (res && res.success) {
-        addToast('Ticket de prueba enviado a la impresora de Cocina', 'success');
+        addToast('Comanda de prueba completa enviada a la impresora de Cocina', 'success');
       } else {
         addToast('No se pudo enviar a la impresora de Cocina. Verifica que el Print Bridge esté activo.', 'warning');
       }
@@ -143,9 +175,49 @@ export const PrintingConfigPage = () => {
   const handleTestReceipt = async () => {
     setTestingReceipt(true);
     try {
-      const res = await sendTestPrint(printerReceiptName, 'caja', bridgeUrl);
+      const sampleInvoice = {
+        invoice_number: `${settings.invoice_prefix || 'FAC'}-TEST-001`,
+        created_at: new Date().toISOString(),
+        customer_name: 'Carlos Mendoza',
+        customer_document: '1098765432',
+        customer_phone: '310 987 6543',
+        customer_address: 'Calle 45 # 12-34',
+        cashier_name: 'Cajero Principal',
+        waiter_name: 'Laura Gómez',
+        table_number: 'Mesa 4',
+        payment_method: 'efectivo',
+        subtotal: 42000,
+        discount_amount: 2000,
+        delivery_fee: 0,
+        tip_amount: 4000,
+        tax_total: 3360,
+        total: 44000,
+        items: [
+          {
+            name: 'Hamburguesa Doble Especial',
+            quantity: 2,
+            unit_price: 18000,
+            modifiers: [
+              { name: 'Tocineta Extra', quantity: 1, price_modifier: 3000 },
+              { name: 'Queso Cheddar', quantity: 1, price_modifier: 0 }
+            ]
+          },
+          {
+            name: 'Limonada de Coco Natural',
+            quantity: 1,
+            unit_price: 8000,
+            modifiers: [
+              { name: 'Poco Hielo', quantity: 1, price_modifier: 0 }
+            ]
+          }
+        ]
+      };
+
+      const plainText = buildInvoicePlainText(sampleInvoice, settings);
+      const res = await sendToThermalBridge(plainText, printerReceiptName, bridgeUrl);
+
       if (res && res.success) {
-        addToast('Factura de prueba enviada a la impresora de Caja', 'success');
+        addToast('Factura de venta POS de prueba enviada a la impresora de Caja', 'success');
       } else {
         addToast('No se pudo enviar a la impresora de Caja. Verifica que el Print Bridge esté activo.', 'warning');
       }
