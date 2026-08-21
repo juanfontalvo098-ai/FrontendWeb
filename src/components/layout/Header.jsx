@@ -1,6 +1,6 @@
 // src/components/layout/Header.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Bell, Check, Trash2, Store, MapPin, ChevronDown } from 'lucide-react';
+import { Menu, Bell, Check, Trash2, Store, MapPin, ChevronDown, Sun, Moon } from 'lucide-react';
 import { useUiStore } from '../../store/uiStore';
 import { Badge } from '../ui/Badge';
 import { api } from '../../api/client';
@@ -10,6 +10,8 @@ import { useAuth } from '../../hooks/useAuth';
 export const Header = ({ title = '' }) => {
   const toggleSidebar = useUiStore(state => state.toggleSidebar);
   const addToast = useUiStore(state => state.addToast);
+  const theme = useUiStore(state => state.theme);
+  const toggleTheme = useUiStore(state => state.toggleTheme);
   const { user, branches, activeBranchId, activeBranch, switchBranch, isGlobalAdmin } = useAuth();
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -267,6 +269,37 @@ export const Header = ({ title = '' }) => {
           <span className="cash-label" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Caja:</span>
           <Badge variant={cashOpen ? 'success' : 'danger'}>{cashOpen ? 'Abierta' : 'Cerrada'}</Badge>
         </div>
+
+        {/* BOTÓN MODO CLARO / MODO OSCURO */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '50%',
+            width: '38px',
+            height: '38px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: theme === 'dark' ? '#FBBF24' : 'var(--accent-primary)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            boxShadow: theme === 'dark' ? '0 0 10px rgba(251, 191, 36, 0.2)' : '0 2px 8px rgba(99, 102, 241, 0.2)'
+          }}
+          title={theme === 'dark' ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'scale(1.08)';
+            e.currentTarget.style.borderColor = 'var(--accent-primary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.borderColor = 'var(--border-color)';
+          }}
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
 
         {/* NOTIFICACIONES */}
         <div style={{ position: 'relative' }} ref={popoverRef}>

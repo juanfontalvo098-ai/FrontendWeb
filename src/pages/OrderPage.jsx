@@ -1,7 +1,7 @@
 // src/pages/OrderPage.jsx — Restored from Desktop Backup with Table Number & RBAC updates
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, Plus, Minus, Trash2, Send, Receipt, Printer, FileText, Edit3, Image as ImageIcon, ShoppingCart, Grid, XCircle, Save, ArrowLeft } from 'lucide-react';
+import { Search, Plus, Minus, Trash2, Send, Receipt, Printer, FileText, Edit3, Image as ImageIcon, ShoppingCart, Grid, XCircle, Save, ArrowLeft, Sparkles } from 'lucide-react';
 import { api, formatCOP } from '../api/client';
 import { getSocket } from '../api/socket';
 import { Button } from '../components/ui/Button';

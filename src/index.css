@@ -81,6 +81,66 @@ html {
   --space-12: 2.5rem;
 }
 
+/* === MODO CLARO (LIGHT THEME) === */
+[data-theme="light"] {
+  /* Superficies & Fondos Light */
+  --bg-primary: #F1F5F9;      /* Fondo base gris suave (slate-100) */
+  --bg-secondary: #FFFFFF;    /* Blanco puro para Sidebar, Header, Paneles */
+  --bg-elevated: #FFFFFF;     /* Tarjetas elevadas, modales */
+  --bg-hover: #E2E8F0;        /* Hover claro (slate-200) */
+  --bg-input: #FFFFFF;        /* Entradas de formulario limpias */
+  
+  /* Acentos de Marca adaptados a fondo claro */
+  --accent-primary: #6366F1;        /* KAMIA Indigo */
+  --accent-primary-hover: #4F46E5;
+  --accent-secondary: #8B5CF6;      /* KAMIA Electric */
+  --accent-secondary-hover: #7C3AED;
+  --accent-indigo: #6366F1;
+  --accent-electric: #8B5CF6;
+  --accent-warning: #D97706;
+  --accent-danger: #EF4444;
+  --accent-success: #10B981;
+  
+  /* Texto Light */
+  --text-primary: #0F172A;     /* Slate-900 (alta legibilidad) */
+  --text-secondary: #475569;   /* Slate-600 */
+  --text-muted: #64748B;       /* Slate-500 */
+  
+  /* Glassmorphism & Shadows Light */
+  --glass-bg: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(99, 102, 241, 0.15);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
+  --glow-electric: 0 0 12px rgba(139, 92, 246, 0.2);
+  --glow-indigo: 0 0 12px rgba(99, 102, 241, 0.2);
+  
+  /* Bordes */
+  --border-color: rgba(15, 23, 42, 0.12);
+  --border-focus: rgba(99, 102, 241, 0.5);
+}
+
+[data-theme="light"] .modal {
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="light"] .btn-secondary {
+  background-color: #F8FAFC;
+  border-color: rgba(15, 23, 42, 0.15);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .btn-secondary:hover {
+  background-color: #E2E8F0;
+  border-color: rgba(15, 23, 42, 0.25);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
 /* === RESET Y ESTILOS BASE === */
 *, *::before, *::after {
   box-sizing: border-box;

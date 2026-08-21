@@ -1,11 +1,47 @@
 // src/store/uiStore.js
 import { create } from 'zustand';
 
+const initialTheme = (() => {
+  try {
+    const saved = localStorage.getItem('pos_theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch (e) {}
+  return 'dark';
+})();
+
+// Aplicar atributo al cargar el módulo
+if (typeof document !== 'undefined') {
+  document.documentElement.setAttribute('data-theme', initialTheme);
+}
+
 export const useUiStore = create((set) => ({
   sidebarOpen: true,
   activeModal: null,
   toasts: [],
   loading: false,
+  theme: initialTheme,
+
+  setTheme: (newTheme) => {
+    const validTheme = newTheme === 'light' ? 'light' : 'dark';
+    try {
+      localStorage.setItem('pos_theme', validTheme);
+    } catch (e) {}
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', validTheme);
+    }
+    set({ theme: validTheme });
+  },
+
+  toggleTheme: () => set((state) => {
+    const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
+    try {
+      localStorage.setItem('pos_theme', nextTheme);
+    } catch (e) {}
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', nextTheme);
+    }
+    return { theme: nextTheme };
+  }),
   
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   

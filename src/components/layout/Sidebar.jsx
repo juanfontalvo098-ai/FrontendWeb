@@ -111,7 +111,7 @@ export const Sidebar = () => {
 
       <aside className="sidebar" style={{ width: sidebarOpen ? '240px' : '0', overflow: 'hidden', transition: 'all 0.3s ease', display: 'flex', flexDirection: 'column' }}>
         {/* Header / Logo KAMIA by JF */}
-        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '4px', borderBottom: '1px solid var(--border-color)', background: 'linear-gradient(180deg, rgba(31, 41, 55, 0.4) 0%, rgba(17, 24, 39, 0) 100%)' }}>
+        <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '4px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <KamiaLogo variant="sidebar" size="md" showSlogan={false} />
             <button onClick={toggleSidebar} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: window.innerWidth <= 768 ? 'block' : 'none' }}>
@@ -148,33 +148,26 @@ export const Sidebar = () => {
                     color: hasActiveChild ? 'var(--accent-electric)' : 'var(--text-muted)',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    background: 'transparent',
+                    background: 'none',
                     border: 'none',
                     cursor: 'pointer',
-                    borderRadius: '0px',
-                    transition: 'all 0.15s ease',
-                    textAlign: 'left'
+                    transition: 'color var(--transition-fast)'
                   }}
-                  title={isCollapsed ? 'Desplegar sección' : 'Plegar sección'}
                 >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'left', flex: 1 }}>
-                    {cat.title}
-                  </span>
+                  <span>{cat.title}</span>
                   <ChevronDown
                     size={13}
                     style={{
                       transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
                       transition: 'transform 0.2s ease',
-                      opacity: 0.8,
-                      marginLeft: 'auto'
+                      opacity: 0.7
                     }}
                   />
                 </button>
 
-                {/* Lista de Ítems */}
+                {/* Lista de Enlaces de la Categoría */}
                 {!isCollapsed && (
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: '2px 0 0 0' }}>
                     {cat.items.map((item) => (
                       <li key={item.path}>
                         <NavLink 
@@ -186,12 +179,12 @@ export const Sidebar = () => {
                             gap: '8px',
                             padding: '6.5px 16px',
                             fontSize: '12px',
-                            color: isActive ? '#FFFFFF' : 'var(--text-secondary)',
+                            color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
                             background: isActive
-                              ? 'linear-gradient(90deg, rgba(99, 102, 241, 0.22) 0%, rgba(139, 92, 246, 0.10) 100%)'
+                              ? 'rgba(99, 102, 241, 0.12)'
                               : 'transparent',
                             borderLeft: isActive ? '3px solid var(--accent-electric)' : '3px solid transparent',
-                            boxShadow: isActive ? 'inset 0 0 14px rgba(99, 102, 241, 0.12)' : 'none',
+                            boxShadow: isActive ? 'inset 0 0 14px rgba(99, 102, 241, 0.08)' : 'none',
                             transition: 'all 0.15s ease',
                             fontWeight: isActive ? 700 : 500
                           })}
@@ -211,7 +204,7 @@ export const Sidebar = () => {
         </nav>
 
         {/* Footer / User Profile */}
-        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.1)' }}>
+        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border-color)', background: 'var(--bg-secondary)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
             <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '11px' }}>
               {(user.full_name || user.username)?.charAt(0).toUpperCase() || 'U'}

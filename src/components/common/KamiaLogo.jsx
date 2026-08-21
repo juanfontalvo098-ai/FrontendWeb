@@ -1,5 +1,6 @@
 // src/components/common/KamiaLogo.jsx
 import React from 'react';
+import { useUiStore } from '../../store/uiStore';
 
 /**
  * KAMIA by JF — Logotipo e Identidad Visual Oficial
@@ -82,13 +83,15 @@ export const KamiaSloganPill = ({ style = {} }) => {
 
 export const KamiaLogo = ({
   variant = 'sidebar', // 'sidebar' | 'horizontal' | 'stacked' | 'icon' | 'full'
-  theme = 'dark',     // 'dark' | 'light'
+  theme: explicitTheme,     // 'dark' | 'light'
   size = 'md',        // 'sm' | 'md' | 'lg' | 'xl'
   showSlogan = false,
   className = '',
   style = {}
 }) => {
-  const isDark = theme === 'dark';
+  const storeTheme = useUiStore(state => state.theme);
+  const activeTheme = explicitTheme || storeTheme || 'dark';
+  const isDark = activeTheme === 'dark';
 
   const heightMap = {
     sm: { logoHeight: 26 },
@@ -138,9 +141,10 @@ export const KamiaLogo = ({
   }
 
   // Versión Horizontal (Sidebar y Header)
+  // En modo claro se utiliza el logo oficial kamia-logo-main.png solicitado
   const logoSrc = isDark
     ? '/assets/branding/kamia-logo-sidebar.png'
-    : '/assets/branding/kamia-logo-horizontal-light.png';
+    : '/assets/branding/kamia-logo-main.png';
 
   return (
     <div

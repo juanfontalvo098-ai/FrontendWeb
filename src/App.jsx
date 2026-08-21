@@ -1,8 +1,9 @@
 // src/App.jsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { ToastContainer } from './components/ui/Toast';
+import { useUiStore } from './store/uiStore';
 
 // Pages
 import { LoginPage } from './pages/LoginPage';
@@ -34,6 +35,12 @@ import { HRPage } from './pages/HRPage';
 import { AutoPrintManager } from './components/common/AutoPrintManager';
 
 function App() {
+  const theme = useUiStore(state => state.theme);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
   return (
     <BrowserRouter>
       <AutoPrintManager />

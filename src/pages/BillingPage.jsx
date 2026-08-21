@@ -10,6 +10,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
+import { Badge } from '../components/ui/Badge';
 import { api, formatCOP } from '../api/client';
 import { useUiStore } from '../store/uiStore';
 import { printInvoiceReceipt, printPreFactura, getCleanTableOrType } from '../utils/printUtils';
