@@ -638,9 +638,9 @@ export const ProductsPage = () => {
                           </span>
                         </td>
                         <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{formatCOP(cost)}</td>
-                        <td style={{ padding: '8px 10px', fontWeight: 800, color: '#FFFFFF' }}>{formatCOP(priceVal)}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--text-primary)' }}>{formatCOP(priceVal)}</td>
                         <td style={{ padding: '8px 10px' }}>
-                          <span style={{ fontWeight: 700, color: '#FFFFFF' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                             {margin}%
                           </span>
                         </td>
