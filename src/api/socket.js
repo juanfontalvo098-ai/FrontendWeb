@@ -29,15 +29,13 @@ export const initSocket = () => {
   const resolveSocketUrl = () => {
     if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
     if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      return `http://${window.location.hostname}:3001`;
-    }
-    return 'http://localhost:3001';
+    return undefined;
   };
 
-  const SOCKET_URL = resolveSocketUrl().replace(/\/api$/, '');
+  const SOCKET_URL = resolveSocketUrl();
 
   socket = io(SOCKET_URL, {
+    path: '/socket.io',
     auth: { token },
     autoConnect: true,
     reconnection: true,
