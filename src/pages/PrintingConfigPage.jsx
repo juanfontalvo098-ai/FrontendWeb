@@ -400,6 +400,54 @@ pause >nul\r
     addToast('Desinstalador desinstalar-servicio.bat descargado', 'info');
   };
 
+  const downloadMobileAccessBat = () => {
+    const batContent = `@echo off
+chcp 65001 >nul
+title GastrosPOS - Habilitador de Red Local & Acceso Movil
+
+:: Verificar y auto-elevar a Administrador
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [INFO] Solicitando permisos de Administrador para configurar Firewall de Windows...
+    powershell -Command "Start-Process '%~f0' -Verb RunAs"
+    exit /b
+)
+
+cls
+echo ====================================================================
+echo   GASTROSPOS / KAMIA - CONFIGURADOR DE ACCESO LOCAL PARA MOVILES
+echo ====================================================================
+echo.
+echo [1/2] Configurando perfil de red de Windows a "Red Privada"...
+powershell -Command "Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private"
+echo   [OK] Perfil de red configurado como Red Privada.
+echo.
+echo [2/2] Abriendo puertos en Firewall de Windows (5173, 3001, 8088)...
+netsh advfirewall firewall delete rule name="GastrosPOS_LAN" >nul 2>&1
+netsh advfirewall firewall add rule name="GastrosPOS_LAN" dir=in action=allow protocol=TCP localport=3001,5173,8088 profile=any >nul
+echo   [OK] Puertos 5173 (POS Web), 3001 (API Server) y 8088 (Print Bridge) habilitados.
+echo.
+echo ====================================================================
+echo   CONFIGURACION EXITOSA!
+echo.
+echo   Tus telefonos celulares y tablets ya tienen acceso libre a:
+echo   http://192.168.1.2:5173
+echo ====================================================================
+echo.
+pause
+`;
+    const blob = new Blob([batContent], { type: 'application/bat' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'habilitar-acceso-movil.bat';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addToast('Descargado habilitar-acceso-movil.bat', 'success');
+  };
+
   // Opciones de impresoras detectadas
   const printerOptions = [
     { value: '', label: 'Impresora Predeterminada de Windows' },
@@ -872,6 +920,16 @@ pause >nul\r
             </div>
             <Button size="sm" variant="danger" onClick={downloadUninstallerBat} style={{ width: '100%' }}>
               Descargar desinstalador (.bat)
+            </Button>
+          </div>
+
+          <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+            <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-primary)' }}>5. Desbloquear Celulares (Firewall)</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '4px 0 8px 0' }}>
+              Configura Red Privada y abre puertos para meseros en Wi-Fi.
+            </div>
+            <Button size="sm" variant="primary" onClick={downloadMobileAccessBat} style={{ width: '100%' }}>
+              Descargar habilitar-movil.bat
             </Button>
           </div>
 
