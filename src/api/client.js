@@ -46,10 +46,10 @@ const handleResponse = async (response) => {
 };
 
 export const api = {
-  get: (endpoint) => fetch(`${BASE_URL}${endpoint}`, { headers: getHeaders() }).then(handleResponse),
-  post: (endpoint, data) => fetch(`${BASE_URL}${endpoint}`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(data) }).then(handleResponse),
-  put: (endpoint, data) => fetch(`${BASE_URL}${endpoint}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(data) }).then(handleResponse),
-  delete: (endpoint) => fetch(`${BASE_URL}${endpoint}`, { method: 'DELETE', headers: getHeaders() }).then(handleResponse),
+  get: (endpoint) => fetch(`${BASE_URL}${endpoint}`, { headers: getHeaders(), mode: 'cors' }).then(handleResponse),
+  post: (endpoint, data) => fetch(`${BASE_URL}${endpoint}`, { method: 'POST', headers: getHeaders(), mode: 'cors', body: JSON.stringify(data) }).then(handleResponse),
+  put: (endpoint, data) => fetch(`${BASE_URL}${endpoint}`, { method: 'PUT', headers: getHeaders(), mode: 'cors', body: JSON.stringify(data) }).then(handleResponse),
+  delete: (endpoint) => fetch(`${BASE_URL}${endpoint}`, { method: 'DELETE', headers: getHeaders(), mode: 'cors' }).then(handleResponse),
   getBlob: async (endpoint) => {
     const token = localStorage.getItem('token');
     const activeBranchId = localStorage.getItem('activeBranchId');
@@ -57,7 +57,8 @@ export const api = {
       headers: {
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...(activeBranchId ? { 'X-Branch-Id': activeBranchId } : {})
-      }
+      },
+      mode: 'cors'
     });
     if (!res.ok) {
       let errMsg = 'Error al generar el archivo para descarga';
