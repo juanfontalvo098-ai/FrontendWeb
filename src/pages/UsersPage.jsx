@@ -12,6 +12,7 @@ import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { api } from '../api/client';
 import { useUiStore } from '../store/uiStore';
+import { useAuthStore } from '../store/authStore';
 
 // Grupos estructurados de todos los módulos del sistema POS & ERP
 export const PERMISSION_GROUPS = [
@@ -99,6 +100,16 @@ export const ROLE_PRESET_PERMISSIONS = {
 
 export const UsersPage = () => {
   const addToast = useUiStore((state) => state.addToast);
+  const currentUser = useAuthStore((state) => state.user);
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+
+  // Grupos y módulos visibles según el rol del usuario conectado
+  const visiblePermissionGroups = PERMISSION_GROUPS.map(group => ({
+    ...group,
+    modules: isSuperAdmin ? group.modules : group.modules.filter(m => m.path !== '/negocios')
+  })).filter(g => g.modules.length > 0);
+
+  const visibleAllModules = visiblePermissionGroups.flatMap(g => g.modules);
 
   const [users, setUsers] = useState([]);
   const [branches, setBranches] = useState([]);
@@ -147,11 +158,17 @@ export const UsersPage = () => {
     setRole('mesero');
     setBranchId('');
     setIsActive(1);
-    setSelectedPermissions(ROLE_PRESET_PERMISSIONS.mesero || ['/', '/mesas']);
+    const defaultPerms = ROLE_PRESET_PERMISSIONS.mesero || ['/', '/mesas'];
+    setSelectedPermissions(isSuperAdmin ? defaultPerms : defaultPerms.filter(p => p !== '/negocios'));
     setIsModalOpen(true);
   };
 
   const handleOpenEditUser = (u) => {
+    if (u.role === 'super_admin' && !isSuperAdmin) {
+      addToast('Solo un Super Administrador puede ver o modificar esta cuenta', 'warning');
+      return;
+    }
+
     setEditingUser(u);
     setUsername(u.username);
     setFullName(u.full_name);
@@ -161,9 +178,10 @@ export const UsersPage = () => {
     setIsActive(u.is_active);
 
     if (Array.isArray(u.permissions) && u.permissions.length > 0) {
-      setSelectedPermissions(u.permissions);
+      setSelectedPermissions(isSuperAdmin ? u.permissions : u.permissions.filter(p => p !== '/negocios'));
     } else {
-      setSelectedPermissions(ROLE_PRESET_PERMISSIONS[u.role] || ['/', '/mesas']);
+      const perms = (ROLE_PRESET_PERMISSIONS[u.role] || ['/', '/mesas']);
+      setSelectedPermissions(isSuperAdmin ? perms : perms.filter(p => p !== '/negocios'));
     }
 
     setIsModalOpen(true);
@@ -173,18 +191,21 @@ export const UsersPage = () => {
     setRole(newRole);
     // Sugerir permisos automáticos según el rol
     if (ROLE_PRESET_PERMISSIONS[newRole]) {
-      setSelectedPermissions(ROLE_PRESET_PERMISSIONS[newRole]);
+      const perms = ROLE_PRESET_PERMISSIONS[newRole];
+      setSelectedPermissions(isSuperAdmin ? perms : perms.filter(p => p !== '/negocios'));
     }
   };
 
   const handleApplyRolePreset = () => {
     if (ROLE_PRESET_PERMISSIONS[role]) {
-      setSelectedPermissions(ROLE_PRESET_PERMISSIONS[role]);
+      const perms = ROLE_PRESET_PERMISSIONS[role];
+      setSelectedPermissions(isSuperAdmin ? perms : perms.filter(p => p !== '/negocios'));
       addToast(`Permisos restablecidos a la plantilla predeterminada de ${role}`, 'info');
     }
   };
 
   const togglePermission = (path) => {
+    if (path === '/negocios' && !isSuperAdmin) return;
     if (selectedPermissions.includes(path)) {
       setSelectedPermissions(selectedPermissions.filter(p => p !== path));
     } else {
@@ -193,7 +214,7 @@ export const UsersPage = () => {
   };
 
   const handleSelectAll = () => {
-    setSelectedPermissions(ALL_MODULES.map(m => m.path));
+    setSelectedPermissions(visibleAllModules.map(m => m.path));
   };
 
   const handleDeselectAll = () => {
@@ -201,7 +222,8 @@ export const UsersPage = () => {
   };
 
   const handleToggleGroup = (groupModules) => {
-    const groupPaths = groupModules.map(m => m.path);
+    const safeModules = isSuperAdmin ? groupModules : groupModules.filter(m => m.path !== '/negocios');
+    const groupPaths = safeModules.map(m => m.path);
     const allSelected = groupPaths.every(p => selectedPermissions.includes(p));
 
     if (allSelected) {
@@ -256,6 +278,11 @@ export const UsersPage = () => {
   };
 
   const handleToggleStatus = async (user) => {
+    if (user.role === 'super_admin' && !isSuperAdmin) {
+      addToast('No tienes permisos para desactivar una cuenta de Super Administrador', 'danger');
+      return;
+    }
+
     const newStatus = user.is_active ? 0 : 1;
     try {
       await api.put(`/users/${user.id}`, {
@@ -274,6 +301,11 @@ export const UsersPage = () => {
   };
 
   const handleDeleteUser = async (user) => {
+    if (user.role === 'super_admin' && !isSuperAdmin) {
+      addToast('No tienes permisos para eliminar una cuenta de Super Administrador', 'danger');
+      return;
+    }
+
     if (!window.confirm(`¿Estás seguro de que deseas eliminar definitivamente al usuario @${user.username} (${user.full_name})?`)) return;
     try {
       await api.delete(`/users/${user.id}/permanent`);
@@ -498,27 +530,35 @@ export const UsersPage = () => {
                       {/* Acciones */}
                       <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                          <button
-                            onClick={() => handleOpenEditUser(u)}
-                            style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '4px 8px', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
-                            title="Editar usuario o permisos"
-                          >
-                            <Edit size={12} /> Editar
-                          </button>
-                          <button
-                            onClick={() => handleToggleStatus(u)}
-                            style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '4px 8px', color: u.is_active ? 'var(--accent-danger)' : '#10b981', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}
-                            title={u.is_active ? 'Desactivar acceso' : 'Activar acceso'}
-                          >
-                            <Shield size={12} /> {u.is_active ? 'Desactivar' : 'Activar'}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteUser(u)}
-                            style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '4px', padding: '4px 6px', color: 'var(--accent-danger)', cursor: 'pointer' }}
-                            title="Eliminar usuario permanentemente"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                          {u.role === 'super_admin' && !isSuperAdmin ? (
+                            <Badge variant="neutral" style={{ fontSize: '10.5px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Lock size={11} color="var(--text-muted)" /> Protegido
+                            </Badge>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleOpenEditUser(u)}
+                                style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '4px 8px', color: 'var(--text-primary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600 }}
+                                title="Editar usuario o permisos"
+                              >
+                                <Edit size={12} /> Editar
+                              </button>
+                              <button
+                                onClick={() => handleToggleStatus(u)}
+                                style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '4px 8px', color: u.is_active ? 'var(--accent-danger)' : '#10b981', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}
+                                title={u.is_active ? 'Desactivar acceso' : 'Activar acceso'}
+                              >
+                                <Shield size={12} /> {u.is_active ? 'Desactivar' : 'Activar'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '4px', padding: '4px 6px', color: 'var(--accent-danger)', cursor: 'pointer' }}
+                                title="Eliminar usuario permanentemente"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -589,7 +629,7 @@ export const UsersPage = () => {
                   { value: 'repartidor', label: 'Repartidor / Delivery' },
                   { value: 'gerente', label: 'Gerente de Sucursal' },
                   { value: 'admin', label: 'Administrador del Negocio' },
-                  { value: 'super_admin', label: 'Super Administrador SaaS' }
+                  ...(isSuperAdmin ? [{ value: 'super_admin', label: 'Super Administrador SaaS' }] : [])
                 ]}
               />
             </div>
@@ -658,7 +698,7 @@ export const UsersPage = () => {
 
               {/* Categorías de Permisos */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '340px', overflowY: 'auto', paddingRight: '4px' }}>
-                {PERMISSION_GROUPS.map((grp) => {
+                {visiblePermissionGroups.map((grp) => {
                   const groupPaths = grp.modules.map(m => m.path);
                   const isGroupAllSelected = groupPaths.every(p => selectedPermissions.includes(p));
                   const isGroupSomeSelected = groupPaths.some(p => selectedPermissions.includes(p));
