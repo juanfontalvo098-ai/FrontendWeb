@@ -90,16 +90,33 @@ html {
   --bg-hover: #E2E8F0;        /* Hover claro (slate-200) */
   --bg-input: #FFFFFF;        /* Entradas de formulario limpias */
   
-  /* Acentos de Marca adaptados a fondo claro */
-  --accent-primary: #6366F1;        /* KAMIA Indigo */
-  --accent-primary-hover: #4F46E5;
-  --accent-secondary: #8B5CF6;      /* KAMIA Electric */
-  --accent-secondary-hover: #7C3AED;
-  --accent-indigo: #6366F1;
-  --accent-electric: #8B5CF6;
-  --accent-warning: #D97706;
-  --accent-danger: #EF4444;
-  --accent-success: #10B981;
+  /* Acentos de Marca adaptados a fondo claro con alto contraste */
+  --accent-primary: #4F46E5;        /* KAMIA Indigo */
+  --accent-primary-hover: #4338CA;
+  --accent-secondary: #7C3AED;      /* KAMIA Electric */
+  --accent-secondary-hover: #6D28D9;
+  --accent-indigo: #4F46E5;
+  --accent-electric: #7C3AED;
+  --accent-warning: #B45309;        /* Ámbar oscuro legible */
+  --accent-danger: #DC2626;         /* Rojo intenso */
+  --accent-success: #047857;        /* Verde esmeralda oscuro de alto contraste */
+
+  /* Badges en Modo Claro */
+  --badge-success-bg: rgba(4, 120, 87, 0.12);
+  --badge-success-text: #047857;
+  --badge-success-border: rgba(4, 120, 87, 0.35);
+
+  --badge-warning-bg: rgba(180, 83, 9, 0.12);
+  --badge-warning-text: #B45309;
+  --badge-warning-border: rgba(180, 83, 9, 0.35);
+
+  --badge-danger-bg: rgba(220, 38, 38, 0.12);
+  --badge-danger-text: #DC2626;
+  --badge-danger-border: rgba(220, 38, 38, 0.35);
+
+  --badge-info-bg: rgba(79, 70, 229, 0.12);
+  --badge-info-text: #4F46E5;
+  --badge-info-border: rgba(79, 70, 229, 0.35);
   
   /* Texto Light */
   --text-primary: #0F172A;     /* Slate-900 (alta legibilidad) */

@@ -1845,14 +1845,14 @@ export const OrdersListPage = () => {
     }
     if (order.status === 'cerrada') {
       return (
-        <span style={{ color: '#10b981', fontWeight: 700, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+        <span style={{ color: 'var(--accent-success)', fontWeight: 700, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           <CheckCircle2 size={13} /> Pagada / Cerrada
         </span>
       );
     }
     if (order.status === 'en_preparacion') {
       return (
-        <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+        <span style={{ color: 'var(--accent-warning)', fontWeight: 700, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           <Clock size={13} /> En Preparación
         </span>
       );
@@ -1866,7 +1866,7 @@ export const OrdersListPage = () => {
     }
     if (order.status === 'entregada') {
       return (
-        <span style={{ color: '#10b981', fontWeight: 700, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+        <span style={{ color: 'var(--accent-success)', fontWeight: 700, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           <CheckCircle2 size={13} /> Entregada
         </span>
       );
@@ -1896,7 +1896,7 @@ export const OrdersListPage = () => {
     }
     if (pm === 'efectivo') {
       return (
-        <span style={{ color: '#10b981', fontWeight: 600, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'capitalize' }}>
+        <span style={{ color: 'var(--accent-success)', fontWeight: 700, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'capitalize' }}>
           <DollarSign size={12} /> Efectivo
         </span>
       );
@@ -1944,7 +1944,7 @@ export const OrdersListPage = () => {
     }
     if (order.status === 'cerrada') {
       return (
-        <span style={{ color: '#10b981', fontSize: '11.5px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+        <span style={{ color: 'var(--accent-success)', fontSize: '11.5px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
           <CheckCircle2 size={12} /> $0 (Al día)
         </span>
       );
@@ -2345,7 +2345,7 @@ export const OrdersListPage = () => {
                           <span style={{
                             fontSize: '12px',
                             fontWeight: o.shift_status === 'abierta' ? 700 : 600,
-                            color: o.shift_status === 'abierta' ? '#10b981' : '#FFFFFF'
+                            color: o.shift_status === 'abierta' ? 'var(--accent-success)' : 'var(--text-primary)'
                           }}>
                             Turno #{o.cash_shift_id || o.cash_register_id}
                           </span>
@@ -2427,7 +2427,7 @@ export const OrdersListPage = () => {
 
                       {/* Monto Total */}
                       <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 800, color: isPaid ? '#10b981' : isCancelled ? 'var(--text-muted)' : '#FFFFFF' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 800, color: isPaid ? 'var(--accent-success)' : isCancelled ? 'var(--text-muted)' : 'var(--text-primary)' }}>
                           {formatCOP(orderTotal)}
                         </span>
                       </td>
