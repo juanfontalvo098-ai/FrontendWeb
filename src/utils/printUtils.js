@@ -11,7 +11,7 @@ export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 
   try {
     const url = (bridgeUrl || 'http://localhost:8088').replace(/\/+$/, '');
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const res = await fetch(`${url}/print`, {
       method: 'POST',
@@ -23,13 +23,16 @@ export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 
 
     if (res.ok) {
       const data = await res.json();
-      console.log('✅ [PrintUtils] Impresión silenciosa enviada con éxito al Print Bridge:', data);
+      console.log('✅ [PrintUtils] Impresión enviada con éxito al Print Bridge:', data);
       return { success: true, data };
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, error: errData.error || `Error HTTP ${res.status}` };
     }
   } catch (err) {
-    console.warn('⚠️ [PrintUtils] Print Bridge no disponible o inalcanzable, usando modo navegador:', err.message);
+    console.warn('⚠️ [PrintUtils] Error al conectar con Print Bridge:', err.message);
+    return { success: false, error: err.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con el Print Bridge' : err.message };
   }
-  return { success: false };
 };
 
 /**

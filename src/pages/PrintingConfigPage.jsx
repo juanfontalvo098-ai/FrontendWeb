@@ -163,7 +163,7 @@ export const PrintingConfigPage = () => {
       if (res && res.success) {
         addToast('Comanda de prueba completa enviada a la impresora de Cocina', 'success');
       } else {
-        addToast('No se pudo enviar a la impresora de Cocina. Verifica que el Print Bridge esté activo.', 'warning');
+        addToast(res?.error || 'No se pudo enviar a la impresora de Cocina. Verifica que el Print Bridge esté activo.', 'warning');
       }
     } catch (e) {
       addToast('Error al enviar prueba: ' + e.message, 'danger');
@@ -219,7 +219,7 @@ export const PrintingConfigPage = () => {
       if (res && res.success) {
         addToast('Factura de venta POS de prueba enviada a la impresora de Caja', 'success');
       } else {
-        addToast('No se pudo enviar a la impresora de Caja. Verifica que el Print Bridge esté activo.', 'warning');
+        addToast(res?.error || 'No se pudo enviar a la impresora de Caja. Verifica que el Print Bridge esté activo.', 'warning');
       }
     } catch (e) {
       addToast('Error al enviar prueba: ' + e.message, 'danger');
@@ -235,7 +235,7 @@ export const PrintingConfigPage = () => {
       if (res && res.success) {
         addToast('Señal de apertura enviada a la gaveta de dinero', 'info');
       } else {
-        addToast('Verifica que la gaveta esté conectada al puerto RJ11 de la impresora de Caja', 'warning');
+        addToast(res?.error || 'Verifica que la gaveta esté conectada al puerto RJ11 de la impresora de Caja', 'warning');
       }
     } catch (e) {
       addToast('Error al probar gaveta: ' + e.message, 'danger');
