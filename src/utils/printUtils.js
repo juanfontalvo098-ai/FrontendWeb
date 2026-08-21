@@ -7,7 +7,7 @@ import { formatCOP, formatDateTime, api } from '../api/client';
 /**
  * Envía el ticket directamente al Print Bridge local (puerto 8088) sin diálogos ni confirmaciones de Windows
  */
-export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 'http://localhost:8088') => {
+export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 'http://localhost:8088', options = {}) => {
   try {
     const url = (bridgeUrl || 'http://localhost:8088').replace(/\/+$/, '');
     const controller = new AbortController();
@@ -16,7 +16,7 @@ export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 
     const res = await fetch(`${url}/print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, printerName }),
+      body: JSON.stringify({ text, printerName, ...options }),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
@@ -33,6 +33,13 @@ export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 
     console.warn('⚠️ [PrintUtils] Error al conectar con Print Bridge:', err.message);
     return { success: false, error: err.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con el Print Bridge' : err.message };
   }
+};
+
+/**
+ * Envía el pulso de apertura de cajón monedero (RJ11) a la impresora
+ */
+export const openCashDrawer = async (printerName = null, bridgeUrl = 'http://localhost:8088') => {
+  return sendToThermalBridge('', printerName, bridgeUrl, { openDrawer: true, cutPaper: false });
 };
 
 /**
