@@ -1,8 +1,9 @@
 // src/pages/CustomersPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Users, UserPlus, Search, Edit2, Trash2, Award, CreditCard,
-  History, ShoppingBag, DollarSign, Calendar, ChevronRight, Phone, Mail, MapPin, Building
+  History, ShoppingBag, DollarSign, Calendar, ChevronRight, Phone, Mail, MapPin, Building,
+  RotateCcw, X, XCircle, ChevronDown, Filter, AlertCircle, CheckCircle2, SlidersHorizontal
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -17,8 +18,15 @@ export const CustomersPage = () => {
 
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Filtros Avanzados de Clientes / CRM
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('');
+  const [filterType, setFilterType] = useState('all'); // 'all' | 'regular' | 'vip' | 'mayorista'
+  const [creditStatusFilter, setCreditStatusFilter] = useState('all'); // 'all' | 'with_debt' | 'with_limit' | 'no_debt'
+  const [loyaltyFilter, setLoyaltyFilter] = useState('all'); // 'all' | 'with_points' | 'zero_points'
+  const [cityFilter, setCityFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('name_asc'); // 'name_asc' | 'name_desc' | 'debt_desc' | 'points_desc' | 'limit_desc' | 'newest'
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -51,11 +59,8 @@ export const CustomersPage = () => {
   const fetchCustomers = async () => {
     try {
       setLoading(true);
-      let query = '/customers?';
-      if (searchTerm) query += `search=${encodeURIComponent(searchTerm)}&`;
-      if (filterType) query += `customer_type=${filterType}&`;
-      const data = await api.get(query);
-      setCustomers(data);
+      const data = await api.get('/customers');
+      setCustomers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error al cargar clientes:', err);
       addToast('Error al cargar lista de clientes', 'error');
@@ -66,7 +71,7 @@ export const CustomersPage = () => {
 
   useEffect(() => {
     fetchCustomers();
-  }, [searchTerm, filterType]);
+  }, []);
 
   const handleOpenNew = () => {
     setEditingCustomer(null);
@@ -188,14 +193,132 @@ export const CustomersPage = () => {
     }
   };
 
+  // Lista de ciudades disponibles
+  const availableCities = useMemo(() => {
+    const set = new Set();
+    customers.forEach(c => {
+      if (c.city && c.city.trim()) set.add(c.city.trim());
+    });
+    return Array.from(set).sort();
+  }, [customers]);
+
+  // Métricas y conteos de segmentación
+  const counts = useMemo(() => {
+    let regular = 0;
+    let vip = 0;
+    let mayorista = 0;
+    let withDebt = 0;
+    let totalDebt = 0;
+    let totalCreditLimit = 0;
+    let totalPoints = 0;
+
+    customers.forEach(c => {
+      if (c.customer_type === 'vip') vip++;
+      else if (c.customer_type === 'mayorista') mayorista++;
+      else regular++;
+
+      const debt = parseFloat(c.credit_balance || 0);
+      const limit = parseFloat(c.credit_limit || 0);
+      const points = parseInt(c.loyalty_points || 0);
+
+      if (debt > 0) withDebt++;
+      totalDebt += debt;
+      totalCreditLimit += limit;
+      totalPoints += points;
+    });
+
+    return {
+      all: customers.length,
+      regular,
+      vip,
+      mayorista,
+      withDebt,
+      totalDebt,
+      totalCreditLimit,
+      totalPoints
+    };
+  }, [customers]);
+
+  // Conteo de filtros activos
+  const activeCustomersFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filterType !== 'all') count++;
+    if (creditStatusFilter !== 'all') count++;
+    if (loyaltyFilter !== 'all') count++;
+    if (cityFilter !== 'all') count++;
+    if (sortBy !== 'name_asc') count++;
+    return count;
+  }, [filterType, creditStatusFilter, loyaltyFilter, cityFilter, sortBy]);
+
+  // Filtrado y Ordenamiento Reactivo de Clientes
+  const filteredCustomers = useMemo(() => {
+    const result = customers.filter(c => {
+      // 1. Buscador Omnibox
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase().trim();
+        const matches = (c.name || '').toLowerCase().includes(q) ||
+          (c.document_number || '').toLowerCase().includes(q) ||
+          (c.phone || '').toLowerCase().includes(q) ||
+          (c.email || '').toLowerCase().includes(q) ||
+          (c.city || '').toLowerCase().includes(q) ||
+          (c.notes || '').toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+
+      // 2. Tipo de Cliente
+      if (filterType !== 'all') {
+        if ((c.customer_type || 'regular') !== filterType) return false;
+      }
+
+      // 3. Estado de Crédito / Cartera
+      const balance = parseFloat(c.credit_balance || 0);
+      const limit = parseFloat(c.credit_limit || 0);
+
+      if (creditStatusFilter === 'with_debt' && balance <= 0) return false;
+      if (creditStatusFilter === 'no_debt' && balance > 0) return false;
+      if (creditStatusFilter === 'with_limit' && limit <= 0) return false;
+
+      // 4. Puntos de Fidelidad
+      const points = parseInt(c.loyalty_points || 0);
+      if (loyaltyFilter === 'with_points' && points <= 0) return false;
+      if (loyaltyFilter === 'zero_points' && points > 0) return false;
+
+      // 5. Ciudad
+      if (cityFilter !== 'all') {
+        if ((c.city || '').trim().toLowerCase() !== cityFilter.trim().toLowerCase()) return false;
+      }
+
+      return true;
+    });
+
+    // Ordenamiento
+    result.sort((a, b) => {
+      const balanceA = parseFloat(a.credit_balance || 0);
+      const balanceB = parseFloat(b.credit_balance || 0);
+      const pointsA = parseInt(a.loyalty_points || 0);
+      const pointsB = parseInt(b.loyalty_points || 0);
+      const limitA = parseFloat(a.credit_limit || 0);
+      const limitB = parseFloat(b.credit_limit || 0);
+
+      if (sortBy === 'debt_desc') return balanceB - balanceA;
+      if (sortBy === 'points_desc') return pointsB - pointsA;
+      if (sortBy === 'limit_desc') return limitB - limitA;
+      if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '');
+      if (sortBy === 'newest') return (b.id || 0) - (a.id || 0);
+      return (a.name || '').localeCompare(b.name || ''); // name_asc
+    });
+
+    return result;
+  }, [customers, searchTerm, filterType, creditStatusFilter, loyaltyFilter, cityFilter, sortBy]);
+
   const getTypeBadge = (type) => {
     switch (type) {
       case 'vip':
-        return <Badge variant="warning">VIP</Badge>;
+        return <Badge variant="warning">⭐ VIP</Badge>;
       case 'mayorista':
-        return <Badge variant="info">Mayorista</Badge>;
+        return <Badge variant="info">🏢 Mayorista / Empresa</Badge>;
       default:
-        return <Badge variant="default">Regular</Badge>;
+        return <Badge variant="default">👤 Regular</Badge>;
     }
   };
 
@@ -226,7 +349,8 @@ export const CustomersPage = () => {
           </div>
           <div>
             <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Total Clientes</div>
-            <div style={{ fontSize: 'var(--font-2xl)', fontWeight: 800 }}>{customers.length}</div>
+            <div style={{ fontSize: 'var(--font-2xl)', fontWeight: 800 }}>{counts.all}</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{counts.regular} regulares · {counts.mayorista} empresas</div>
           </div>
         </Card>
 
@@ -235,68 +359,320 @@ export const CustomersPage = () => {
             <Award size={24} color="var(--accent-warning)" />
           </div>
           <div>
-            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Clientes VIP</div>
-            <div style={{ fontSize: 'var(--font-2xl)', fontWeight: 800 }}>
-              {customers.filter(c => c.customer_type === 'vip').length}
+            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Fidelización VIP</div>
+            <div style={{ fontSize: 'var(--font-2xl)', fontWeight: 800, color: 'var(--accent-warning)' }}>
+              {counts.vip} VIP
             </div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{counts.totalPoints} pts acumulados</div>
           </div>
         </Card>
 
         <Card style={{ padding: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-          <div style={{ padding: '12px', background: 'rgba(16, 185, 129, 0.15)', borderRadius: 'var(--radius-md)' }}>
-            <CreditCard size={24} color="var(--accent-primary)" />
+          <div style={{ padding: '12px', background: counts.totalDebt > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)', borderRadius: 'var(--radius-md)' }}>
+            <CreditCard size={24} color={counts.totalDebt > 0 ? 'var(--accent-danger)' : 'var(--accent-success)'} />
           </div>
           <div>
-            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Crédito Otorgado</div>
-            <div style={{ fontSize: 'var(--font-2xl)', fontWeight: 800 }}>
-              {formatCOP(customers.reduce((sum, c) => sum + parseFloat(c.credit_balance || 0), 0))}
+            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Cartera CxC / Deuda</div>
+            <div style={{ fontSize: 'var(--font-2xl)', fontWeight: 800, color: counts.totalDebt > 0 ? 'var(--accent-danger)' : 'var(--text-primary)' }}>
+              {formatCOP(counts.totalDebt)}
             </div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{counts.withDebt} clientes con saldo pendiente</div>
+          </div>
+        </Card>
+
+        <Card style={{ padding: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+          <div style={{ padding: '12px', background: 'rgba(99, 102, 241, 0.15)', borderRadius: 'var(--radius-md)' }}>
+            <DollarSign size={24} color="var(--accent-primary)" />
+          </div>
+          <div>
+            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>Cupo Total Otorgado</div>
+            <div style={{ fontSize: 'var(--font-2xl)', fontWeight: 800, color: 'var(--accent-primary)' }}>
+              {formatCOP(counts.totalCreditLimit)}
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Disponible: {formatCOP(Math.max(0, counts.totalCreditLimit - counts.totalDebt))}</div>
           </div>
         </Card>
       </div>
 
       {/* Filters Bar */}
-      <Card style={{ padding: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
-        <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
-            <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      <Card style={{ padding: '14px 16px', marginBottom: 'var(--space-6)', border: '1px solid var(--border-color)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+        {/* Fila 1: Buscador Omnibox + Ordenamiento + Botón Filtros Avanzados */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: searchTerm ? 'var(--accent-primary)' : 'var(--text-muted)', pointerEvents: 'none' }} />
             <input
               type="text"
-              placeholder="Buscar por nombre, documento, teléfono o correo..."
+              placeholder="Buscar por nombre, documento (cédula/NIT), teléfono, correo, ciudad o notas..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
                 width: '100%',
-                padding: '10px 12px 10px 38px',
+                padding: '9px 34px 9px 36px',
                 background: 'var(--bg-primary)',
-                border: '1px solid var(--border-color)',
+                border: searchTerm ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
                 borderRadius: 'var(--radius-md)',
                 color: 'var(--text-primary)',
-                fontSize: 'var(--font-sm)'
+                fontSize: '13px',
+                outline: 'none',
+                boxShadow: searchTerm ? '0 0 0 3px rgba(99, 102, 241, 0.15)' : 'none',
+                transition: 'all 0.2s'
               }}
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                aria-label="Limpiar búsqueda"
+                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}
+              >
+                <XCircle size={15} />
+              </button>
+            )}
           </div>
-          <div style={{ width: '200px' }}>
+
+          {/* Selector de Ordenamiento */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Ordenar:</span>
             <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
               style={{
-                width: '100%',
-                padding: '10px 12px',
-                background: 'var(--bg-primary)',
-                border: '1px solid var(--border-color)',
+                padding: '8px 10px',
                 borderRadius: 'var(--radius-md)',
-                color: 'var(--text-primary)',
-                fontSize: 'var(--font-sm)'
+                border: sortBy !== 'name_asc' ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                background: sortBy !== 'name_asc' ? 'rgba(99, 102, 241, 0.08)' : 'var(--bg-primary)',
+                color: sortBy !== 'name_asc' ? 'var(--accent-primary)' : 'var(--text-primary)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                outline: 'none'
               }}
             >
-              <option value="">Todos los tipos</option>
-              <option value="regular">Regular</option>
-              <option value="vip">VIP</option>
-              <option value="mayorista">Mayorista</option>
+              <option value="name_asc">🔤 Nombre (A - Z)</option>
+              <option value="name_desc">🔤 Nombre (Z - A)</option>
+              <option value="debt_desc">🚨 Mayor Deuda Pendiente (Cobranza)</option>
+              <option value="points_desc">⭐ Más Puntos de Fidelidad</option>
+              <option value="limit_desc">💰 Mayor Cupo Aprobado</option>
+              <option value="newest">✨ Más Recientes</option>
             </select>
           </div>
+
+          {/* Botón Filtros Avanzados */}
+          <Button
+            type="button"
+            size="sm"
+            variant={showAdvancedFilters || activeCustomersFiltersCount > 0 ? 'primary' : 'secondary'}
+            onClick={() => setShowAdvancedFilters(prev => !prev)}
+            icon={<SlidersHorizontal size={13} />}
+            style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700 }}
+          >
+            Filtros
+            {activeCustomersFiltersCount > 0 && (
+              <span style={{
+                marginLeft: '4px',
+                padding: '1px 5px',
+                borderRadius: '8px',
+                background: showAdvancedFilters || activeCustomersFiltersCount > 0 ? '#fff' : 'var(--accent-primary)',
+                color: showAdvancedFilters || activeCustomersFiltersCount > 0 ? 'var(--accent-primary)' : '#fff',
+                fontSize: '10px',
+                fontWeight: 900
+              }}>
+                {activeCustomersFiltersCount}
+              </span>
+            )}
+            <ChevronDown size={13} style={{ marginLeft: '4px', transform: showAdvancedFilters ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+          </Button>
         </div>
+
+        {/* Fila 2: Chips de Segmento y Deuda */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', paddingTop: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>Segmento:</span>
+            {[
+              { id: 'all', label: `Todos (${counts.all})` },
+              { id: 'regular', label: `Regular (${counts.regular})` },
+              { id: 'vip', label: `⭐ VIP (${counts.vip})` },
+              { id: 'mayorista', label: `🏢 Mayorista / Empresa (${counts.mayorista})` },
+            ].map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setFilterType(t.id)}
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: '14px',
+                  fontSize: '11px',
+                  fontWeight: filterType === t.id ? 700 : 500,
+                  border: filterType === t.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: filterType === t.id ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-primary)',
+                  color: filterType === t.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+
+            <div style={{ height: '14px', width: '1px', background: 'var(--border-color)', margin: '0 2px' }} />
+
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>Cartera:</span>
+            {[
+              { id: 'all', label: 'Todos' },
+              { id: 'with_debt', label: `🚨 Con Saldo Pendiente (${counts.withDebt})` },
+              { id: 'with_limit', label: '💳 Con Cupo' },
+              { id: 'no_debt', label: '✅ Sin Deuda' },
+            ].map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCreditStatusFilter(c.id)}
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: '14px',
+                  fontSize: '11px',
+                  fontWeight: creditStatusFilter === c.id ? 700 : 500,
+                  border: creditStatusFilter === c.id ? (c.id === 'with_debt' ? '1px solid #ef4444' : '1px solid #10b981') : '1px solid var(--border-color)',
+                  background: creditStatusFilter === c.id ? (c.id === 'with_debt' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)') : 'var(--bg-primary)',
+                  color: creditStatusFilter === c.id ? (c.id === 'with_debt' ? '#ef4444' : '#10b981') : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+
+          <Badge variant="info" style={{ fontSize: '11px', padding: '3px 8px', fontWeight: 700 }}>
+            {filteredCustomers.length} {filteredCustomers.length === 1 ? 'cliente' : 'clientes'}
+          </Badge>
+        </div>
+
+        {/* Fila 3: Panel Desplegable de Filtros Avanzados */}
+        {showAdvancedFilters && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px',
+            background: 'var(--bg-secondary)',
+            borderRadius: '8px',
+            border: '1px solid var(--border-color)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '12px',
+            animation: 'fadeIn 0.2s ease'
+          }}>
+            {/* Filtro: Ciudad */}
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                <MapPin size={12} style={{ display: 'inline', marginRight: '4px' }} /> Ciudad / Ubicación
+              </label>
+              <select
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  border: cityFilter !== 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px'
+                }}
+              >
+                <option value="all">Todas las Ciudades</option>
+                {availableCities.map(city => (
+                  <option key={city} value={city}>{city}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filtro: Puntos de Fidelidad */}
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                <Award size={12} style={{ display: 'inline', marginRight: '4px' }} /> Puntos de Fidelidad
+              </label>
+              <select
+                value={loyaltyFilter}
+                onChange={(e) => setLoyaltyFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  border: loyaltyFilter !== 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px'
+                }}
+              >
+                <option value="all">Todos los Clientes</option>
+                <option value="with_points">⭐ Con Puntos Acumulados (+ de 0)</option>
+                <option value="zero_points">Sin Puntos Acumulados (0)</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Fila 4: Pills de Filtros Activos y Limpieza */}
+        {(searchTerm || filterType !== 'all' || creditStatusFilter !== 'all' || loyaltyFilter !== 'all' || cityFilter !== 'all' || sortBy !== 'name_asc') && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Filtros Activos:</span>
+
+              {searchTerm && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 700 }}>
+                  "{searchTerm}"
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSearchTerm('')} />
+                </span>
+              )}
+
+              {filterType !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 700 }}>
+                  Tipo: {filterType}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setFilterType('all')} />
+                </span>
+              )}
+
+              {creditStatusFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontSize: '11px', fontWeight: 700 }}>
+                  Cartera: {creditStatusFilter}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setCreditStatusFilter('all')} />
+                </span>
+              )}
+
+              {cityFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', fontSize: '11px', fontWeight: 700 }}>
+                  Ciudad: {cityFilter}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setCityFilter('all')} />
+                </span>
+              )}
+
+              {loyaltyFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', fontSize: '11px', fontWeight: 700 }}>
+                  Fidelización: {loyaltyFilter}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setLoyaltyFilter('all')} />
+                </span>
+              )}
+            </div>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSearchTerm('');
+                setFilterType('all');
+                setCreditStatusFilter('all');
+                setLoyaltyFilter('all');
+                setCityFilter('all');
+                setSortBy('name_asc');
+              }}
+              icon={<RotateCcw size={12} />}
+              style={{ fontSize: '11px', padding: '3px 8px', fontWeight: 700, color: 'var(--accent-danger)' }}
+            >
+              Limpiar Filtros
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* Table */}
@@ -321,14 +697,14 @@ export const CustomersPage = () => {
                     Cargando directorio de clientes...
                   </td>
                 </tr>
-              ) : customers.length === 0 ? (
+              ) : filteredCustomers.length === 0 ? (
                 <tr>
                   <td colSpan="7" style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--text-muted)' }}>
-                    No se encontraron clientes.
+                    No se encontraron clientes con los filtros aplicados.
                   </td>
                 </tr>
               ) : (
-                customers.map((c) => (
+                filteredCustomers.map((c) => (
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.15s ease' }}>
                     <td style={{ padding: 'var(--space-4)', fontWeight: 600 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>

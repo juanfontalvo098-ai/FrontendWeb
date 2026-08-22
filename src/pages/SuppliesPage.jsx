@@ -1,10 +1,10 @@
 // src/pages/SuppliesPage.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Boxes, Plus, Search, Edit2, Trash2, SlidersHorizontal,
   TrendingDown, TrendingUp, AlertTriangle, CheckCircle, Package,
   Layers, DollarSign, ArrowDownRight, ArrowUpRight, History, Tag,
-  FolderPlus
+  FolderPlus, RotateCcw, X, XCircle, ChevronDown, ChevronRight, Filter
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -21,8 +21,15 @@ export const SuppliesPage = () => {
   const [categories, setCategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Filtros Avanzados de Insumos
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [stockStatusFilter, setStockStatusFilter] = useState('all'); // 'all' | 'critical' | 'low' | 'optimal' | 'overstock'
+  const [supplierFilter, setSupplierFilter] = useState('all');
+  const [unitFilter, setUnitFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('stock_asc'); // 'stock_asc' | 'stock_desc' | 'name_asc' | 'name_desc' | 'cost_desc' | 'cost_asc' | 'total_val_desc'
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Modales Insumos
   const [supplyModalOpen, setSupplyModalOpen] = useState(false);
@@ -311,14 +318,112 @@ export const SuppliesPage = () => {
     }
   };
 
-  // Filtrado
-  const filteredSupplies = supplies.filter(s => {
-    const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) ||
-      (s.sku && s.sku.toLowerCase().includes(search.toLowerCase())) ||
-      (s.category && s.category.toLowerCase().includes(search.toLowerCase()));
-    const matchesCat = selectedCategory ? s.category === selectedCategory : true;
-    return matchesSearch && matchesCat;
-  });
+  // Conteo de insumos por categoría
+  const categoryCounts = useMemo(() => {
+    const counts = { all: supplies.length };
+    categories.forEach(c => { counts[c.name] = 0; });
+    supplies.forEach(s => {
+      const cat = s.category || 'General';
+      if (counts[cat] !== undefined) counts[cat]++;
+      else counts[cat] = 1;
+    });
+    return counts;
+  }, [supplies, categories]);
+
+  // Conteo de estados de stock (Semáforo de inventario)
+  const stockCounts = useMemo(() => {
+    let critical = 0;
+    let low = 0;
+    let optimal = 0;
+    let overstock = 0;
+
+    supplies.forEach(s => {
+      const stock = parseFloat(s.current_stock || 0);
+      const min = parseFloat(s.min_stock || 0);
+      const ideal = parseFloat(s.ideal_stock || min * 3 || 20);
+
+      if (stock <= 0) critical++;
+      else if (stock <= min) low++;
+      else if (stock <= ideal) optimal++;
+      else overstock++;
+    });
+
+    return { all: supplies.length, critical, low, optimal, overstock };
+  }, [supplies]);
+
+  // Conteo de filtros activos en insumos
+  const activeSuppliesFiltersCount = useMemo(() => {
+    let count = 0;
+    if (selectedCategory && selectedCategory !== 'all') count++;
+    if (stockStatusFilter !== 'all') count++;
+    if (supplierFilter !== 'all') count++;
+    if (unitFilter !== 'all') count++;
+    if (sortBy !== 'stock_asc') count++;
+    return count;
+  }, [selectedCategory, stockStatusFilter, supplierFilter, unitFilter, sortBy]);
+
+  // Filtrado y Ordenamiento de Insumos
+  const filteredSupplies = useMemo(() => {
+    const result = supplies.filter(s => {
+      // 1. Buscador Omnibox
+      if (search.trim()) {
+        const q = search.toLowerCase().trim();
+        const matchesSearch = (s.name || '').toLowerCase().includes(q) ||
+          (s.sku && s.sku.toLowerCase().includes(q)) ||
+          (s.barcode && s.barcode.includes(q)) ||
+          (s.category && s.category.toLowerCase().includes(q)) ||
+          (s.description && s.description.toLowerCase().includes(q));
+        if (!matchesSearch) return false;
+      }
+
+      // 2. Categoría
+      if (selectedCategory && selectedCategory !== 'all') {
+        if ((s.category || 'General') !== selectedCategory) return false;
+      }
+
+      // 3. Estado de Stock
+      const stock = parseFloat(s.current_stock || 0);
+      const min = parseFloat(s.min_stock || 0);
+      const ideal = parseFloat(s.ideal_stock || min * 3 || 20);
+
+      if (stockStatusFilter === 'critical' && stock > 0) return false;
+      if (stockStatusFilter === 'low' && (stock <= 0 || stock > min)) return false;
+      if (stockStatusFilter === 'optimal' && (stock <= min || stock > ideal)) return false;
+      if (stockStatusFilter === 'overstock' && stock <= ideal) return false;
+
+      // 4. Proveedor
+      if (supplierFilter !== 'all') {
+        if (s.supplier_id?.toString() !== supplierFilter.toString()) return false;
+      }
+
+      // 5. Unidad de Medida
+      if (unitFilter !== 'all') {
+        if ((s.unit_of_measure || '').toLowerCase() !== unitFilter.toLowerCase()) return false;
+      }
+
+      return true;
+    });
+
+    // Ordenamiento
+    result.sort((a, b) => {
+      const stockA = parseFloat(a.current_stock || 0);
+      const stockB = parseFloat(b.current_stock || 0);
+      const costA = parseFloat(a.cost_price || 0);
+      const costB = parseFloat(b.cost_price || 0);
+      const valA = stockA * costA;
+      const valB = stockB * costB;
+
+      if (sortBy === 'stock_desc') return stockB - stockA;
+      if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '');
+      if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '');
+      if (sortBy === 'cost_desc') return costB - costA;
+      if (sortBy === 'cost_asc') return costA - costB;
+      if (sortBy === 'total_val_desc') return valB - valA;
+      return stockA - stockB; // stock_asc por defecto (priorizar compras)
+    });
+
+    return result;
+  }, [supplies, search, selectedCategory, stockStatusFilter, supplierFilter, unitFilter, sortBy]);
 
   // Métricas
   const totalSupplies = supplies.length;
@@ -394,36 +499,314 @@ export const SuppliesPage = () => {
         </Card>
       </div>
 
-      {/* Barra de Filtros */}
-      <Card style={{ padding: '10px 14px', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: '220px', position: 'relative' }}>
-            <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <Input
-              placeholder="Buscar insumo por nombre, código o categoría..."
+      {/* Barra de Filtros Avanzados de Insumos */}
+      <Card style={{ padding: '14px 16px', marginBottom: '14px', border: '1px solid var(--border-color)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+        {/* Fila 1: Buscador Omnibox + Ordenamiento + Botón Filtros Avanzados */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: search ? 'var(--accent-primary)' : 'var(--text-muted)', pointerEvents: 'none' }} />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, código SKU, código de barras o descripción..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ paddingLeft: '32px', marginBottom: 0, fontSize: '12px' }}
+              style={{
+                width: '100%',
+                padding: '9px 34px 9px 36px',
+                background: 'var(--bg-primary)',
+                border: search ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
+                fontSize: '13px',
+                outline: 'none',
+                boxShadow: search ? '0 0 0 3px rgba(99, 102, 241, 0.15)' : 'none',
+                transition: 'all 0.2s'
+              }}
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Limpiar búsqueda"
+                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}
+              >
+                <XCircle size={15} />
+              </button>
+            )}
           </div>
 
-          <div style={{ width: '240px' }}>
+          {/* Selector de Ordenamiento */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Ordenar:</span>
             <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
               style={{
-                width: '100%', padding: '7px 10px', background: 'var(--bg-primary)',
-                border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)', fontSize: '12px'
+                padding: '8px 10px',
+                borderRadius: 'var(--radius-md)',
+                border: sortBy !== 'stock_asc' ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                background: sortBy !== 'stock_asc' ? 'rgba(99, 102, 241, 0.08)' : 'var(--bg-primary)',
+                color: sortBy !== 'stock_asc' ? 'var(--accent-primary)' : 'var(--text-primary)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                outline: 'none'
               }}
             >
-              <option value="">Todas las Categorías ({categories.length})</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.name}>{cat.name} ({cat.supplies_count || 0})</option>
-              ))}
+              <option value="stock_asc">🚨 Stock: Menor a Mayor (Reabastecer)</option>
+              <option value="stock_desc">📦 Stock: Mayor a Menor</option>
+              <option value="name_asc">🔤 Nombre (A - Z)</option>
+              <option value="name_desc">🔤 Nombre (Z - A)</option>
+              <option value="cost_desc">💰 Costo: Mayor a Menor</option>
+              <option value="cost_asc">💰 Costo: Menor a Mayor</option>
+              <option value="total_val_desc">💎 Mayor Valor Total en Bodega</option>
             </select>
           </div>
+
+          {/* Botón Filtros Avanzados */}
+          <Button
+            type="button"
+            size="sm"
+            variant={showAdvancedFilters || activeSuppliesFiltersCount > 0 ? 'primary' : 'secondary'}
+            onClick={() => setShowAdvancedFilters(prev => !prev)}
+            icon={<SlidersHorizontal size={13} />}
+            style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700 }}
+          >
+            Filtros
+            {activeSuppliesFiltersCount > 0 && (
+              <span style={{
+                marginLeft: '4px',
+                padding: '1px 5px',
+                borderRadius: '8px',
+                background: showAdvancedFilters || activeSuppliesFiltersCount > 0 ? '#fff' : 'var(--accent-primary)',
+                color: showAdvancedFilters || activeSuppliesFiltersCount > 0 ? 'var(--accent-primary)' : '#fff',
+                fontSize: '10px',
+                fontWeight: 900
+              }}>
+                {activeSuppliesFiltersCount}
+              </span>
+            )}
+            <ChevronDown size={13} style={{ marginLeft: '4px', transform: showAdvancedFilters ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+          </Button>
         </div>
+
+        {/* Fila 2: Chips de Categorías de Insumos */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', padding: '4px 0 8px 0', scrollbarWidth: 'none' }}>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('all')}
+            style={{
+              padding: '4px 12px',
+              borderRadius: '16px',
+              fontSize: '11.5px',
+              fontWeight: selectedCategory === 'all' ? 800 : 500,
+              border: selectedCategory === 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+              background: selectedCategory === 'all' ? 'var(--accent-primary)' : 'var(--bg-primary)',
+              color: selectedCategory === 'all' ? '#fff' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: selectedCategory === 'all' ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none'
+            }}
+          >
+            Todas ({categoryCounts.all || 0})
+          </button>
+          {categories.map(c => {
+            const isSelected = selectedCategory === c.name;
+            const count = categoryCounts[c.name] || 0;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedCategory(c.name)}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: '16px',
+                  fontSize: '11.5px',
+                  fontWeight: isSelected ? 800 : 500,
+                  border: isSelected ? `1.5px solid ${c.color || 'var(--accent-primary)'}` : '1px solid var(--border-color)',
+                  background: isSelected ? (c.color || 'var(--accent-primary)') : 'var(--bg-primary)',
+                  color: isSelected ? '#fff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
+                }}
+              >
+                {c.name} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Fila 3: Semáforo de Estado de Stock */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', paddingTop: '6px', borderTop: '1px solid var(--border-color)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>Semáforo Stock:</span>
+            {[
+              { id: 'all', label: `Todos (${stockCounts.all})`, color: 'var(--text-secondary)', bg: 'var(--bg-primary)', border: 'var(--border-color)' },
+              { id: 'critical', label: `🔴 Agotado (${stockCounts.critical})`, color: '#ef4444', bg: 'rgba(239, 68, 68, 0.12)', border: '#ef4444' },
+              { id: 'low', label: `🟡 Bajo / Reorden (${stockCounts.low})`, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.12)', border: '#f59e0b' },
+              { id: 'optimal', label: `🟢 Óptimo (${stockCounts.optimal})`, color: '#10b981', bg: 'rgba(16, 185, 129, 0.12)', border: '#10b981' },
+              { id: 'overstock', label: `🔵 Sobre-stock (${stockCounts.overstock})`, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)', border: '#3b82f6' },
+            ].map(st => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setStockStatusFilter(st.id)}
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: '14px',
+                  fontSize: '11px',
+                  fontWeight: stockStatusFilter === st.id ? 800 : 500,
+                  border: stockStatusFilter === st.id ? `1.5px solid ${st.border}` : '1px solid var(--border-color)',
+                  background: stockStatusFilter === st.id ? st.bg : 'var(--bg-primary)',
+                  color: stockStatusFilter === st.id ? st.color : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s'
+                }}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+
+          <Badge variant="info" style={{ fontSize: '11px', padding: '3px 8px', fontWeight: 700 }}>
+            {filteredSupplies.length} {filteredSupplies.length === 1 ? 'insumo' : 'insumos'}
+          </Badge>
+        </div>
+
+        {/* Fila 4: Panel Desplegable de Filtros Avanzados */}
+        {showAdvancedFilters && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px',
+            background: 'var(--bg-secondary)',
+            borderRadius: '8px',
+            border: '1px solid var(--border-color)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '12px',
+            animation: 'fadeIn 0.2s ease'
+          }}>
+            {/* Filtro: Proveedor */}
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Proveedor Asignado
+              </label>
+              <select
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  border: supplierFilter !== 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px'
+                }}
+              >
+                <option value="all">Todos los Proveedores</option>
+                {suppliers.map(sup => (
+                  <option key={sup.id} value={sup.id}>🏢 {sup.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filtro: Unidad de Medida */}
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Unidad de Medida
+              </label>
+              <select
+                value={unitFilter}
+                onChange={(e) => setUnitFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  border: unitFilter !== 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px'
+                }}
+              >
+                <option value="all">Todas las Unidades</option>
+                {unitsList.map(u => (
+                  <option key={u.value} value={u.value}>{u.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Fila 5: Pills de Filtros Activos y Limpieza */}
+        {(search || (selectedCategory && selectedCategory !== 'all') || stockStatusFilter !== 'all' || supplierFilter !== 'all' || unitFilter !== 'all' || sortBy !== 'stock_asc') && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Filtros Activos:</span>
+
+              {search && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 700 }}>
+                  "{search}"
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSearch('')} />
+                </span>
+              )}
+
+              {selectedCategory && selectedCategory !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 700 }}>
+                  Cat: {selectedCategory}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSelectedCategory('all')} />
+                </span>
+              )}
+
+              {stockStatusFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.12)', color: '#ef4444', fontSize: '11px', fontWeight: 700 }}>
+                  Stock: {stockStatusFilter}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setStockStatusFilter('all')} />
+                </span>
+              )}
+
+              {supplierFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', fontSize: '11px', fontWeight: 700 }}>
+                  Proveedor: {suppliers.find(s => s.id.toString() === supplierFilter.toString())?.name || supplierFilter}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSupplierFilter('all')} />
+                </span>
+              )}
+
+              {unitFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(6, 182, 212, 0.12)', color: '#06b6d4', fontSize: '11px', fontWeight: 700 }}>
+                  Unidad: {unitFilter}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setUnitFilter('all')} />
+                </span>
+              )}
+            </div>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSearch('');
+                setSelectedCategory('all');
+                setStockStatusFilter('all');
+                setSupplierFilter('all');
+                setUnitFilter('all');
+                setSortBy('stock_asc');
+              }}
+              icon={<RotateCcw size={12} />}
+              style={{ fontSize: '11px', padding: '3px 8px', fontWeight: 700, color: 'var(--accent-danger)' }}
+            >
+              Limpiar Filtros
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* Tabla de Insumos */}

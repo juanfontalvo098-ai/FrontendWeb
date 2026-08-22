@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Plus, Edit2, Trash2, Upload, Image as ImageIcon,
   Layers, Package, Search, DollarSign, Barcode, Tag,
-  FileJson, Download, CheckCircle2, AlertCircle, RefreshCw, FileText, Sparkles
+  FileJson, Download, CheckCircle2, AlertCircle, RefreshCw, FileText, Sparkles,
+  SlidersHorizontal, ChevronDown, X, XCircle, RotateCcw, Filter, Check
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -20,8 +21,17 @@ export const ProductsPage = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Filtros de Productos
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [availabilityFilter, setAvailabilityFilter] = useState('all'); // 'all' | 'available' | 'out_of_stock'
+  const [inventoryFilter, setInventoryFilter] = useState('all'); // 'all' | 'tracked' | 'low_stock' | 'untracked'
+  const [taxFilter, setTaxFilter] = useState('all'); // 'all' | 'exempt' | 'impoconsumo' | 'iva'
+  const [minPriceFilter, setMinPriceFilter] = useState('');
+  const [maxPriceFilter, setMaxPriceFilter] = useState('');
+  const [sortBy, setSortBy] = useState('name_asc'); // 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc' | 'newest'
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Modales
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -436,16 +446,111 @@ export const ProductsPage = () => {
     return `${(num * 100).toFixed(0)}%`;
   };
 
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (p.barcode && p.barcode.includes(searchTerm));
-    const matchesCategory = categoryFilter ? p.category_id?.toString() === categoryFilter : true;
-    return matchesSearch && matchesCategory;
-  });
+  // Conteo de productos por categoría
+  const categoryCounts = useMemo(() => {
+    const counts = { all: products.length };
+    categories.forEach(c => { counts[c.id] = 0; });
+    products.forEach(p => {
+      if (p.category_id && counts[p.category_id] !== undefined) {
+        counts[p.category_id]++;
+      }
+    });
+    return counts;
+  }, [products, categories]);
+
+  // Conteo de filtros activos en productos
+  const activeProductsFiltersCount = useMemo(() => {
+    let count = 0;
+    if (categoryFilter && categoryFilter !== 'all') count++;
+    if (availabilityFilter !== 'all') count++;
+    if (inventoryFilter !== 'all') count++;
+    if (taxFilter !== 'all') count++;
+    if (minPriceFilter) count++;
+    if (maxPriceFilter) count++;
+    if (sortBy !== 'name_asc') count++;
+    return count;
+  }, [categoryFilter, availabilityFilter, inventoryFilter, taxFilter, minPriceFilter, maxPriceFilter, sortBy]);
+
+  // Filtrado y Ordenamiento de Productos
+  const filteredProducts = useMemo(() => {
+    const result = products.filter(p => {
+      // 1. Buscador Omnibox
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase().trim();
+        const matchesSearch = (p.name || '').toLowerCase().includes(q) ||
+          (p.sku && p.sku.toLowerCase().includes(q)) ||
+          (p.barcode && p.barcode.includes(q)) ||
+          (p.description && p.description.toLowerCase().includes(q));
+        if (!matchesSearch) return false;
+      }
+
+      // 2. Categoría
+      if (categoryFilter && categoryFilter !== 'all') {
+        if (p.category_id?.toString() !== categoryFilter.toString()) return false;
+      }
+
+      // 3. Disponibilidad
+      if (availabilityFilter === 'available') {
+        if (p.is_available === false || p.is_available === 0) return false;
+      } else if (availabilityFilter === 'out_of_stock') {
+        const stock = parseFloat(p.current_stock ?? p.stock ?? 0);
+        if (p.track_inventory && stock > 0) return false;
+        if (!p.track_inventory && p.is_available !== false) return false;
+      }
+
+      // 4. Inventario / Stock
+      if (inventoryFilter === 'tracked') {
+        if (!p.track_inventory) return false;
+      } else if (inventoryFilter === 'low_stock') {
+        if (!p.track_inventory) return false;
+        const stock = parseFloat(p.current_stock ?? p.stock ?? 0);
+        const min = parseFloat(p.min_stock ?? 5);
+        if (stock > min) return false;
+      } else if (inventoryFilter === 'untracked') {
+        if (p.track_inventory) return false;
+      }
+
+      // 5. Impuesto
+      if (taxFilter !== 'all') {
+        const rate = parseFloat(p.tax_rate ?? 0);
+        if (taxFilter === 'exempt' && rate > 0) return false;
+        if (taxFilter === 'impoconsumo' && Math.abs(rate - 0.08) > 0.005) return false;
+        if (taxFilter === 'iva' && Math.abs(rate - 0.19) > 0.005) return false;
+      }
+
+      // 6. Rango de precio
+      const price = parseFloat(p.price || 0);
+      if (minPriceFilter && price < parseFloat(minPriceFilter)) return false;
+      if (maxPriceFilter && price > parseFloat(maxPriceFilter)) return false;
+
+      return true;
+    });
+
+    // Ordenamiento
+    result.sort((a, b) => {
+      if (sortBy === 'name_desc') return b.name.localeCompare(a.name);
+      if (sortBy === 'price_asc') return parseFloat(a.price || 0) - parseFloat(b.price || 0);
+      if (sortBy === 'price_desc') return parseFloat(b.price || 0) - parseFloat(a.price || 0);
+      if (sortBy === 'stock_asc') {
+        const stockA = parseFloat(a.current_stock ?? a.stock ?? 0);
+        const stockB = parseFloat(b.current_stock ?? b.stock ?? 0);
+        return stockA - stockB;
+      }
+      if (sortBy === 'stock_desc') {
+        const stockA = parseFloat(a.current_stock ?? a.stock ?? 0);
+        const stockB = parseFloat(b.current_stock ?? b.stock ?? 0);
+        return stockB - stockA;
+      }
+      if (sortBy === 'newest') return (b.id || 0) - (a.id || 0);
+      return a.name.localeCompare(b.name); // name_asc por defecto
+    });
+
+    return result;
+  }, [products, searchTerm, categoryFilter, availabilityFilter, inventoryFilter, taxFilter, minPriceFilter, maxPriceFilter, sortBy]);
 
   const filteredCategories = categories.filter(c =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (c.description && c.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -517,48 +622,377 @@ export const ProductsPage = () => {
         </div>
       </div>
 
-      {/* Search & Filters */}
-      <Card style={{ padding: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: activeTab === 'productos' ? '2fr 1fr' : '1fr', gap: 'var(--space-3)' }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      {/* Search & Advanced Filters */}
+      <Card style={{ padding: '14px 16px', marginBottom: 'var(--space-4)', border: '1px solid var(--border-color)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+        {/* Fila 1: Buscador Omnibox + Ordenamiento + Botón Filtros Avanzados */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: searchTerm ? 'var(--accent-primary)' : 'var(--text-muted)', pointerEvents: 'none' }} />
             <input
               type="text"
-              placeholder={activeTab === 'productos' ? 'Buscar productos por nombre, SKU o código de barras...' : 'Buscar categorías...'}
+              placeholder={activeTab === 'productos' ? 'Buscar por nombre, SKU, código de barras o descripción...' : 'Buscar categorías por nombre o descripción...'}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{
                 width: '100%',
-                padding: '7px 10px 7px 32px',
+                padding: '9px 34px 9px 36px',
                 background: 'var(--bg-primary)',
-                border: '1px solid var(--border-color)',
+                border: searchTerm ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
                 borderRadius: 'var(--radius-md)',
                 color: 'var(--text-primary)',
-                fontSize: 'var(--font-xs)'
+                fontSize: '13px',
+                outline: 'none',
+                boxShadow: searchTerm ? '0 0 0 3px rgba(99, 102, 241, 0.15)' : 'none',
+                transition: 'all 0.2s'
               }}
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                aria-label="Limpiar búsqueda"
+                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center' }}
+              >
+                <XCircle size={15} />
+              </button>
+            )}
           </div>
 
           {activeTab === 'productos' && (
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              style={{
-                padding: '7px 10px',
-                background: 'var(--bg-primary)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-primary)',
-                fontSize: 'var(--font-xs)'
-              }}
-            >
-              <option value="">Todas las categorías ({categories.length})</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <>
+              {/* Selector de Ordenamiento */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Ordenar:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-md)',
+                    border: sortBy !== 'name_asc' ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    background: sortBy !== 'name_asc' ? 'rgba(99, 102, 241, 0.08)' : 'var(--bg-primary)',
+                    color: sortBy !== 'name_asc' ? 'var(--accent-primary)' : 'var(--text-primary)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="name_asc">🔤 Nombre (A - Z)</option>
+                  <option value="name_desc">🔤 Nombre (Z - A)</option>
+                  <option value="price_asc">💰 Precio: Menor a Mayor</option>
+                  <option value="price_desc">💰 Precio: Mayor a Menor</option>
+                  <option value="stock_asc">📦 Stock: Menor a Mayor (Reabastecer)</option>
+                  <option value="stock_desc">📦 Stock: Mayor a Menor</option>
+                  <option value="newest">✨ Más Recientes</option>
+                </select>
+              </div>
+
+              {/* Botón Filtros Avanzados */}
+              <Button
+                type="button"
+                size="sm"
+                variant={showAdvancedFilters || activeProductsFiltersCount > 0 ? 'primary' : 'secondary'}
+                onClick={() => setShowAdvancedFilters(prev => !prev)}
+                icon={<SlidersHorizontal size={13} />}
+                style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700 }}
+              >
+                Filtros
+                {activeProductsFiltersCount > 0 && (
+                  <span style={{
+                    marginLeft: '4px',
+                    padding: '1px 5px',
+                    borderRadius: '8px',
+                    background: showAdvancedFilters || activeProductsFiltersCount > 0 ? '#fff' : 'var(--accent-primary)',
+                    color: showAdvancedFilters || activeProductsFiltersCount > 0 ? 'var(--accent-primary)' : '#fff',
+                    fontSize: '10px',
+                    fontWeight: 900
+                  }}>
+                    {activeProductsFiltersCount}
+                  </span>
+                )}
+                <ChevronDown size={13} style={{ marginLeft: '4px', transform: showAdvancedFilters ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+              </Button>
+            </>
           )}
         </div>
+
+        {/* Fila 2: Chips de Categorías (solo en pestaña productos) */}
+        {activeTab === 'productos' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', padding: '4px 0 8px 0', scrollbarWidth: 'none' }}>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('all')}
+              style={{
+                padding: '4px 12px',
+                borderRadius: '16px',
+                fontSize: '11.5px',
+                fontWeight: categoryFilter === 'all' ? 800 : 500,
+                border: categoryFilter === 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                background: categoryFilter === 'all' ? 'var(--accent-primary)' : 'var(--bg-primary)',
+                color: categoryFilter === 'all' ? '#fff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                boxShadow: categoryFilter === 'all' ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none'
+              }}
+            >
+              Todas ({categoryCounts.all || 0})
+            </button>
+            {categories.map(c => {
+              const isSelected = categoryFilter === c.id.toString();
+              const count = categoryCounts[c.id] || 0;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCategoryFilter(c.id.toString())}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '16px',
+                    fontSize: '11.5px',
+                    fontWeight: isSelected ? 800 : 500,
+                    border: isSelected ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    background: isSelected ? 'var(--accent-primary)' : 'var(--bg-primary)',
+                    color: isSelected ? '#fff' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    boxShadow: isSelected ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none'
+                  }}
+                >
+                  {c.name} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Fila 3: Chips Rápidos de Estado e Inventario */}
+        {activeTab === 'productos' && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', paddingTop: '6px', borderTop: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>Disponibilidad:</span>
+              {[
+                { id: 'all', label: 'Todos' },
+                { id: 'available', label: 'Disponibles' },
+                { id: 'out_of_stock', label: 'Agotados / Sin Stock' },
+              ].map(a => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setAvailabilityFilter(a.id)}
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: '14px',
+                    fontSize: '11px',
+                    fontWeight: availabilityFilter === a.id ? 700 : 500,
+                    border: availabilityFilter === a.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    background: availabilityFilter === a.id ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-primary)',
+                    color: availabilityFilter === a.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {a.label}
+                </button>
+              ))}
+
+              <div style={{ height: '14px', width: '1px', background: 'var(--border-color)', margin: '0 2px' }} />
+
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>Control Stock:</span>
+              {[
+                { id: 'all', label: 'Todos' },
+                { id: 'low_stock', label: '⚠️ Stock Bajo / Crítico' },
+                { id: 'tracked', label: 'Con Inventario' },
+                { id: 'untracked', label: 'Sin Control' },
+              ].map(inv => (
+                <button
+                  key={inv.id}
+                  type="button"
+                  onClick={() => setInventoryFilter(inv.id)}
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: '14px',
+                    fontSize: '11px',
+                    fontWeight: inventoryFilter === inv.id ? 700 : 500,
+                    border: inventoryFilter === inv.id ? '1px solid #f59e0b' : '1px solid var(--border-color)',
+                    background: inventoryFilter === inv.id ? 'rgba(245, 158, 11, 0.12)' : 'var(--bg-primary)',
+                    color: inventoryFilter === inv.id ? '#f59e0b' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {inv.label}
+                </button>
+              ))}
+            </div>
+
+            <Badge variant="info" style={{ fontSize: '11px', padding: '3px 8px', fontWeight: 700 }}>
+              {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}
+            </Badge>
+          </div>
+        )}
+
+        {/* Fila 4: Panel Desplegable de Filtros Avanzados */}
+        {activeTab === 'productos' && showAdvancedFilters && (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px',
+            background: 'var(--bg-secondary)',
+            borderRadius: '8px',
+            border: '1px solid var(--border-color)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '12px',
+            animation: 'fadeIn 0.2s ease'
+          }}>
+            {/* Filtro: Impuesto */}
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Régimen / Impuesto
+              </label>
+              <select
+                value={taxFilter}
+                onChange={(e) => setTaxFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  border: taxFilter !== 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px'
+                }}
+              >
+                <option value="all">Todos los Impuestos</option>
+                <option value="exempt">Exento (0%)</option>
+                <option value="impoconsumo">Impoconsumo (8%)</option>
+                <option value="iva">IVA (19%)</option>
+              </select>
+            </div>
+
+            {/* Filtro: Precio Mínimo */}
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Precio Mínimo ($)
+              </label>
+              <input
+                type="number"
+                placeholder="Ej: 10000"
+                value={minPriceFilter}
+                onChange={(e) => setMinPriceFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  border: minPriceFilter ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px'
+                }}
+              />
+            </div>
+
+            {/* Filtro: Precio Máximo */}
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                Precio Máximo ($)
+              </label>
+              <input
+                type="number"
+                placeholder="Ej: 50000"
+                value={maxPriceFilter}
+                onChange={(e) => setMaxPriceFilter(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  border: maxPriceFilter ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px'
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Fila 5: Pills de Filtros Activos y Limpieza */}
+        {activeTab === 'productos' && (searchTerm || (categoryFilter && categoryFilter !== 'all') || availabilityFilter !== 'all' || inventoryFilter !== 'all' || taxFilter !== 'all' || minPriceFilter || maxPriceFilter || sortBy !== 'name_asc') && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Filtros Activos:</span>
+
+              {searchTerm && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 700 }}>
+                  "{searchTerm}"
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setSearchTerm('')} />
+                </span>
+              )}
+
+              {categoryFilter && categoryFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 700 }}>
+                  Cat: {categories.find(c => c.id.toString() === categoryFilter.toString())?.name || categoryFilter}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setCategoryFilter('all')} />
+                </span>
+              )}
+
+              {availabilityFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', fontSize: '11px', fontWeight: 700 }}>
+                  {availabilityFilter === 'available' ? 'Disponibles' : 'Agotados'}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setAvailabilityFilter('all')} />
+                </span>
+              )}
+
+              {inventoryFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b', fontSize: '11px', fontWeight: 700 }}>
+                  {inventoryFilter === 'low_stock' ? 'Stock Bajo' : inventoryFilter === 'tracked' ? 'Con Control' : 'Sin Control'}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setInventoryFilter('all')} />
+                </span>
+              )}
+
+              {taxFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', fontSize: '11px', fontWeight: 700 }}>
+                  Impuesto: {taxFilter}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => setTaxFilter('all')} />
+                </span>
+              )}
+
+              {(minPriceFilter || maxPriceFilter) && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(6, 182, 212, 0.12)', color: '#06b6d4', fontSize: '11px', fontWeight: 700 }}>
+                  Precio: {minPriceFilter ? `$${minPriceFilter}` : '$0'} - {maxPriceFilter ? `$${maxPriceFilter}` : '∞'}
+                  <X size={11} style={{ cursor: 'pointer' }} onClick={() => { setMinPriceFilter(''); setMaxPriceFilter(''); }} />
+                </span>
+              )}
+            </div>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSearchTerm('');
+                setCategoryFilter('all');
+                setAvailabilityFilter('all');
+                setInventoryFilter('all');
+                setTaxFilter('all');
+                setMinPriceFilter('');
+                setMaxPriceFilter('');
+                setSortBy('name_asc');
+              }}
+              icon={<RotateCcw size={12} />}
+              style={{ fontSize: '11px', padding: '3px 8px', fontWeight: 700, color: 'var(--accent-danger)' }}
+            >
+              Limpiar Filtros
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* Main Table */}
