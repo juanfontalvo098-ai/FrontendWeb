@@ -5,9 +5,8 @@ import { api } from '../../api/client';
 import { useUiStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
 import { 
-  sendToThermalBridge, 
-  buildKitchenTicketPlainText, 
-  buildInvoicePlainText,
+  printKitchenTicket, 
+  printInvoiceReceipt,
   isSilentPrintingActive,
   DEFAULT_BRIDGE_URL
 } from '../../utils/printUtils';
@@ -15,7 +14,8 @@ import {
 /**
  * Gestor Global en segundo plano para Auto-Impresión Remota de Comandas y Facturas
  * Escucha en vivo las señales de WebSocket (kitchen:new-ticket, invoice:created)
- * y envía automáticamente el trabajo de impresión al KAMIA Print Bridge en el puerto 8182.
+ * - Si la impresión silenciosa está activada: envía directamente a la impresora térmica vía Print Bridge.
+ * - Si la impresión silenciosa está desactivada: abre automáticamente el cuadro de diálogo de Windows.
  * Incluye filtro de deduplicación estricta para evitar impresiones repetidas.
  */
 export const AutoPrintManager = () => {
@@ -113,17 +113,23 @@ export const AutoPrintManager = () => {
         const waiterName = ticketData.waiter_name || orderDetails?.waiter_name || user?.full_name || 'Personal';
         const tableLabel = orderObj.table_number ? (orderObj.table_number.toLowerCase().startsWith('mesa') ? orderObj.table_number : `Mesa ${orderObj.table_number}`) : (orderObj.order_type === 'delivery' ? 'Domicilio' : 'Para Llevar');
 
-        const plainText = buildKitchenTicketPlainText(orderObj, items, orderObj.notes, waiterName);
-        const bridgeUrl = settings.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
-        const bridgeRes = await sendToThermalBridge(plainText, settings.printer_kitchen_name || null, bridgeUrl, { cutPaper: true });
+        // Ejecutar impresión (silenciosa si enable_silent_printing es true, o cuadro de diálogo de Windows si es false)
+        const printRes = await printKitchenTicket(
+          orderObj,
+          items,
+          orderObj.notes,
+          waiterName,
+          settings,
+          settings?.default_paper_width || '80mm'
+        );
 
-        if (bridgeRes && bridgeRes.success) {
+        if (printRes && printRes.mode === 'print_bridge') {
           addToast(`🍳 Comanda de ${tableLabel} (#${orderObj.id}) auto-impresa en Cocina (Silenciosa)`, 'success');
         } else {
-          console.warn('⚠️ [AutoPrintManager] Bridge no disponible para auto-impresión:', bridgeRes?.error);
+          addToast(`🍳 Comanda de ${tableLabel} (#${orderObj.id}) enviada a diálogo de impresión`, 'info');
         }
       } catch (err) {
-        console.error('❌ [AutoPrintManager] Error al auto-imprimir comanda:', err);
+        console.error('❌ [AutoPrintManager] Error al procesar comanda:', err);
       } finally {
         isPrintingRef.current = false;
       }
@@ -151,20 +157,19 @@ export const AutoPrintManager = () => {
       }
       if (!settings) return;
 
-      const isSilentActive = isSilentPrintingActive(settings);
-      const isAutoInvoiceEnabled = isSilentActive && (settings.auto_print_invoices === true || settings.auto_print_invoices === 1 || settings.auto_print_invoices === 'true');
+      const isAutoInvoiceEnabled = settings.auto_print_invoices === true || settings.auto_print_invoices === 1 || settings.auto_print_invoices === 'true';
       if (!isAutoInvoiceEnabled) return;
 
       try {
         isPrintingRef.current = true;
-        const plainText = buildInvoicePlainText(invoiceData, settings);
-        const bridgeUrl = settings.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
-        const res = await sendToThermalBridge(plainText, settings.printer_receipt_name || null, bridgeUrl, { cutPaper: true });
-        if (res && res.success) {
+        const printRes = await printInvoiceReceipt(invoiceData, settings, settings?.default_paper_width || '80mm');
+        if (printRes && printRes.mode === 'print_bridge') {
           addToast(`🧾 Factura #${invoiceData.invoice_number || ''} auto-impresa en Caja (Silenciosa)`, 'success');
+        } else {
+          addToast(`🧾 Factura #${invoiceData.invoice_number || ''} enviada a diálogo de impresión`, 'info');
         }
       } catch (err) {
-        console.error('[AutoPrintManager] Error al auto-imprimir factura:', err);
+        console.error('[AutoPrintManager] Error al procesar factura:', err);
       } finally {
         isPrintingRef.current = false;
       }

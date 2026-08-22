@@ -208,11 +208,13 @@ const printWithIframe = (htmlContent, title = 'Impresión POS') => {
   const iframe = document.createElement('iframe');
   iframe.id = 'pos-print-iframe';
   iframe.style.position = 'fixed';
-  iframe.style.right = '0px';
-  iframe.style.bottom = '0px';
-  iframe.style.width = '0px';
-  iframe.style.height = '0px';
+  iframe.style.top = '0px';
+  iframe.style.left = '0px';
+  iframe.style.width = '1px';
+  iframe.style.height = '1px';
+  iframe.style.opacity = '0.01';
   iframe.style.border = 'none';
+  iframe.style.pointerEvents = 'none';
   iframe.style.zIndex = '-9999';
   document.body.appendChild(iframe);
 
@@ -226,7 +228,7 @@ const printWithIframe = (htmlContent, title = 'Impresión POS') => {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
     } catch (e) {
-      console.warn('Fallback a window.print()');
+      console.warn('Fallback a window.print():', e);
       try { window.print(); } catch (e2) {}
     }
     setTimeout(() => {
