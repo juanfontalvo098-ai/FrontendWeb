@@ -71,10 +71,9 @@ export const AutoPrintManager = () => {
       }
       if (!settings) return;
 
-      const isSilentActive = isSilentPrintingActive(settings);
-      const isAutoKitchenEnabled = isSilentActive && (settings.auto_print_kitchen_tickets !== false && settings.auto_print_kitchen_tickets !== 0 && settings.auto_print_kitchen_tickets !== 'false');
+      const isAutoKitchenEnabled = settings.auto_print_kitchen_tickets !== false && settings.auto_print_kitchen_tickets !== 0 && settings.auto_print_kitchen_tickets !== 'false';
       if (!isAutoKitchenEnabled) {
-        console.log('ℹ️ [AutoPrintManager] Auto-impresión de comandas desactivada o impresión silenciosa inactiva');
+        console.log('ℹ️ [AutoPrintManager] Auto-impresión de comandas desactivada en configuración');
         return;
       }
 

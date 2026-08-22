@@ -421,10 +421,15 @@ export const OrderPage = () => {
     }
   };
 
-  const handlePrintKitchenTicket = (ticketItems, explicitOrderId = null) => {
+  const handlePrintKitchenTicket = async (ticketItems, explicitOrderId = null) => {
     try {
+      let effectiveSettings = settings;
+      if (!effectiveSettings) {
+        effectiveSettings = await api.get('/settings').catch(() => ({}));
+        setSettings(effectiveSettings);
+      }
       const tableClean = displayTableNumber.replace(/^Mesa\s*/i, '');
-      printKitchenTicket(
+      await printKitchenTicket(
         {
           id: explicitOrderId || currentOrder?.id,
           table_number: tableClean,
@@ -432,29 +437,42 @@ export const OrderPage = () => {
           waiter_name: currentOrder?.waiter_name || user?.full_name || 'Personal'
         },
         ticketItems,
-        settings || {},
-        settings?.default_paper_width || '80mm'
+        effectiveSettings || {},
+        effectiveSettings?.default_paper_width || '80mm'
       );
     } catch (e) {
       console.warn('[OrderPage] Excepción en comanda:', e);
     }
   };
 
-  const handlePrintPreBill = () => {
-    const tableClean = displayTableNumber.replace(/^Mesa\s*/i, '');
-    printPreFactura(
-      {
-        id: currentOrder?.id,
-        table_number: tableClean,
-        order_type: 'mesa',
-        waiter_name: currentOrder?.waiter_name || user?.full_name || 'Personal'
-      },
-      orderItems,
-      settings || {},
-      settings?.default_paper_width || '80mm',
-      { itemsSubtotal: subtotal }
-    );
-    addToast('Pre-factura enviada a impresión térmica', 'info');
+  const handlePrintPreBill = async () => {
+    try {
+      let effectiveSettings = settings;
+      if (!effectiveSettings) {
+        effectiveSettings = await api.get('/settings').catch(() => ({}));
+        setSettings(effectiveSettings);
+      }
+      const tableClean = displayTableNumber.replace(/^Mesa\s*/i, '');
+      await printPreFactura(
+        {
+          id: currentOrder?.id,
+          table_number: tableClean,
+          order_type: 'mesa',
+          waiter_name: currentOrder?.waiter_name || user?.full_name || 'Personal'
+        },
+        orderItems.map(i => ({
+          ...i,
+          unit_price: i.product?.price || i.unit_price,
+          name: i.product?.name || i.name,
+          quantity: i.qty || i.quantity || 1
+        })),
+        effectiveSettings || {},
+        effectiveSettings?.default_paper_width || '80mm'
+      );
+      addToast('Pre-factura enviada a impresión térmica', 'info');
+    } catch (e) {
+      console.warn('[OrderPage] Excepción en prefactura:', e);
+    }
   };
 
   const handleRequestBill = async () => {
