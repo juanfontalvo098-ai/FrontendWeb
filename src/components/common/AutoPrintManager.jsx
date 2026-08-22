@@ -17,12 +17,15 @@ import {
  * Gestor Global en segundo plano para Auto-Impresión Remota de Comandas y Facturas
  * Escucha en vivo las señales de WebSocket (kitchen:new-ticket, invoice:created)
  * y envía automáticamente el trabajo de impresión a QZ Tray o KAMIA Print Bridge.
+ * Incluye filtro de deduplicación estricta para evitar impresiones repetidas.
  */
 export const AutoPrintManager = () => {
   const user = useAuthStore((state) => state.user);
   const addToast = useUiStore((state) => state.addToast);
   const settingsRef = useRef(null);
   const isPrintingRef = useRef(false);
+  const processedTicketsRef = useRef(new Map()); // id -> timestamp
+  const processedInvoicesRef = useRef(new Map()); // id -> timestamp
 
   const loadSettings = async () => {
     try {
@@ -46,7 +49,22 @@ export const AutoPrintManager = () => {
     // 1. Escuchar nuevas comandas de cocina enviadas remotamente por meseros
     const handleKitchenTicket = async (ticketData) => {
       if (!ticketData) return;
-      console.log('⚡ [AutoPrintManager] Recibida señal de comanda de cocina vía WebSocket:', ticketData);
+
+      const orderId = ticketData.order_id || ticketData.id;
+      const now = Date.now();
+
+      // Deduplicación estricta: evitar imprimir la misma comanda más de una vez en una ventana de 15 segundos
+      const dedupKey = `${orderId}_${ticketData.items ? ticketData.items.length : 'full'}`;
+      if (processedTicketsRef.current.has(dedupKey)) {
+        const lastPrinted = processedTicketsRef.current.get(dedupKey);
+        if (now - lastPrinted < 15000) {
+          console.log('ℹ️ [AutoPrintManager] Señal duplicada ignorada (deduplicada):', dedupKey);
+          return;
+        }
+      }
+      processedTicketsRef.current.set(dedupKey, now);
+
+      console.log('⚡ [AutoPrintManager] Procesando comanda de cocina vía WebSocket:', ticketData);
 
       let settings = settingsRef.current;
       if (!settings) {
@@ -67,7 +85,6 @@ export const AutoPrintManager = () => {
       let items = ticketData.items || [];
       let orderDetails = null;
 
-      const orderId = ticketData.order_id || ticketData.id;
       if ((!items || items.length === 0) && orderId) {
         try {
           orderDetails = await api.get(`/orders/${orderId}`);
@@ -102,7 +119,7 @@ export const AutoPrintManager = () => {
 
         // Intento 1: QZ Tray si está conectado
         if (qzService.isQzConnected()) {
-          const res = await printKitchenTicket(orderObj, items, orderObj.notes, waiterName, settings, settings.paper_width || '80mm');
+          await printKitchenTicket(orderObj, items, orderObj.notes, waiterName, settings, settings.paper_width || '80mm');
           addToast(`🍳 Comanda de ${tableLabel} (#${orderObj.id}) auto-impresa en Cocina (QZ Tray)`, 'success');
           return;
         }
@@ -115,7 +132,7 @@ export const AutoPrintManager = () => {
         if (bridgeRes && bridgeRes.success) {
           addToast(`🍳 Comanda de ${tableLabel} (#${orderObj.id}) auto-impresa en Cocina (Print Bridge)`, 'success');
         } else {
-          // Intento 3: Reintentar con printKitchenTicket
+          // Intento 3: Reintentar con printKitchenTicket estándar
           await printKitchenTicket(orderObj, items, orderObj.notes, waiterName, settings, settings.paper_width || '80mm');
           addToast(`🍳 Comanda de ${tableLabel} (#${orderObj.id}) enviada a impresión`, 'info');
         }
@@ -129,6 +146,14 @@ export const AutoPrintManager = () => {
     // 2. Escuchar facturas creadas remotamente
     const handleInvoiceCreated = async (invoiceData) => {
       if (!invoiceData) return;
+      const invKey = `${invoiceData.invoice_id || invoiceData.id || invoiceData.invoice_number}`;
+      const now = Date.now();
+      if (processedInvoicesRef.current.has(invKey)) {
+        const last = processedInvoicesRef.current.get(invKey);
+        if (now - last < 15000) return;
+      }
+      processedInvoicesRef.current.set(invKey, now);
+
       console.log('⚡ [AutoPrintManager] Recibida señal de factura creada vía WebSocket:', invoiceData);
 
       let settings = settingsRef.current;
