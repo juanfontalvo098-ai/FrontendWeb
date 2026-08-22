@@ -118,8 +118,8 @@ export const KamiaLogo = ({
   if (variant === 'stacked') {
     const stackedHeight = size === 'xl' ? 120 : size === 'lg' ? 95 : size === 'md' ? 75 : 55;
     const stackedSrc = isDark
-      ? '/assets/branding/kamia-logo-stacked-light.png'
-      : '/assets/branding/kamia-logo-stacked-dark.png';
+      ? '/assets/branding/kamia-logo-stacked-dark.png'
+      : '/assets/branding/kamia-logo-stacked-light.png';
 
     return (
       <div
