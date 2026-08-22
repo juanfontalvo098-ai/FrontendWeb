@@ -4,7 +4,7 @@ import {
   Printer, RefreshCw, CheckCircle, AlertCircle, Download,
   Play, Trash2, Cpu, FileText, Check, UtensilsCrossed,
   Receipt, DollarSign, Settings, ShieldCheck, Sparkles, ExternalLink,
-  Eye, Laptop, MonitorCheck, HelpCircle, Server
+  Eye, Laptop, MonitorCheck, HelpCircle, Server, FolderDown, Zap
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -46,6 +46,7 @@ export const PrintingConfigPage = () => {
   // Estado en vivo del KAMIA Print Bridge (Puerto 8182)
   const [bridgeStatus, setBridgeStatus] = useState('checking'); // 'connected' | 'disconnected' | 'checking'
   const [bridgeInfo, setBridgeInfo] = useState(null);
+  const [activeBridgeUrl, setActiveBridgeUrl] = useState(DEFAULT_BRIDGE_URL);
   const [detectedPrinters, setDetectedPrinters] = useState([]);
   const [testingKitchen, setTestingKitchen] = useState(false);
   const [testingReceipt, setTestingReceipt] = useState(false);
@@ -86,9 +87,10 @@ export const PrintingConfigPage = () => {
       if (health.online) {
         setBridgeStatus('connected');
         setBridgeInfo(health.data);
-        const printers = await getPrintBridgePrinters(url);
+        setActiveBridgeUrl(health.activeUrl || url);
+        const printers = await getPrintBridgePrinters(health.activeUrl || url);
         setDetectedPrinters(printers);
-        addToast('🟢 KAMIA Print Bridge conectado correctamente en el puerto 8182', 'success');
+        addToast(`🟢 Print Bridge conectado en ${health.activeUrl || url}`, 'success');
       } else {
         setBridgeStatus('disconnected');
         setBridgeInfo(null);
@@ -138,6 +140,50 @@ export const PrintingConfigPage = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  // 4. Descarga Directa del Instalador de Print Bridge
+  const downloadFile = (filename, content, mime = 'application/x-bat') => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadInstaller = () => {
+    // Intentar descarga directa desde el servidor backend
+    const backendUrl = (import.meta.env.VITE_API_URL || '').replace(/\/+api\/?$/, '');
+    const directUrl = `${backendUrl}/print-bridge/Instalar_Print_Bridge_KAMIA.bat`;
+
+    const a = document.createElement('a');
+    a.href = directUrl;
+    a.download = 'Instalar_Print_Bridge_KAMIA.bat';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    addToast('📥 Descargando instalador automático para Windows...', 'info');
+  };
+
+  const handleDownloadRunner = () => {
+    const backendUrl = (import.meta.env.VITE_API_URL || '').replace(/\/+api\/?$/, '');
+    const directUrl = `${backendUrl}/print-bridge/Iniciar_Print_Bridge.bat`;
+
+    const a = document.createElement('a');
+    a.href = directUrl;
+    a.download = 'Iniciar_Print_Bridge.bat';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    addToast('📥 Descargando script de inicio rápido...', 'info');
   };
 
   // Datos de demostración estructurados para pruebas y vista previa
@@ -206,15 +252,14 @@ export const PrintingConfigPage = () => {
     }
   ];
 
-  // 4. Pruebas de Impresión con Formato Real y Silencioso
+  // 5. Pruebas de Impresión con Formato Real y Silencioso
   const handleTestKitchen = async () => {
     setTestingKitchen(true);
     try {
       const res = await sendTestPrint(printerKitchenName || null, 'cocina', silentPrintBridgeUrl);
       if (res && res.success) {
-        addToast(`✅ Comanda de prueba enviada con éxito a "${printerKitchenName || 'Predeterminada'}" vía Print Bridge`, 'success');
+        addToast(`✅ Comanda de prueba enviada a "${printerKitchenName || 'Predeterminada'}"`, 'success');
       } else {
-        // Fallback visual
         await printKitchenTicket(
           sampleKitchenOrder,
           sampleKitchenItems,
@@ -235,9 +280,8 @@ export const PrintingConfigPage = () => {
     try {
       const res = await sendTestPrint(printerReceiptName || null, 'caja', silentPrintBridgeUrl);
       if (res && res.success) {
-        addToast(`✅ Factura de prueba enviada con éxito a "${printerReceiptName || 'Predeterminada'}" vía Print Bridge`, 'success');
+        addToast(`✅ Factura de prueba enviada a "${printerReceiptName || 'Predeterminada'}"`, 'success');
       } else {
-        // Fallback visual
         await printInvoiceReceipt(sampleInvoice, { ...settings, enable_silent_printing: false }, paperWidth);
         addToast('Factura enviada a diálogo de impresión (Modo Fallback)', 'info');
       }
@@ -342,18 +386,18 @@ export const PrintingConfigPage = () => {
                   KAMIA Thermal Print Bridge v2.0
                 </h3>
                 <Badge variant={bridgeStatus === 'connected' ? 'success' : (bridgeStatus === 'checking' ? 'warning' : 'danger')}>
-                  {bridgeStatus === 'connected' ? '🟢 Conectado y Listo' : (bridgeStatus === 'checking' ? '🟡 Verificando...' : '🔴 Desconectado (Modo Diálogo)')}
+                  {bridgeStatus === 'connected' ? '🟢 Conectado y Listo' : (bridgeStatus === 'checking' ? '🟡 Verificando...' : '🔴 Desconectado')}
                 </Badge>
               </div>
 
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
                 {bridgeStatus === 'connected' ? (
                   <span>
-                    Servicio activo en <strong>{silentPrintBridgeUrl}</strong> &bull; <strong>{detectedPrinters.length}</strong> impresoras de Windows detectadas &bull; Modo 100% Silencioso (ESC/POS)
+                    Servicio activo en <strong>{activeBridgeUrl}</strong> &bull; <strong>{detectedPrinters.length}</strong> impresoras de Windows detectadas &bull; Modo 100% Silencioso (ESC/POS)
                   </span>
                 ) : (
                   <span>
-                    El servidor Print Bridge no está en ejecución en <strong>{silentPrintBridgeUrl}</strong>. Para activar la impresión silenciosa sin cuadros de diálogo, inicia <strong>iniciar-impresora.bat</strong>.
+                    El servidor Print Bridge no está en ejecución en este equipo. Descarga e instala el agente abajo para activar la impresión silenciosa.
                   </span>
                 )}
               </div>
@@ -372,38 +416,74 @@ export const PrintingConfigPage = () => {
           </div>
 
         </div>
+      </Card>
 
-        {/* Alerta interactiva si el servicio no está corriendo */}
-        {bridgeStatus === 'disconnected' && (
-          <div style={{
-            marginTop: '16px',
-            padding: '14px 16px',
-            borderRadius: '8px',
-            background: 'rgba(239, 68, 68, 0.08)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            display: 'flex',
-            gap: '12px',
-            alignItems: 'flex-start'
-          }}>
-            <AlertCircle size={20} color="var(--accent-danger)" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <div>
-              <strong style={{ color: 'var(--accent-danger)', fontSize: '13.5px' }}>
-                ¿Cómo activar la Impresión Silenciosa y Corte Automático en este computador?
-              </strong>
-              <ol style={{ margin: '6px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                <li>
-                  En la carpeta del sistema POS en tu computador, haz doble clic en el archivo <strong style={{ color: 'var(--text-primary)' }}>iniciar-impresora.bat</strong>.
-                </li>
-                <li>
-                  El servidor iniciará en segundo plano en el puerto <strong>8182</strong>.
-                </li>
-                <li>
-                  Presiona el botón <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>"🔄 Verificar Estado"</span> arriba para sincronizar las impresoras instaladas.
-                </li>
-              </ol>
+      {/* SECCIÓN DE DESCARGA E INSTALACIÓN DIRECTA DESDE LA WEB */}
+      <Card style={{ padding: '20px', marginBottom: '20px', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(16, 185, 129, 0.06))', border: '1.5px solid rgba(99, 102, 241, 0.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FolderDown size={20} color="var(--accent-primary)" />
+              Descargar Agente de Impresión Térmica para Windows
+            </h3>
+            <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: 0, maxWidth: '750px', lineHeight: '1.5' }}>
+              ¿Estás en un computador nuevo o no tienes el servidor de impresión instalado? Descarga el instalador con un solo clic. Funciona en Windows 10/11 con o sin Node.js instalado (incluye motor nativo de Windows).
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <Button
+              variant="primary"
+              icon={<Download size={16} />}
+              onClick={handleDownloadInstaller}
+              style={{ fontWeight: 800 }}
+            >
+              📥 Descargar Instalador (.bat)
+            </Button>
+            <Button
+              variant="secondary"
+              icon={<Play size={14} />}
+              onClick={handleDownloadRunner}
+            >
+              Inicio Rápido (.bat)
+            </Button>
+          </div>
+        </div>
+
+        {/* Pasos de Instalación */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginTop: '16px' }}>
+          
+          <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(99, 102, 241, 0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px' }}>1</span>
+              Descarga el Instalador
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Haz clic en el botón <strong style={{ color: 'var(--text-primary)' }}>"Descargar Instalador (.bat)"</strong> arriba.
             </div>
           </div>
-        )}
+
+          <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(99, 102, 241, 0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px' }}>2</span>
+              Ejecútalo en tu Computador
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              Abre el archivo descargado en la PC donde está conectada la impresora térmica USB.
+            </div>
+          </div>
+
+          <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--accent-success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px' }}>3</span>
+              ¡Listo para Imprimir!
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              El monitor cambiará a <strong style={{ color: 'var(--accent-success)' }}>🟢 Conectado</strong> y se iniciará solo con Windows.
+            </div>
+          </div>
+
+        </div>
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px', marginBottom: '20px' }}>
@@ -464,7 +544,7 @@ export const PrintingConfigPage = () => {
                 placeholder="http://localhost:8182"
               />
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                Por defecto: <strong>http://localhost:8182</strong>.
+                Por defecto: <strong>http://localhost:8182</strong> (también prueba 127.0.0.1 automáticamente).
               </div>
             </div>
 
@@ -684,36 +764,6 @@ export const PrintingConfigPage = () => {
               >
                 {testingDrawer ? 'Enviando pulso...' : '💵 Probar Apertura de Gaveta'}
               </Button>
-            </div>
-          </div>
-
-        </div>
-      </Card>
-
-      {/* GUÍA DE FUNCIONAMIENTO MULTI-DISPOSITIVO */}
-      <Card style={{ padding: '18px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 800, margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <HelpCircle size={17} color="var(--accent-primary)" />
-          ¿Cómo funciona la impresión remota desde celulares de meseros?
-        </h3>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '14px', marginTop: '10px' }}>
-          
-          <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-primary)' }}>
-              1. El mesero toma el pedido en su celular
-            </div>
-            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.5' }}>
-              El mesero selecciona los productos en la mesa y pulsa "Enviar a Cocina". La comanda se registra de inmediato en la base de datos central.
-            </div>
-          </div>
-
-          <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-primary)' }}>
-              2. Señal instantánea a la Estación de Impresión (PC)
-            </div>
-            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.5' }}>
-              El computador de caja/cocina recibe la señal mediante WebSocket y el <strong>Print Bridge (Puerto 8182)</strong> envía el ticket en milisegundos a la impresora térmica USB con corte de papel automático.
             </div>
           </div>
 

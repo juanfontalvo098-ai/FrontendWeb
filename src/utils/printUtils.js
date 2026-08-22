@@ -7,71 +7,104 @@ import { formatCOP, formatDateTime, api } from '../api/client';
 export const DEFAULT_BRIDGE_URL = 'http://localhost:8182';
 
 /**
+ * Obtiene lista de URLs candidatas (localhost, 127.0.0.1 y personalizada)
+ */
+export const getCandidateBridgeUrls = (preferredUrl = null) => {
+  const list = [];
+  if (preferredUrl && typeof preferredUrl === 'string' && preferredUrl.trim()) {
+    list.push(preferredUrl.trim().replace(/\/+$/, ''));
+  }
+  list.push('http://localhost:8182');
+  list.push('http://127.0.0.1:8182');
+  return list.filter((v, i, a) => v && a.indexOf(v) === i);
+};
+
+/**
  * Envía el ticket directamente al Print Bridge local (puerto 8182) sin diálogos ni confirmaciones de Windows
  */
 export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = DEFAULT_BRIDGE_URL, options = {}) => {
-  try {
-    const url = (bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/+$/, '');
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const candidateUrls = getCandidateBridgeUrls(bridgeUrl);
+  let lastError = null;
 
-    const res = await fetch(`${url}/print`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, printerName, ...options }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
+  for (const baseUrl of candidateUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    if (res.ok) {
-      const data = await res.json();
-      console.log('✅ [PrintUtils] Impresión silenciosa procesada por Print Bridge:', data);
-      return { success: true, data };
-    } else {
-      const errData = await res.json().catch(() => ({}));
-      return { success: false, error: errData.error || `Error HTTP ${res.status}` };
+      const res = await fetch(`${baseUrl}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, printerName, ...options }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`✅ [PrintUtils] Impresión procesada por Print Bridge (${baseUrl}):`, data);
+        return { success: true, data, activeUrl: baseUrl };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        lastError = errData.error || `Error HTTP ${res.status}`;
+      }
+    } catch (err) {
+      lastError = err.name === 'AbortError' ? 'Tiempo de espera agotado' : err.message;
     }
-  } catch (err) {
-    console.warn('⚠️ [PrintUtils] Print Bridge no respondió en ' + (bridgeUrl || DEFAULT_BRIDGE_URL) + ':', err.message);
-    return { success: false, error: err.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con el Print Bridge' : err.message };
   }
+
+  console.warn('⚠️ [PrintUtils] Print Bridge no respondió en ninguna de las URLs probadas:', candidateUrls);
+  return { success: false, error: lastError || 'Print Bridge no disponible' };
 };
 
 /**
  * Consulta el estado y las impresoras disponibles en el Print Bridge local
  */
 export const checkPrintBridgeHealth = async (bridgeUrl = DEFAULT_BRIDGE_URL) => {
-  try {
-    const url = (bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/+$/, '');
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+  const candidateUrls = getCandidateBridgeUrls(bridgeUrl);
 
-    const res = await fetch(`${url}/health`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      const data = await res.json();
-      return { online: true, data };
+  for (const baseUrl of candidateUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const res = await fetch(`${baseUrl}/health`, { 
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' }
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        return { online: true, data, activeUrl: baseUrl };
+      }
+    } catch (e) {
+      // Probar siguiente candidata
     }
-  } catch (e) {
-    // Offline
   }
   return { online: false };
 };
 
 export const getPrintBridgePrinters = async (bridgeUrl = DEFAULT_BRIDGE_URL) => {
-  try {
-    const url = (bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/+$/, '');
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+  const candidateUrls = getCandidateBridgeUrls(bridgeUrl);
 
-    const res = await fetch(`${url}/printers`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      const data = await res.json();
-      return data.printers || [];
+  for (const baseUrl of candidateUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      const res = await fetch(`${baseUrl}/printers`, { 
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' }
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        return data.printers || [];
+      }
+    } catch (e) {
+      // Probar siguiente
     }
-  } catch (e) {
-    // Offline
   }
   return [];
 };
@@ -80,25 +113,28 @@ export const getPrintBridgePrinters = async (bridgeUrl = DEFAULT_BRIDGE_URL) => 
  * Envía un ticket de prueba con formateo ESC/POS al Print Bridge
  */
 export const sendTestPrint = async (printerName = null, type = 'comanda', bridgeUrl = DEFAULT_BRIDGE_URL) => {
-  try {
-    const url = (bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/+$/, '');
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4000);
+  const candidateUrls = getCandidateBridgeUrls(bridgeUrl);
 
-    const res = await fetch(`${url}/test-print`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ printerName, type }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
+  for (const baseUrl of candidateUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    if (res.ok) {
-      const data = await res.json();
-      return { success: true, data };
+      const res = await fetch(`${baseUrl}/test-print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ printerName, type }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        return { success: true, data, activeUrl: baseUrl };
+      }
+    } catch (err) {
+      // Probar siguiente
     }
-  } catch (err) {
-    console.error('Error al enviar test-print al Print Bridge:', err);
   }
   return { success: false };
 };
