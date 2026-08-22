@@ -408,7 +408,11 @@ export const OrderPage = () => {
 
       addToast('Orden enviada a cocina con éxito', 'success');
 
-      handlePrintKitchenTicket(orderItems, activeId);
+      try {
+        handlePrintKitchenTicket(orderItems, activeId);
+      } catch (printErr) {
+        console.warn('[OrderPage] Error al invocar impresión local de comanda:', printErr);
+      }
       await fetchData();
     } catch (err) {
       addToast(err.message || 'Error al enviar a cocina', 'danger');
@@ -418,19 +422,22 @@ export const OrderPage = () => {
   };
 
   const handlePrintKitchenTicket = (ticketItems, explicitOrderId = null) => {
-    const tableClean = displayTableNumber.replace(/^Mesa\s*/i, '');
-    printKitchenTicket(
-      {
-        id: explicitOrderId || currentOrder?.id,
-        table_number: tableClean,
-        order_type: 'mesa',
-        waiter_name: currentOrder?.waiter_name || user?.full_name || 'Personal'
-      },
-      ticketItems,
-      settings || {},
-      settings?.default_paper_width || '80mm'
-    );
-    addToast('Comanda enviada a impresión', 'info');
+    try {
+      const tableClean = displayTableNumber.replace(/^Mesa\s*/i, '');
+      printKitchenTicket(
+        {
+          id: explicitOrderId || currentOrder?.id,
+          table_number: tableClean,
+          order_type: 'mesa',
+          waiter_name: currentOrder?.waiter_name || user?.full_name || 'Personal'
+        },
+        ticketItems,
+        settings || {},
+        settings?.default_paper_width || '80mm'
+      );
+    } catch (e) {
+      console.warn('[OrderPage] Excepción en comanda:', e);
+    }
   };
 
   const handlePrintPreBill = () => {

@@ -1,65 +1,17 @@
 // src/utils/printUtils.js
-// Módulo centralizado y unificado de impresión térmica para todo el sistema POS
-// Garantiza formatos idénticos, máxima legibilidad y soporte de logo
+// Módulo centralizado y unificado de impresión térmica directa y silenciosa (KAMIA Print Bridge v2.0)
+// Puerto predeterminado: 8182
 
 import { formatCOP, formatDateTime, api } from '../api/client';
-import { qzService } from './qzTrayService';
+
+export const DEFAULT_BRIDGE_URL = 'http://localhost:8182';
 
 /**
- * Imprime un documento térmico:
- * 1. Prioridad 1: Si QZ Tray está activo, imprime de forma 100% silenciosa y directa (firmado criptográficamente con Certificado Digital X.509).
- * 2. Prioridad 2: Si KAMIA Print Bridge (puerto 8088) está activo, imprime vía ESC/POS directo al spooler.
- * 3. Fallback: Diálogo nativo de Windows (iframe limpio).
+ * Envía el ticket directamente al Print Bridge local (puerto 8182) sin diálogos ni confirmaciones de Windows
  */
-export const printThermalDocument = async (htmlContent, printerName = null, options = {}) => {
-  const { 
-    title = 'Impresión POS', 
-    paperWidth = '80mm', 
-    cut = true, 
-    plainText = null, 
-    bridgeUrl = 'http://localhost:8088',
-    enableSilentPrinting = true,
-    settings = null
-  } = options;
-
-  // Determinar si la impresión silenciosa está activada en la configuración
-  const isSilentEnabled = enableSilentPrinting !== false && (settings?.enable_silent_printing !== false);
-
-  // 1. Intentar impresión silenciosa directa mediante QZ Tray firmado SI está habilitada
-  if (isSilentEnabled && qzService.isQzConnected()) {
-    try {
-      const res = await qzService.printHtml(htmlContent, printerName, { paperWidth, cut, jobName: title });
-      if (res && res.success) {
-        return { success: true, mode: 'qz_tray', printer: res.printer };
-      }
-    } catch (err) {
-      console.warn('⚠️ [printUtils] QZ Tray falló, intentando Print Bridge o diálogo:', err.message);
-    }
-  }
-
-  // 2. Intentar impresión silenciosa directa mediante el Print Bridge nativo de KAMIA SI está habilitada
-  if (isSilentEnabled && plainText) {
-    try {
-      const res = await sendToThermalBridge(plainText, printerName, bridgeUrl, { cutPaper: cut });
-      if (res && res.success) {
-        return { success: true, mode: 'print_bridge', printer: printerName || 'Predeterminada' };
-      }
-    } catch (err) {
-      console.warn('⚠️ [printUtils] Print Bridge no disponible, continuando fallback:', err.message);
-    }
-  }
-
-  // 3. Diálogo de impresión nativo del navegador (con vista previa visual exacta)
-  printWithIframe(htmlContent, title);
-  return { success: true, mode: 'iframe_dialog' };
-};
-
-/**
- * Envía el ticket directamente al Print Bridge local (puerto 8088) sin diálogos ni confirmaciones de Windows
- */
-export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 'http://localhost:8088', options = {}) => {
+export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = DEFAULT_BRIDGE_URL, options = {}) => {
   try {
-    const url = (bridgeUrl || 'http://localhost:8088').replace(/\/+$/, '');
+    const url = (bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/+$/, '');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -73,36 +25,26 @@ export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 
 
     if (res.ok) {
       const data = await res.json();
-      console.log('✅ [PrintUtils] Impresión enviada con éxito al Print Bridge:', data);
+      console.log('✅ [PrintUtils] Impresión silenciosa procesada por Print Bridge:', data);
       return { success: true, data };
     } else {
       const errData = await res.json().catch(() => ({}));
       return { success: false, error: errData.error || `Error HTTP ${res.status}` };
     }
   } catch (err) {
-    console.warn('⚠️ [PrintUtils] Error al conectar con Print Bridge:', err.message);
+    console.warn('⚠️ [PrintUtils] Print Bridge no respondió en ' + (bridgeUrl || DEFAULT_BRIDGE_URL) + ':', err.message);
     return { success: false, error: err.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con el Print Bridge' : err.message };
   }
 };
 
 /**
- * Envía el pulso de apertura de cajón monedero (RJ11) a la impresora
- */
-export const openCashDrawer = async (printerName = null, bridgeUrl = 'http://localhost:8088') => {
-  if (qzService.isQzConnected()) {
-    return qzService.openCashDrawer(printerName);
-  }
-  return sendToThermalBridge('', printerName, bridgeUrl, { openDrawer: true, cutPaper: false });
-};
-
-/**
  * Consulta el estado y las impresoras disponibles en el Print Bridge local
  */
-export const checkPrintBridgeHealth = async (bridgeUrl = 'http://localhost:8088') => {
+export const checkPrintBridgeHealth = async (bridgeUrl = DEFAULT_BRIDGE_URL) => {
   try {
-    const url = (bridgeUrl || 'http://localhost:8088').replace(/\/+$/, '');
+    const url = (bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/+$/, '');
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
 
     const res = await fetch(`${url}/health`, { signal: controller.signal });
     clearTimeout(timeoutId);
@@ -116,9 +58,9 @@ export const checkPrintBridgeHealth = async (bridgeUrl = 'http://localhost:8088'
   return { online: false };
 };
 
-export const getPrintBridgePrinters = async (bridgeUrl = 'http://localhost:8088') => {
+export const getPrintBridgePrinters = async (bridgeUrl = DEFAULT_BRIDGE_URL) => {
   try {
-    const url = (bridgeUrl || 'http://localhost:8088').replace(/\/+$/, '');
+    const url = (bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/+$/, '');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3500);
 
@@ -137,9 +79,9 @@ export const getPrintBridgePrinters = async (bridgeUrl = 'http://localhost:8088'
 /**
  * Envía un ticket de prueba con formateo ESC/POS al Print Bridge
  */
-export const sendTestPrint = async (printerName = null, type = 'comanda', bridgeUrl = 'http://localhost:8088') => {
+export const sendTestPrint = async (printerName = null, type = 'comanda', bridgeUrl = DEFAULT_BRIDGE_URL) => {
   try {
-    const url = (bridgeUrl || 'http://localhost:8088').replace(/\/+$/, '');
+    const url = (bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/+$/, '');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
 
@@ -159,6 +101,49 @@ export const sendTestPrint = async (printerName = null, type = 'comanda', bridge
     console.error('Error al enviar test-print al Print Bridge:', err);
   }
   return { success: false };
+};
+
+/**
+ * Envía el pulso de apertura de cajón monedero (RJ11) a la impresora
+ */
+export const openCashDrawer = async (printerName = null, bridgeUrl = DEFAULT_BRIDGE_URL) => {
+  return sendToThermalBridge('', printerName, bridgeUrl, { openDrawer: true, cutPaper: false });
+};
+
+/**
+ * Imprime un documento térmico:
+ * 1. Prioridad 1: Si KAMIA Print Bridge (puerto 8182) está activo y silent printing habilitado, imprime vía ESC/POS directo al spooler sin diálogo.
+ * 2. Fallback: Diálogo nativo de Windows / iframe limpio.
+ */
+export const printThermalDocument = async (htmlContent, printerName = null, options = {}) => {
+  const { 
+    title = 'Impresión POS', 
+    paperWidth = '80mm', 
+    cut = true, 
+    plainText = null, 
+    bridgeUrl = DEFAULT_BRIDGE_URL,
+    enableSilentPrinting = true,
+    settings = null
+  } = options;
+
+  const isSilentEnabled = enableSilentPrinting !== false && (settings?.enable_silent_printing !== false);
+
+  // 1. Intentar impresión silenciosa directa mediante el Print Bridge nativo de KAMIA SI está habilitada
+  if (isSilentEnabled && plainText) {
+    try {
+      const effectiveBridgeUrl = settings?.silent_print_bridge_url || bridgeUrl || DEFAULT_BRIDGE_URL;
+      const res = await sendToThermalBridge(plainText, printerName, effectiveBridgeUrl, { cutPaper: cut });
+      if (res && res.success) {
+        return { success: true, mode: 'print_bridge', printer: printerName || 'Predeterminada' };
+      }
+    } catch (err) {
+      console.warn('⚠️ [printUtils] Print Bridge no disponible, continuando fallback:', err.message);
+    }
+  }
+
+  // 2. Diálogo de impresión nativo del navegador (con vista previa visual exacta)
+  printWithIframe(htmlContent, title);
+  return { success: true, mode: 'iframe_dialog' };
 };
 
 /**
@@ -410,15 +395,15 @@ export const buildKitchenTicketPlainText = (orderData, itemsList = [], notes = '
   return text;
 };
 
-export const buildPreFacturaPlainText = (orderData, itemsList = [], settings = {}, calculations = {}) => {
-  let subtotal = calculations.itemsSubtotal || 0;
+export const buildPreFacturaPlainText = (orderData, itemsList = [], settings = {}, extras = {}) => {
+  let subtotal = extras.itemsSubtotal || 0;
   if (!subtotal) {
     subtotal = itemsList.reduce((acc, it) => acc + ((parseFloat(it.quantity || it.qty) || 1) * (parseFloat(it.unit_price || it.price || it.product?.price) || 0)), 0);
   }
-  const discount = parseFloat(calculations.discountVal || orderData.discount_amount || 0);
-  const deliveryFee = parseFloat(calculations.delFee || orderData.delivery_fee || 0);
+  const discount = parseFloat(extras.discountVal || orderData.discount_amount || 0);
+  const deliveryFee = parseFloat(extras.delFee || orderData.delivery_fee || 0);
   const baseTotal = Math.max(0, subtotal - discount) + deliveryFee;
-  const propinaSugerida = calculations.tipVal !== undefined ? calculations.tipVal : (baseTotal * 0.1);
+  const propinaSugerida = extras.tipVal !== undefined ? extras.tipVal : (baseTotal * 0.1);
   const totalConPropina = baseTotal + propinaSugerida;
   const tableOrType = getCleanTableOrType(orderData);
 
@@ -429,7 +414,7 @@ export const buildPreFacturaPlainText = (orderData, itemsList = [], settings = {
 
   let text = '';
   text += doubleLine + '\n';
-  text += `        ${(settings?.business_name || 'GASTROSPOS').toUpperCase()}\n`;
+  text += `        ${(settings?.business_name || 'KAMIA POS').toUpperCase()}\n`;
   if (settings?.nit) text += `          NIT: ${settings.nit}\n`;
   text += doubleLine + '\n';
   text += '    *** PRE-CUENTA / PRE-FACTURA ***\n';
@@ -492,7 +477,7 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
   const width = 38;
   const line = '-'.repeat(width);
   const doubleLine = '='.repeat(width);
-  const bName = (mergedSettings?.business_name || 'GASTROSPOS RESTAURANTE').toUpperCase();
+  const bName = (mergedSettings?.business_name || 'KAMIA RESTAURANTE').toUpperCase();
   const nit = mergedSettings?.nit || '';
   const address = mergedSettings?.address || '';
   const phone = mergedSettings?.phone || '';
@@ -567,7 +552,7 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
   }
 
   const isCredit = invoice.payment_method === 'credito' || parseFloat(invoice.credit_balance || invoice.credit_amount || 0) > 0;
-  const creditBalance = parseFloat(invoice.credit_balance !== undefined ? invoice.credit_balance : (invoice.credit_amount || (invoice.payment_method === 'credito' ? invoice.total : 0)));
+  const creditBalance = parseFloat(invoice.credit_balance !== undefined ? invoice.credit_balance : (invoice.credit_amount || (invoice.payment_method === 'credito' ? total : 0)));
   const paidInitial = Math.max(0, parseFloat(invoice.total || 0) - creditBalance);
 
   if (isCredit && creditBalance > 0) {
@@ -587,7 +572,7 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
     text += line + '\n';
   }
   text += `  ${mergedSettings?.receipt_footer || '¡Gracias por su compra!'}\n`;
-  text += `    Software POS GastrosPOS ERP v1.0\n`;
+  text += `    Software POS KAMIA by JF\n`;
   text += doubleLine + '\n';
   return text;
 };
@@ -602,7 +587,7 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
 
   let text = '';
   text += doubleLine + '\n';
-  text += `        ${(settings?.business_name || 'GASTROSPOS').toUpperCase()}\n`;
+  text += `        ${(settings?.business_name || 'KAMIA POS').toUpperCase()}\n`;
   text += doubleLine + '\n';
   text += '       *** CIERRE DE TURNO ***\n';
   text += line + '\n';
@@ -628,19 +613,40 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
 
 // =========================================================================
 // 1. COMANDA DE COCINA (TICKET TÉRMICO OPERATIVO UNIFICADO)
+// Soporta llamadas con firma:
+// printKitchenTicket(orderData, itemsList, settings, paperWidth)
+// printKitchenTicket(orderData, itemsList, notes, waiter, settings, paperWidth)
 // =========================================================================
-export const printKitchenTicket = async (orderData, itemsList = [], settings = {}, paperWidth = '80mm') => {
+export const printKitchenTicket = async (orderData = {}, itemsList = [], arg3 = {}, arg4 = '80mm', arg5 = null, arg6 = null) => {
+  let settings = {};
+  let paperWidth = '80mm';
+  let customNotes = '';
+  let customWaiter = '';
+
+  if (typeof arg3 === 'string') {
+    // Firma extendida: (orderData, itemsList, notes, waiter, settings, paperWidth)
+    customNotes = arg3;
+    customWaiter = typeof arg4 === 'string' ? arg4 : '';
+    settings = (arg5 && typeof arg5 === 'object') ? arg5 : {};
+    paperWidth = (typeof arg6 === 'string') ? arg6 : (settings?.default_paper_width || '80mm');
+  } else {
+    // Firma estándar: (orderData, itemsList, settings, paperWidth)
+    settings = (arg3 && typeof arg3 === 'object') ? arg3 : {};
+    paperWidth = (typeof arg4 === 'string') ? arg4 : (settings?.default_paper_width || '80mm');
+  }
+
   const tableOrType = getCleanTableOrType(orderData);
-  const waiter = orderData.waiter_name || orderData.user_name || 'Personal';
+  const waiter = customWaiter || orderData.waiter_name || orderData.user_name || 'Personal';
   const orderId = orderData.id || 'NUEVA';
-  const notes = orderData.notes || orderData.delivery_notes || '';
+  const notes = customNotes || orderData.notes || orderData.delivery_notes || '';
 
   const plainText = buildKitchenTicketPlainText(orderData, itemsList, notes, waiter);
+  const bridgeUrl = settings?.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
 
   // Intentar impresión silenciosa directa si está configurada
-  if (settings?.enable_silent_printing) {
-    const silentRes = await sendToThermalBridge(plainText, settings?.printer_kitchen_name || null, settings?.silent_print_bridge_url);
-    if (silentRes && silentRes.success) return true;
+  if (settings?.enable_silent_printing !== false) {
+    const silentRes = await sendToThermalBridge(plainText, settings?.printer_kitchen_name || null, bridgeUrl);
+    if (silentRes && silentRes.success) return { success: true, mode: 'print_bridge' };
   }
 
   const html = `
@@ -734,7 +740,7 @@ export const printKitchenTicket = async (orderData, itemsList = [], settings = {
     paperWidth, 
     cut: true, 
     plainText, 
-    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088',
+    bridgeUrl,
     settings
   });
 };
@@ -772,11 +778,13 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
   const customerEmail = !isConsumidorFinal ? (orderData.customer_email || orderData.email || '') : '';
   const customerCity = !isConsumidorFinal ? (orderData.customer_city || orderData.city || '') : '';
 
+  const plainText = buildPreFacturaPlainText(orderData, itemsList, mergedSettings, extras);
+  const bridgeUrl = mergedSettings?.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
+
   // Intentar impresión silenciosa directa
-  if (settings?.enable_silent_printing) {
-    const plainText = buildPreFacturaPlainText(orderData, itemsList, settings, calculations);
-    const silentRes = await sendToThermalBridge(plainText, settings?.printer_receipt_name || null, settings?.silent_print_bridge_url);
-    if (silentRes.success) return true;
+  if (mergedSettings?.enable_silent_printing !== false) {
+    const silentRes = await sendToThermalBridge(plainText, mergedSettings?.printer_receipt_name || null, bridgeUrl);
+    if (silentRes && silentRes.success) return { success: true, mode: 'print_bridge' };
   }
 
   const html = `
@@ -790,7 +798,7 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
       </head>
       <body>
         <div class="receipt-wrapper">
-          ${getBusinessHeaderHTML(settings, paperWidth)}
+          ${getBusinessHeaderHTML(mergedSettings, paperWidth)}
           <div class="solid-line"></div>
           <div class="center bold" style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000;">*** PRE-CUENTA / PRE-FACTURA ***</div>
           <div class="center bold" style="font-size: 9.5px; color: #000000;">(Documento de control - No válido como factura fiscal)</div>
@@ -883,20 +891,19 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
           </div>
 
           <div class="solid-line"></div>
-          <div class="center bold" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'}; margin-top: 4px; color: #000000;">${settings?.receipt_footer || '¡Muchas gracias por su visita!'}</div>
+          <div class="center bold" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'}; margin-top: 4px; color: #000000;">${mergedSettings?.receipt_footer || '¡Muchas gracias por su visita!'}</div>
           <div class="center" style="font-size: ${paperWidth === '58mm' ? '10px' : '11px'}; margin-top: 2px; color: #000000; font-style: italic;">La propina es voluntaria y destinada al personal de servicio.</div>
         </div>
       </body>
     </html>
   `;
 
-  const plainText = buildPreFacturaPlainText(orderData, itemsList, mergedSettings, extras);
-  return printThermalDocument(html, settings?.printer_receipt_name || null, { 
+  return printThermalDocument(html, mergedSettings?.printer_receipt_name || null, { 
     title: `Pre-Factura #${orderData.id || ''}`, 
     paperWidth, 
     cut: true, 
     plainText, 
-    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088',
+    bridgeUrl,
     settings: mergedSettings
   });
 };
@@ -930,11 +937,13 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
   const customerEmail = !isConsumidorFinal ? (invoice.customer_email || invoice.email || '') : '';
   const customerCity = !isConsumidorFinal ? (invoice.customer_city || invoice.city || '') : '';
 
+  const plainText = buildInvoicePlainText(invoice, mergedSettings);
+  const bridgeUrl = mergedSettings?.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
+
   // Intentar impresión silenciosa directa
-  if (mergedSettings?.enable_silent_printing) {
-    const plainText = buildInvoicePlainText(invoice, mergedSettings);
-    const silentRes = await sendToThermalBridge(plainText, mergedSettings?.printer_receipt_name || null, mergedSettings?.silent_print_bridge_url);
-    if (silentRes.success) return true;
+  if (mergedSettings?.enable_silent_printing !== false) {
+    const silentRes = await sendToThermalBridge(plainText, mergedSettings?.printer_receipt_name || null, bridgeUrl);
+    if (silentRes && silentRes.success) return { success: true, mode: 'print_bridge' };
   }
 
   const html = `
@@ -1081,13 +1090,12 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
     </html>
   `;
 
-  const plainText = buildInvoicePlainText(invoice, mergedSettings);
-  return printThermalDocument(html, settings?.printer_receipt_name || null, { 
+  return printThermalDocument(html, mergedSettings?.printer_receipt_name || null, { 
     title: `Factura POS #${invoice.invoice_number || ''}`, 
     paperWidth, 
     cut: true, 
     plainText, 
-    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088',
+    bridgeUrl,
     settings: mergedSettings
   });
 };
@@ -1168,12 +1176,13 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
   `;
 
   const plainText = buildShiftClosePlainText(shift, settings);
+  const bridgeUrl = settings?.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
+
   return printThermalDocument(html, settings?.printer_receipt_name || null, { 
     title: `Cierre de Turno #${shift.id}`, 
     paperWidth, 
     cut: true, 
     plainText, 
-    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088' 
+    bridgeUrl 
   });
 };
-

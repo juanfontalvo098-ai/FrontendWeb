@@ -29,7 +29,7 @@ export const SettingsPage = () => {
   const [enableSilentPrinting, setEnableSilentPrinting] = useState(false);
   const [autoPrintKitchenTickets, setAutoPrintKitchenTickets] = useState(false);
   const [autoPrintInvoices, setAutoPrintInvoices] = useState(false);
-  const [silentPrintBridgeUrl, setSilentPrintBridgeUrl] = useState('http://localhost:8088');
+  const [silentPrintBridgeUrl, setSilentPrintBridgeUrl] = useState('http://localhost:8182');
   const [printerKitchenName, setPrinterKitchenName] = useState('');
   const [printerReceiptName, setPrinterReceiptName] = useState('');
   const [bridgeStatus, setBridgeStatus] = useState('unknown'); // 'online', 'offline', 'testing', 'unknown'
@@ -59,7 +59,7 @@ export const SettingsPage = () => {
         setEnableSilentPrinting(Boolean(data.enable_silent_printing));
         setAutoPrintKitchenTickets(Boolean(data.auto_print_kitchen_tickets));
         setAutoPrintInvoices(Boolean(data.auto_print_invoices));
-        setSilentPrintBridgeUrl(data.silent_print_bridge_url || 'http://localhost:8088');
+        setSilentPrintBridgeUrl(data.silent_print_bridge_url || 'http://localhost:8182');
         setPrinterKitchenName(data.printer_kitchen_name || '');
         setPrinterReceiptName(data.printer_receipt_name || '');
       } catch (err) {
