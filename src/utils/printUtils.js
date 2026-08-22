@@ -3,6 +3,31 @@
 // Garantiza formatos idénticos, máxima legibilidad y soporte de logo
 
 import { formatCOP, formatDateTime, api } from '../api/client';
+import { qzService } from './qzTrayService';
+
+/**
+ * Imprime un documento térmico HTML:
+ * 1. Si QZ Tray está conectado en este equipo, lo imprime de forma silenciosa directa al spooler.
+ * 2. Si QZ Tray no está conectado, realiza un fallback transparente al diálogo de impresión de Windows (iframe).
+ */
+export const printThermalDocument = async (htmlContent, printerName = null, options = {}) => {
+  const { title = 'Impresión POS', paperWidth = '80mm', cut = true } = options;
+
+  if (qzService.isQzConnected()) {
+    try {
+      const res = await qzService.printHtml(htmlContent, printerName, { paperWidth, cut, jobName: title });
+      if (res && res.success) {
+        return { success: true, mode: 'qz_tray', printer: res.printer };
+      }
+    } catch (err) {
+      console.warn('⚠️ [printUtils] QZ Tray falló, ejecutando fallback a diálogo de Windows:', err.message);
+    }
+  }
+
+  // Fallback transparente a diálogo de Windows (Iframe)
+  printWithIframe(htmlContent, title);
+  return { success: true, mode: 'iframe_dialog' };
+};
 
 /**
  * Envía el ticket directamente al Print Bridge local (puerto 8088) sin diálogos ni confirmaciones de Windows
@@ -39,6 +64,9 @@ export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 
  * Envía el pulso de apertura de cajón monedero (RJ11) a la impresora
  */
 export const openCashDrawer = async (printerName = null, bridgeUrl = 'http://localhost:8088') => {
+  if (qzService.isQzConnected()) {
+    return qzService.openCashDrawer(printerName);
+  }
   return sendToThermalBridge('', printerName, bridgeUrl, { openDrawer: true, cutPaper: false });
 };
 
@@ -641,8 +669,7 @@ export const printKitchenTicket = async (orderData, itemsList = [], settings = {
     </html>
   `;
 
-  printWithIframe(html, `Comanda Cocina #${orderId}`);
-  return true;
+  return printThermalDocument(html, settings?.printer_kitchen_name || null, { title: `Comanda Cocina #${orderId}`, paperWidth, cut: true });
 };
 
 // =========================================================================
@@ -796,8 +823,7 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
     </html>
   `;
 
-  printWithIframe(html, `Pre-Factura #${orderData.id || ''}`);
-  return true;
+  return printThermalDocument(html, settings?.printer_receipt_name || null, { title: `Pre-Factura #${orderData.id || ''}`, paperWidth, cut: true });
 };
 
 // =========================================================================
@@ -980,8 +1006,7 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
     </html>
   `;
 
-  printWithIframe(html, `Factura POS #${invoice.invoice_number || ''}`);
-  return true;
+  return printThermalDocument(html, settings?.printer_receipt_name || null, { title: `Factura POS #${invoice.invoice_number || ''}`, paperWidth, cut: true });
 };
 
 // =========================================================================
@@ -1059,7 +1084,6 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
     </html>
   `;
 
-  printWithIframe(html, `Cierre de Turno #${shift.id}`);
-  return true;
+  return printThermalDocument(html, settings?.printer_receipt_name || null, { title: `Cierre de Turno #${shift.id}`, paperWidth, cut: true });
 };
 

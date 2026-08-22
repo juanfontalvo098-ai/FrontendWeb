@@ -541,10 +541,10 @@ pause >nul\r
                 </div>
                 <div>
                   <h4 style={{ margin: 0, fontSize: '14.5px', fontWeight: 800 }}>
-                    Configuración de Impresión Térmica & Print Bridge (Node.js)
+                    Configuración de Impresión Térmica & QZ Tray
                   </h4>
                   <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Asignación de impresoras de Cocina/Caja, formato 80mm/58mm, instalador de Node.js y pruebas en vivo.
+                    Asignación de impresoras de Cocina/Caja, formato 80mm/58mm, motor QZ Tray y estación de auto-impresión.
                   </p>
                 </div>
               </div>

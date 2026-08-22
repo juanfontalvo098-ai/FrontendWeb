@@ -4,7 +4,7 @@ import {
   Printer, RefreshCw, CheckCircle, AlertCircle, Download,
   Play, Trash2, Cpu, FileText, Check, UtensilsCrossed,
   Receipt, DollarSign, Settings, ShieldCheck, Sparkles, ExternalLink,
-  Eye
+  Eye, Laptop, MonitorCheck, HelpCircle
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -13,16 +13,12 @@ import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { api, formatCOP, formatDateTime } from '../api/client';
 import { useUiStore } from '../store/uiStore';
+import { qzService } from '../utils/qzTrayService';
 import {
-  checkPrintBridgeHealth,
-  getPrintBridgePrinters,
-  sendTestPrint,
-  sendToThermalBridge,
   openCashDrawer,
-  buildInvoicePlainText,
-  buildKitchenTicketPlainText,
   printInvoiceReceipt,
-  printKitchenTicket
+  printKitchenTicket,
+  printThermalDocument
 } from '../utils/printUtils';
 
 export const PrintingConfigPage = () => {
@@ -42,11 +38,12 @@ export const PrintingConfigPage = () => {
   const [printerBarName, setPrinterBarName] = useState('');
   const [paperWidth, setPaperWidth] = useState('80mm');
   const [openDrawerOnPayment, setOpenDrawerOnPayment] = useState(true);
-  const [bridgeUrl, setBridgeUrl] = useState('http://localhost:8088');
 
-  // Estado en vivo del Bridge
-  const [bridgeStatus, setBridgeStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
-  const [bridgeInfo, setBridgeInfo] = useState(null);
+  // Estado Local: ¿Es este equipo la Estación de Impresión?
+  const [isPrintStation, setIsPrintStation] = useState(qzService.isPrintStation());
+
+  // Estado en vivo de QZ Tray
+  const [qzStatus, setQzStatus] = useState('checking'); // 'connected' | 'disconnected' | 'checking'
   const [detectedPrinters, setDetectedPrinters] = useState([]);
   const [testingKitchen, setTestingKitchen] = useState(false);
   const [testingReceipt, setTestingReceipt] = useState(false);
@@ -70,7 +67,6 @@ export const PrintingConfigPage = () => {
       setPrinterBarName(data.printer_bar_name || '');
       setPaperWidth(data.paper_width || '80mm');
       setOpenDrawerOnPayment(data.open_drawer_on_payment !== undefined ? !!data.open_drawer_on_payment : true);
-      setBridgeUrl(data.silent_print_bridge_url || 'http://localhost:8088');
     } catch (err) {
       addToast('Error al cargar configuración de impresión: ' + err.message, 'danger');
     } finally {
@@ -78,32 +74,30 @@ export const PrintingConfigPage = () => {
     }
   };
 
-  // 2. Probar conexión en vivo con el Bridge de Node.js
-  const testBridgeConnection = async () => {
-    setBridgeStatus('checking');
+  // 2. Probar conexión en vivo con QZ Tray
+  const testQzConnection = async () => {
+    setQzStatus('checking');
     try {
-      const health = await checkPrintBridgeHealth(bridgeUrl);
-      if (health && health.online) {
-        setBridgeStatus('online');
-        setBridgeInfo(health.data);
-        const printers = await getPrintBridgePrinters(bridgeUrl);
+      const ok = await qzService.connect();
+      if (ok && qzService.isQzConnected()) {
+        setQzStatus('connected');
+        const printers = await qzService.getPrinters(true);
         setDetectedPrinters(printers);
-        addToast('Print Bridge Node.js conectado correctamente', 'success');
+        addToast('🟢 QZ Tray conectado correctamente en este equipo', 'success');
       } else {
-        setBridgeStatus('offline');
-        setBridgeInfo(null);
+        setQzStatus('disconnected');
         setDetectedPrinters([]);
       }
     } catch (e) {
-      setBridgeStatus('offline');
-      setBridgeInfo(null);
+      setQzStatus('disconnected');
       setDetectedPrinters([]);
     }
   };
 
   useEffect(() => {
     loadSettings();
-    testBridgeConnection();
+    testQzConnection();
+    setIsPrintStation(qzService.isPrintStation());
   }, []);
 
   // 3. Guardar Configuración
@@ -120,8 +114,7 @@ export const PrintingConfigPage = () => {
         printer_receipt_name: printerReceiptName,
         printer_bar_name: printerBarName,
         paper_width: paperWidth,
-        open_drawer_on_payment: openDrawerOnPayment,
-        silent_print_bridge_url: bridgeUrl
+        open_drawer_on_payment: openDrawerOnPayment
       };
 
       await api.put('/settings', payload);
@@ -131,6 +124,17 @@ export const PrintingConfigPage = () => {
       addToast('Error al guardar configuración: ' + err.message, 'danger');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 4. Alternar estación de impresión
+  const handleTogglePrintStation = (checked) => {
+    setIsPrintStation(checked);
+    qzService.setPrintStation(checked);
+    if (checked) {
+      addToast('✅ Este equipo fue designado como Estación de Impresión de la Sucursal', 'success');
+    } else {
+      addToast('ℹ️ Este equipo ya no procesará auto-impresiones de otros dispositivos', 'info');
     }
   };
 
@@ -200,22 +204,22 @@ export const PrintingConfigPage = () => {
     }
   ];
 
-  // 4. Pruebas de Impresión con Formato Real
+  // 5. Pruebas de Impresión con Formato Real
   const handleTestKitchen = async () => {
     setTestingKitchen(true);
     try {
-      const plainText = buildKitchenTicketPlainText(
+      const res = await printKitchenTicket(
         sampleKitchenOrder,
         sampleKitchenItems,
         'Mesa VIP - Entregar todo junto',
-        sampleKitchenOrder.waiter_name
+        sampleKitchenOrder.waiter_name,
+        settings,
+        paperWidth
       );
-
-      const res = await sendToThermalBridge(plainText, printerKitchenName, bridgeUrl);
-      if (res && res.success) {
-        addToast('Comanda de prueba enviada a la impresora de Cocina', 'success');
+      if (res && res.mode === 'qz_tray') {
+        addToast(`✅ Comanda de prueba impresa en "${res.printer}" vía QZ Tray`, 'success');
       } else {
-        addToast(res?.error || 'No se pudo enviar a la impresora de Cocina. Verifica que el Print Bridge esté activo.', 'warning');
+        addToast('Comanda enviada a diálogo de impresión (Modo Fallback)', 'info');
       }
     } catch (e) {
       addToast('Error al enviar prueba: ' + e.message, 'danger');
@@ -227,13 +231,11 @@ export const PrintingConfigPage = () => {
   const handleTestReceipt = async () => {
     setTestingReceipt(true);
     try {
-      const plainText = buildInvoicePlainText(sampleInvoice, settings);
-      const res = await sendToThermalBridge(plainText, printerReceiptName, bridgeUrl);
-
-      if (res && res.success) {
-        addToast('Factura de venta POS de prueba enviada a la impresora de Caja', 'success');
+      const res = await printInvoiceReceipt(sampleInvoice, settings, paperWidth);
+      if (res && res.mode === 'qz_tray') {
+        addToast(`✅ Factura de prueba impresa en "${res.printer}" vía QZ Tray`, 'success');
       } else {
-        addToast(res?.error || 'No se pudo enviar a la impresora de Caja. Verifica que el Print Bridge esté activo.', 'warning');
+        addToast('Factura enviada a diálogo de impresión (Modo Fallback)', 'info');
       }
     } catch (e) {
       addToast('Error al enviar prueba: ' + e.message, 'danger');
@@ -245,9 +247,9 @@ export const PrintingConfigPage = () => {
   const handleTestDrawer = async () => {
     setTestingDrawer(true);
     try {
-      const res = await openCashDrawer(printerReceiptName, bridgeUrl);
+      const res = await openCashDrawer(printerReceiptName);
       if (res && res.success) {
-        addToast('Señal de apertura enviada a la gaveta de dinero', 'info');
+        addToast('Señal de apertura enviada a la gaveta de dinero', 'success');
       } else {
         addToast(res?.error || 'Verifica que la gaveta esté conectada al puerto RJ11 de la impresora de Caja', 'warning');
       }
@@ -258,293 +260,19 @@ export const PrintingConfigPage = () => {
     }
   };
 
-  // 5. Descargas de Scripts
-  const downloadNodeInstaller = () => {
-    window.open('https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi', '_blank');
-    addToast('Descargando instalador oficial de Node.js LTS (64 bits)...', 'info');
-  };
-
-  const downloadStarterBat = () => {
-    const origin = window.location.origin;
-    const downloadUrl = `${origin}/print-bridge/bridge.js`;
-
-    const batContent = `@echo off\r
-title KAMIA POS - Servidor Print Bridge (Node.js)\r
-color 0A\r
-cls\r
-echo ======================================================================\r
-echo           KAMIA POS - SERVIDOR DE IMPRESION DIRECTA (NODE.JS)\r
-echo ======================================================================\r
-echo.\r
-\r
-:: 1. Verificar si Node.js esta instalado\r
-where node >nul 2>nul\r
-if %errorlevel% neq 0 (\r
-    color 0C\r
-    echo [ALERTA] Node.js no esta instalado en este computador.\r
-    echo Node.js es OBLIGATORIO para el Print Bridge.\r
-    echo.\r
-    echo Abriendo la pagina de descarga oficial de Node.js...\r
-    start https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi\r
-    echo.\r
-    echo Por favor completa la instalacion de Node.js y vuelve a ejecutar este archivo.\r
-    echo.\r
-    pause\r
-    exit /b 1\r
-)\r
-for /f "tokens=*" %%i in ('node -v') do set NODE_VERSION=%%i\r
-echo [OK] Node.js detectado: %NODE_VERSION%\r
-echo.\r
-\r
-:: 2. Preparar directorio local en AppData\r
-set "TARGET_DIR=%LOCALAPPDATA%\\GastrosPOS\\PrintBridge"\r
-if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"\r
-set "BRIDGE_FILE=%TARGET_DIR%\\bridge.js"\r
-\r
-:: 3. Copiar archivo local o descargar desde la aplicacion web\r
-if exist "%~dp0bridge.js" (\r
-    copy /y "%~dp0bridge.js" "%BRIDGE_FILE%" >nul\r
-    echo [OK] Archivo bridge.js copiado desde la carpeta actual.\r
-) else (\r
-    echo Descargando componentes del Print Bridge desde la plataforma...\r
-    curl -fsSL -o "%BRIDGE_FILE%" "${downloadUrl}" 2>nul\r
-    if not exist "%BRIDGE_FILE%" (\r
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { (New-Object Net.WebClient).DownloadFile('${downloadUrl}', '%BRIDGE_FILE%') } catch {}"\r
-    )\r
-)\r
-\r
-:: 4. Validar existencia de bridge.js\r
-if not exist "%BRIDGE_FILE%" (\r
-    color 0C\r
-    echo.\r
-    echo [ERROR] No se pudo descargar el archivo bridge.js del servidor.\r
-    echo URL de origen: ${downloadUrl}\r
-    echo Verifica tu conexion a internet o descarga el archivo manualmente.\r
-    echo.\r
-    pause\r
-    exit /b 1\r
-)\r
-\r
-:: 5. Iniciar servicio en primer plano\r
-echo.\r
-echo ======================================================================\r
-echo   [OK] Iniciando KAMIA Print Bridge en http://localhost:8088...\r
-echo   Deja esta ventana abierta o minimizada mientras uses el POS.\r
-echo ======================================================================\r
-echo.\r
-cd /d "%TARGET_DIR%"\r
-node bridge.js\r
-if %errorlevel% neq 0 (\r
-    echo.\r
-    color 0C\r
-    echo [AVISO] El Print Bridge se ha detenido inesperadamente.\r
-    pause\r
-)\r
-`;
-    const blob = new Blob([batContent], { type: 'application/bat' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'iniciar-bridge.bat';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addToast('Script iniciar-bridge.bat descargado', 'success');
-  };
-
-  const downloadInstallerBat = () => {
-    const origin = window.location.origin;
-    const downloadUrl = `${origin}/print-bridge/bridge.js`;
-
-    const batContent = `@echo off\r
-title KAMIA POS - Instalador de Servicio Print Bridge (Node.js)\r
-color 0B\r
-cls\r
-echo ======================================================================\r
-echo           KAMIA POS - INSTALADOR DE SERVICIO PRINT BRIDGE (NODE.JS)\r
-echo ======================================================================\r
-echo.\r
-\r
-:: 1. Verificar si Node.js esta instalado\r
-where node >nul 2>nul\r
-if %errorlevel% neq 0 (\r
-    color 0C\r
-    echo [ALERTA] Node.js no esta instalado en este computador.\r
-    echo Node.js es OBLIGATORIO para el Print Bridge.\r
-    echo.\r
-    echo Abriendo la pagina de descarga oficial de Node.js...\r
-    start https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi\r
-    echo.\r
-    echo Por favor completa la instalacion de Node.js y vuelve a ejecutar este instalador.\r
-    echo.\r
-    pause\r
-    exit /b 1\r
-)\r
-for /f "tokens=*" %%i in ('node -v') do set NODE_VERSION=%%i\r
-echo   [1/4] Node.js verificado: %NODE_VERSION%\r
-\r
-:: 2. Preparar directorio local en AppData\r
-set "TARGET_DIR=%LOCALAPPDATA%\\GastrosPOS\\PrintBridge"\r
-if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"\r
-set "BRIDGE_FILE=%TARGET_DIR%\\bridge.js"\r
-\r
-:: 3. Copiar o descargar bridge.js\r
-if exist "%~dp0bridge.js" (\r
-    copy /y "%~dp0bridge.js" "%BRIDGE_FILE%" >nul\r
-    echo   [2/4] Archivo bridge.js copiado localmente.\r
-) else (\r
-    echo   [2/4] Descargando componentes del Print Bridge...\r
-    curl -fsSL -o "%BRIDGE_FILE%" "${downloadUrl}" 2>nul\r
-    if not exist "%BRIDGE_FILE%" (\r
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { (New-Object Net.WebClient).DownloadFile('${downloadUrl}', '%BRIDGE_FILE%') } catch {}"\r
-    )\r
-)\r
-\r
-if not exist "%BRIDGE_FILE%" (\r
-    color 0C\r
-    echo   [ERROR] No se pudo descargar bridge.js. Verifica tu internet.\r
-    pause\r
-    exit /b 1\r
-)\r
-\r
-:: 4. Detener instancias previas\r
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Get-NetTCPConnection -LocalPort 8088 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } catch {}; try { Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*PrintBridge*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } } catch {}"\r
-\r
-:: 5. Crear script de inicio automatico\r
-set "STARTUP_FOLDER=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"\r
-set "VBS_PATH=%STARTUP_FOLDER%\\KAMIA_PrintBridge.vbs"\r
-> "%VBS_PATH%" echo Set WshShell = CreateObject("WScript.Shell")\r
->> "%VBS_PATH%" echo WshShell.Run "node """ ^& "%TARGET_DIR%\\bridge.js"""", 0, False\r
->> "%VBS_PATH%" echo Set WshShell = Nothing\r
-echo   [3/4] Inicio automatico con Windows configurado.\r
-\r
-:: 6. Iniciar el servicio\r
-echo   [4/4] Iniciando servicio en segundo plano...\r
-wscript "%VBS_PATH%"\r
-\r
-echo.\r
-echo ======================================================================\r
-echo    INSTALACION COMPLETADA EXITOSAMENTE\r
-echo ======================================================================\r
-echo.\r
-echo   [OK] El Print Bridge Node.js ya esta activo en http://localhost:8088\r
-echo   [OK] Se ejecutara de forma silenciosa cada vez que inicies Windows.\r
-echo.\r
-pause\r
-`;
-    const blob = new Blob([batContent], { type: 'application/bat' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'instalar-servicio.bat';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addToast('Instalador instalar-servicio.bat descargado', 'success');
-  };
-
-  const downloadUninstallerBat = () => {
-    const batContent = `@echo off\r
-title KAMIA POS - Desinstalador de Print Bridge\r
-color 0C\r
-cls\r
-echo ======================================================================\r
-echo           KAMIA POS - DESINSTALADOR DE PRINT BRIDGE\r
-echo ======================================================================\r
-echo.\r
-echo   [1/3] Deteniendo procesos de Print Bridge en ejecucion...\r
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Get-NetTCPConnection -LocalPort 8088 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } catch {}; try { Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*PrintBridge*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } } catch {}"\r
-\r
-echo   [2/3] Eliminando inicio automatico con Windows...\r
-set "STARTUP_FOLDER=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"\r
-if exist "%STARTUP_FOLDER%\\KAMIA_PrintBridge.vbs" del /f /q "%STARTUP_FOLDER%\\KAMIA_PrintBridge.vbs"\r
-if exist "%STARTUP_FOLDER%\\GastrosPOS_PrintBridge.vbs" del /f /q "%STARTUP_FOLDER%\\GastrosPOS_PrintBridge.vbs"\r
-\r
-echo   [3/3] Eliminando archivos instalados...\r
-set "TARGET_DIR=%LOCALAPPDATA%\\GastrosPOS\\PrintBridge"\r
-if exist "%TARGET_DIR%" rmdir /s /q "%TARGET_DIR%"\r
-\r
-echo.\r
-echo ======================================================================\r
-echo    PRINT BRIDGE DESINSTALADO Y ELIMINADO EXITOSAMENTE\r
-echo ======================================================================\r
-echo.\r
-echo   [OK] El servicio local (Puerto 8088) ha sido detenido.\r
-echo   [OK] Se elimino el inicio automatico con Windows.\r
-echo   [OK] Se eliminaron todos los archivos del sistema.\r
-echo.\r
-echo Presiona cualquier tecla para cerrar esta ventana...\r
-pause >nul\r
-`;
-    const blob = new Blob([batContent], { type: 'application/bat' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'desinstalar-servicio.bat';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addToast('Desinstalador desinstalar-servicio.bat descargado', 'info');
-  };
-
-  const downloadMobileAccessBat = () => {
-    const batContent = `@echo off
-chcp 65001 >nul
-title GastrosPOS - Habilitador de Red Local & Acceso Movil
-
-:: Verificar y auto-elevar a Administrador
-net session >nul 2>&1
-if %errorLevel% neq 0 (
-    echo [INFO] Solicitando permisos de Administrador para configurar Firewall de Windows...
-    powershell -Command "Start-Process '%~f0' -Verb RunAs"
-    exit /b
-)
-
-cls
-echo ====================================================================
-echo   GASTROSPOS / KAMIA - CONFIGURADOR DE ACCESO LOCAL PARA MOVILES
-echo ====================================================================
-echo.
-echo [1/2] Configurando perfil de red de Windows a "Red Privada"...
-powershell -Command "Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private"
-echo   [OK] Perfil de red configurado como Red Privada.
-echo.
-echo [2/2] Abriendo puertos en Firewall de Windows (5173, 3001, 8088)...
-netsh advfirewall firewall delete rule name="GastrosPOS_LAN" >nul 2>&1
-netsh advfirewall firewall add rule name="GastrosPOS_LAN" dir=in action=allow protocol=TCP localport=3001,5173,8088 profile=any >nul
-echo   [OK] Puertos 5173 (POS Web), 3001 (API Server) y 8088 (Print Bridge) habilitados.
-echo.
-echo ====================================================================
-echo   CONFIGURACION EXITOSA!
-echo.
-echo   Tus telefonos celulares y tablets ya tienen acceso libre a:
-echo   http://192.168.1.2:5173
-echo ====================================================================
-echo.
-pause
-`;
-    const blob = new Blob([batContent], { type: 'application/bat' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'habilitar-acceso-movil.bat';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    addToast('Descargado habilitar-acceso-movil.bat', 'success');
+  // 6. Descarga directa del instalador de QZ Tray
+  const downloadQzTrayInstaller = () => {
+    window.open('https://github.com/qzind/tray/releases/download/v2.2.4/qz-tray-2.2.4.exe', '_blank');
+    addToast('Iniciando descarga oficial de QZ Tray v2.2.4 para Windows...', 'info');
   };
 
   // Opciones de impresoras detectadas
   const printerOptions = [
     { value: '', label: 'Impresora Predeterminada de Windows' },
-    ...detectedPrinters.map(p => ({
-      value: p.name,
-      label: `${p.name} ${p.isDefault ? '(Predeterminada)' : ''}`
-    }))
+    ...detectedPrinters.map(p => {
+      const name = typeof p === 'string' ? p : p.name;
+      return { value: name, label: `🖨️ ${name}` };
+    })
   ];
 
   if (loading) {
@@ -563,10 +291,10 @@ pause
         <div>
           <h1 style={{ fontSize: '22px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
             <Printer size={24} color="var(--accent-primary)" />
-            Configuración de Impresión Térmica & Print Bridge
+            Configuración de Impresión Térmica & QZ Tray
           </h1>
           <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
-            Control centralizado de impresión directa silenciosa (ESC/POS), auto-impresión de comandas y gestión de impresoras.
+            Control de impresión silenciosa con corte automático de papel, detección de impresoras de Windows y enrutamiento de comandas.
           </p>
         </div>
 
@@ -575,9 +303,9 @@ pause
             type="button"
             variant="secondary"
             icon={<RefreshCw size={14} />}
-            onClick={testBridgeConnection}
+            onClick={testQzConnection}
           >
-            Re-Escanear Bridge
+            Re-Escanear QZ Tray
           </Button>
           <Button
             type="button"
@@ -591,7 +319,7 @@ pause
         </div>
       </div>
 
-      {/* MONITOR EN VIVO: ESTADO DE NODE.JS Y PRINT BRIDGE */}
+      {/* MONITOR EN VIVO: ESTADO DE QZ TRAY */}
       <Card style={{ padding: '16px 20px', marginBottom: '20px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           
@@ -600,33 +328,33 @@ pause
               width: '48px',
               height: '48px',
               borderRadius: '12px',
-              background: bridgeStatus === 'online' ? 'rgba(4, 120, 87, 0.15)' : 'rgba(220, 38, 38, 0.15)',
+              background: qzStatus === 'connected' ? 'rgba(4, 120, 87, 0.15)' : 'rgba(220, 38, 38, 0.15)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: bridgeStatus === 'online' ? 'var(--accent-success)' : 'var(--accent-danger)'
+              color: qzStatus === 'connected' ? 'var(--accent-success)' : 'var(--accent-danger)'
             }}>
-              <Cpu size={26} />
+              <Laptop size={26} />
             </div>
 
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0 }}>
-                  Estado del Microservicio Print Bridge (Node.js)
+                  Motor de Impresión Profesional: QZ Tray
                 </h3>
-                <Badge variant={bridgeStatus === 'online' ? 'success' : (bridgeStatus === 'checking' ? 'warning' : 'danger')}>
-                  {bridgeStatus === 'online' ? '🟢 En Línea' : (bridgeStatus === 'checking' ? '🟡 Verificando...' : '🔴 Desconectado')}
+                <Badge variant={qzStatus === 'connected' ? 'success' : (qzStatus === 'checking' ? 'warning' : 'danger')}>
+                  {qzStatus === 'connected' ? '🟢 Conectado y Listo' : (qzStatus === 'checking' ? '🟡 Verificando...' : '🔴 Desconectado (Modo Diálogo)')}
                 </Badge>
               </div>
 
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                {bridgeStatus === 'online' ? (
+                {qzStatus === 'connected' ? (
                   <span>
-                    Servicio activo en <strong>{bridgeUrl}</strong> &bull; Motor <strong>Node.js {bridgeInfo?.nodeVersion || ''}</strong> &bull; {detectedPrinters.length} impresoras detectadas
+                    Comunicación activa en <strong>localhost:8182</strong> &bull; <strong>{detectedPrinters.length}</strong> impresoras de Windows detectadas &bull; Impresión silenciosa habilitada
                   </span>
                 ) : (
                   <span>
-                    El servicio local no está activo en el puerto 8088. Sigue los pasos inferiores para iniciarlo.
+                    QZ Tray no está abierto en este computador. El sistema usará el diálogo estándar de Windows de forma automática.
                   </span>
                 )}
               </div>
@@ -636,35 +364,27 @@ pause
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <Button
               size="sm"
-              variant="secondary"
-              icon={<Download size={14} />}
-              onClick={downloadNodeInstaller}
-              title="Descargar Node.js LTS Oficial de 64 bits"
-            >
-              📥 Instalar Node.js LTS
-            </Button>
-            <Button
-              size="sm"
               variant="primary"
-              icon={<Play size={14} />}
-              onClick={downloadStarterBat}
+              icon={<Download size={14} />}
+              onClick={downloadQzTrayInstaller}
+              title="Descargar Instalador Oficial de QZ Tray para Windows"
             >
-              🚀 Iniciar Bridge (.bat)
+              📥 Descargar QZ Tray (.exe Oficial)
             </Button>
             <Button
               size="sm"
               variant="secondary"
-              icon={<ShieldCheck size={14} />}
-              onClick={downloadInstallerBat}
+              icon={<RefreshCw size={14} />}
+              onClick={testQzConnection}
             >
-              ⚡ Instalar Auto-Inicio (.bat)
+              🔄 Verificar Conexión
             </Button>
           </div>
 
         </div>
 
         {/* Alerta interactiva si está desconectado */}
-        {bridgeStatus === 'offline' && (
+        {qzStatus === 'disconnected' && (
           <div style={{
             marginTop: '16px',
             padding: '14px 16px',
@@ -678,19 +398,66 @@ pause
             <AlertCircle size={20} color="var(--accent-danger)" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div>
               <strong style={{ color: 'var(--accent-danger)', fontSize: '13.5px' }}>
-                ¿Cómo activar la Impresión Silenciosa en 2 pasos simples?
+                ¿Cómo activar la Impresión Silenciosa y Corte Automático con QZ Tray?
               </strong>
               <ol style={{ margin: '6px 0 0 0', paddingLeft: '20px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
                 <li>
-                  <strong>Paso 1 (Obligatorio):</strong> Si no tienes Node.js, haz clic en el botón <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>"📥 Instalar Node.js LTS"</span> y sigue el asistente oficial.
+                  Haz clic en el botón <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>"📥 Descargar QZ Tray (.exe Oficial)"</span> y ejecuta el instalador.
                 </li>
                 <li>
-                  <strong>Paso 2:</strong> Haz clic en <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>"🚀 Iniciar Bridge (.bat)"</span> o <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>"⚡ Instalar Auto-Inicio (.bat)"</span> para dejar el puente activo permanentemente en segundo plano.
+                  Al abrirse QZ Tray en la bandeja del sistema (junto al reloj de Windows), presiona <span style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>"🔄 Verificar Conexión"</span>.
+                </li>
+                <li>
+                  En la ventana de confirmación que aparecerá por única vez en tu pantalla, marca la casilla <strong style={{ color: 'var(--text-primary)' }}>"Remember this decision / Recordar decisión"</strong> y presiona <strong style={{ color: 'var(--text-primary)' }}>"Allow / Permitir"</strong>.
                 </li>
               </ol>
             </div>
           </div>
         )}
+      </Card>
+
+      {/* DESIGNACIÓN DE ESTACIÓN DE IMPRESIÓN */}
+      <Card style={{ padding: '16px 20px', marginBottom: '20px', background: isPrintStation ? 'rgba(99, 102, 241, 0.06)' : 'var(--bg-secondary)', border: isPrintStation ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              background: isPrintStation ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+              color: isPrintStation ? '#FFFFFF' : 'var(--text-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <MonitorCheck size={22} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0 }}>
+                  Estación de Impresión de la Sucursal (PC de Caja / Cocina)
+                </h3>
+                {isPrintStation && <Badge variant="primary">🎯 Terminal Activa</Badge>}
+              </div>
+              <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Si activas esta opción, este computador escuchará las comandas enviadas por los meseros desde sus celulares y las expulsará físicamente en la impresora térmica conectada.
+              </p>
+            </div>
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700 }}>
+              {isPrintStation ? 'Activado en este PC' : 'Desactivado en este dispositivo'}
+            </span>
+            <input
+              type="checkbox"
+              checked={isPrintStation}
+              onChange={(e) => handleTogglePrintStation(e.target.checked)}
+              style={{ accentColor: 'var(--accent-primary)', width: '22px', height: '22px', cursor: 'pointer' }}
+            />
+          </label>
+        </div>
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '20px', marginBottom: '20px' }}>
@@ -763,7 +530,7 @@ pause
                     cursor: 'pointer'
                   }}
                 >
-                  80 mm (Estándar POS)
+                  📄 80 mm (Estándar POS)
                 </button>
                 <button
                   type="button"
@@ -780,7 +547,7 @@ pause
                     cursor: 'pointer'
                   }}
                 >
-                  58 mm (Compacta)
+                  📄 58 mm (Portátil / Tira)
                 </button>
               </div>
             </div>
@@ -788,14 +555,14 @@ pause
           </div>
         </Card>
 
-        {/* AUTOMATIZACIÓN & AUTO-IMPRESIÓN */}
+        {/* PARÁMETROS DE AUTO-IMPRESIÓN */}
         <Card style={{ padding: '18px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
           <h3 style={{ fontSize: '15px', fontWeight: 800, margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={17} color="var(--accent-secondary)" />
-            Automatizaciones & Auto-Impresión Remota
+            <Settings size={17} color="var(--accent-primary)" />
+            Automatizaciones de Impresión
           </h3>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             
             {/* Switch 1: Impresión Silenciosa */}
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
@@ -806,9 +573,9 @@ pause
                 style={{ accentColor: 'var(--accent-success)', width: '18px', height: '18px', marginTop: '2px', cursor: 'pointer' }}
               />
               <div>
-                <strong style={{ fontSize: '13px' }}>Habilitar Impresión Silenciosa Directa (ESC/POS)</strong>
+                <strong style={{ fontSize: '13px' }}>Habilitar Impresión Silenciosa Directa (ESC/POS & QZ Tray)</strong>
                 <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                  Envía el ticket instantáneamente a la impresora térmica sin abrir cuadros de diálogo ni ventanas del navegador.
+                  Envía el ticket instantáneamente a la impresora térmica sin abrir cuadros de diálogo del navegador.
                 </div>
               </div>
             </label>
@@ -824,7 +591,7 @@ pause
               <div>
                 <strong style={{ fontSize: '13px' }}>Auto-imprimir comandas enviadas desde celulares de meseros</strong>
                 <div style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                  Cuando un mesero presione "Enviar a Cocina" desde su teléfono, la comanda saldrá expulsada automáticamente en esta estación.
+                  Cuando un mesero presione "Enviar a Cocina" desde su teléfono, la comanda saldrá expulsada automáticamente en la Estación de Impresión.
                 </div>
               </div>
             </label>
@@ -873,7 +640,7 @@ pause
           Centro de Pruebas, Vista Previa & Generador de PDF
         </h3>
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
-          Visualiza la factura o comanda en pantalla, descárgala en PDF de alta resolución con 1 clic, o prueba la impresión silenciosa directa.
+          Visualiza la factura o comanda en pantalla, descárgala en PDF de alta resolución con 1 clic, o prueba la impresión directa.
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
@@ -901,7 +668,7 @@ pause
                 variant="secondary"
                 icon={<Printer size={14} />}
                 onClick={handleTestReceipt}
-                disabled={testingReceipt || bridgeStatus !== 'online'}
+                disabled={testingReceipt}
               >
                 {testingReceipt ? 'Enviando...' : '⚡ Imprimir Térmica'}
               </Button>
@@ -931,7 +698,7 @@ pause
                 variant="secondary"
                 icon={<Printer size={14} />}
                 onClick={handleTestKitchen}
-                disabled={testingKitchen || bridgeStatus !== 'online'}
+                disabled={testingKitchen}
               >
                 {testingKitchen ? 'Enviando...' : '⚡ Imprimir Térmica'}
               </Button>
@@ -953,7 +720,7 @@ pause
                 variant="secondary"
                 icon={<DollarSign size={14} />}
                 onClick={handleTestDrawer}
-                disabled={testingDrawer || bridgeStatus !== 'online'}
+                disabled={testingDrawer}
                 style={{ width: '100%' }}
               >
                 {testingDrawer ? 'Enviando pulso...' : '💵 Probar Apertura de Gaveta'}
@@ -964,63 +731,31 @@ pause
         </div>
       </Card>
 
-      {/* PAQUETE DE DESCARGAS Y ASISTENCIA */}
+      {/* GUÍA DE INSTALACIÓN Y PREGUNTAS FRECUENTES */}
       <Card style={{ padding: '18px', background: 'var(--bg-elevated)', border: '1px solid var(--border-color)' }}>
         <h3 style={{ fontSize: '15px', fontWeight: 800, margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Download size={17} color="var(--accent-primary)" />
-          Paquetes de Instalación y Scripts para el Print Bridge
+          <HelpCircle size={17} color="var(--accent-primary)" />
+          Preguntas Frecuentes & Guía de Configuración
         </h3>
         
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', marginTop: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '14px', marginTop: '10px' }}>
           
-          <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontWeight: 700, fontSize: '13px' }}>1. Instalador Oficial Node.js</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '4px 0 8px 0' }}>
-              Motor de ejecución obligatorio para el servidor de impresión.
+          <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-primary)' }}>
+              ¿Por qué usar QZ Tray en lugar del diálogo de impresión?
             </div>
-            <Button size="sm" variant="secondary" onClick={downloadNodeInstaller} style={{ width: '100%' }}>
-              Descargar Node.js LTS (.msi)
-            </Button>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.5' }}>
+              QZ Tray envía los trabajos de impresión directamente a la cola de Windows sin abrir ventanas emergentes, ajusta el papel de borde a borde y realiza el corte automático de papel por comando ESC/POS.
+            </div>
           </div>
 
-          <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontWeight: 700, fontSize: '13px' }}>2. Lanzador de Print Bridge</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '4px 0 8px 0' }}>
-              Inicia el servidor en consola y verifica Node.js automáticamente.
+          <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-primary)' }}>
+              ¿Qué pasa si uso el sistema desde un celular o tablet?
             </div>
-            <Button size="sm" variant="secondary" onClick={downloadStarterBat} style={{ width: '100%' }}>
-              Descargar iniciar-bridge.bat
-            </Button>
-          </div>
-
-          <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontWeight: 700, fontSize: '13px' }}>3. Instalador Permanente</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '4px 0 8px 0' }}>
-              Registra el servicio para iniciar siempre en segundo plano con Windows.
+            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.5' }}>
+              Los meseros pueden pedir desde sus móviles tranquilamente. La comanda se envía por internet a la nube y la <strong>Estación de Impresión</strong> (tu computador de caja) la imprime de inmediato.
             </div>
-            <Button size="sm" variant="secondary" onClick={downloadInstallerBat} style={{ width: '100%' }}>
-              Descargar instalar-servicio.bat
-            </Button>
-          </div>
-
-          <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontWeight: 700, fontSize: '13px' }}>4. Desinstalador Limpio</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '4px 0 8px 0' }}>
-              Detiene procesos y elimina el auto-inicio de Windows.
-            </div>
-            <Button size="sm" variant="danger" onClick={downloadUninstallerBat} style={{ width: '100%' }}>
-              Descargar desinstalador (.bat)
-            </Button>
-          </div>
-
-          <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
-            <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--accent-primary)' }}>5. Desbloquear Celulares (Firewall)</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '4px 0 8px 0' }}>
-              Configura Red Privada y abre puertos para meseros en Wi-Fi.
-            </div>
-            <Button size="sm" variant="primary" onClick={downloadMobileAccessBat} style={{ width: '100%' }}>
-              Descargar habilitar-movil.bat
-            </Button>
           </div>
 
         </div>
@@ -1159,7 +894,7 @@ pause
             <Button
               variant="primary"
               icon={<Download size={15} />}
-              onClick={() => printInvoiceReceipt(sampleInvoice, { ...settings, enable_silent_printing: false }, paperWidth)}
+              onClick={() => printInvoiceReceipt(sampleInvoice, settings, paperWidth)}
             >
               📥 Guardar PDF / Imprimir en Navegador
             </Button>
@@ -1167,9 +902,9 @@ pause
               variant="secondary"
               icon={<Printer size={15} />}
               onClick={handleTestReceipt}
-              disabled={testingReceipt || bridgeStatus !== 'online'}
+              disabled={testingReceipt}
             >
-              ⚡ Enviar a Impresora Térmica (ESC/POS)
+              ⚡ Enviar a Impresora Térmica
             </Button>
           </div>
 
@@ -1268,7 +1003,7 @@ pause
             <Button
               variant="primary"
               icon={<Download size={15} />}
-              onClick={() => printKitchenTicket(sampleKitchenOrder, sampleKitchenItems, { ...settings, enable_silent_printing: false }, paperWidth)}
+              onClick={() => printKitchenTicket(sampleKitchenOrder, sampleKitchenItems, 'Mesa VIP - Entregar todo junto', sampleKitchenOrder.waiter_name, settings, paperWidth)}
             >
               📥 Guardar PDF / Imprimir en Navegador
             </Button>
@@ -1276,9 +1011,9 @@ pause
               variant="secondary"
               icon={<Printer size={15} />}
               onClick={handleTestKitchen}
-              disabled={testingKitchen || bridgeStatus !== 'online'}
+              disabled={testingKitchen}
             >
-              ⚡ Enviar a Impresora Térmica (ESC/POS)
+              ⚡ Enviar a Impresora Térmica
             </Button>
           </div>
 
