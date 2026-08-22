@@ -480,7 +480,7 @@ export const OrdersListPage = () => {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all'); // 'all' | 'efectivo' | 'tarjeta' | 'transferencia' | 'credito' | 'mixto'
   const [waiterFilter, setWaiterFilter] = useState('all');
   const [amountRangeFilter, setAmountRangeFilter] = useState('all'); // 'all' | 'under20k' | '20k_50k' | '50k_100k' | 'over100k'
-  const [dateFilter, setDateFilter] = useState('today'); // 'today' | 'yesterday' | '7days' | 'month' | 'prev_month' | 'all' | 'custom'
+  const [dateFilter, setDateFilter] = useState('7days'); // 'today' | 'yesterday' | '7days' | 'month' | 'prev_month' | 'all' | 'custom' (7days por defecto)
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [shiftFilter, setShiftFilter] = useState('all'); // 'all' | <shift_id>
@@ -719,7 +719,7 @@ export const OrdersListPage = () => {
     if (waiterFilter !== 'all') count++;
     if (amountRangeFilter !== 'all') count++;
     if (shiftFilter !== 'all') count++;
-    if (dateFilter !== 'today') count++;
+    if (dateFilter !== '7days') count++;
     if (sortBy !== 'date_desc') count++;
     return count;
   }, [paymentMethodFilter, waiterFilter, amountRangeFilter, shiftFilter, dateFilter, sortBy]);
@@ -2488,11 +2488,11 @@ export const OrdersListPage = () => {
                   width: '100%',
                   padding: '7px 10px',
                   borderRadius: '6px',
-                  border: dateFilter !== 'today' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  border: dateFilter !== '7days' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
                   background: 'var(--bg-primary)',
                   color: 'var(--text-primary)',
                   fontSize: '12px',
-                  fontWeight: dateFilter !== 'today' ? 700 : 500
+                  fontWeight: dateFilter !== '7days' ? 700 : 500
                 }}
               >
                 <option value="today">📅 Hoy</option>
@@ -2532,7 +2532,7 @@ export const OrdersListPage = () => {
         )}
 
         {/* Fila 4: Barra de Pills de Filtros Activos y Limpieza */}
-        {(searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || paymentMethodFilter !== 'all' || waiterFilter !== 'all' || amountRangeFilter !== 'all' || shiftFilter !== 'all' || dateFilter !== 'today' || sortBy !== 'date_desc') && (
+        {(searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || paymentMethodFilter !== 'all' || waiterFilter !== 'all' || amountRangeFilter !== 'all' || shiftFilter !== 'all' || dateFilter !== '7days' || sortBy !== 'date_desc') && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Filtros Activos:</span>
@@ -2586,10 +2586,10 @@ export const OrdersListPage = () => {
                 </span>
               )}
 
-              {dateFilter !== 'today' && (
+              {dateFilter !== '7days' && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 700 }}>
-                  Fecha: {dateFilter === 'custom' ? `${customStartDate} al ${customEndDate}` : dateFilter}
-                  <X size={12} style={{ cursor: 'pointer' }} onClick={() => { setDateFilter('today'); setCustomStartDate(''); setCustomEndDate(''); }} />
+                  Fecha: {dateFilter === 'custom' ? `${customStartDate} al ${customEndDate}` : dateFilter === 'today' ? 'Hoy' : dateFilter === 'yesterday' ? 'Ayer' : dateFilter === 'month' ? 'Este Mes' : dateFilter === 'prev_month' ? 'Mes Anterior' : dateFilter === 'all' ? 'Todo el Histórico' : dateFilter}
+                  <X size={12} style={{ cursor: 'pointer' }} onClick={() => { setDateFilter('7days'); setCustomStartDate(''); setCustomEndDate(''); }} />
                 </span>
               )}
             </div>
@@ -2605,7 +2605,7 @@ export const OrdersListPage = () => {
                 setWaiterFilter('all');
                 setAmountRangeFilter('all');
                 setShiftFilter('all');
-                setDateFilter('today');
+                setDateFilter('7days');
                 setCustomStartDate('');
                 setCustomEndDate('');
                 setSortBy('date_desc');
