@@ -90,34 +90,43 @@ const initQzSecurity = () => {
   // 2. Algoritmo RSA-SHA512
   qz.security.setSignatureAlgorithm('SHA512');
 
-  // 3. Promesa de Firma Digital (AsyncFunction nativa directa requerida por QZ Tray)
-  qz.security.setSignaturePromise(async (toSign) => {
-    try {
-      const key = await getWebCryptoKey();
-      if (key && window.crypto && window.crypto.subtle) {
-        const enc = new TextEncoder();
-        const dataBuf = enc.encode(toSign);
-        const sigBuf = await window.crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, dataBuf);
-        let binary = '';
-        const bytes = new Uint8Array(sigBuf);
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const sigB64 = window.btoa(binary);
-        return sigB64;
-      }
+  // 3. Promesa de Firma Digital (Resolver universal compatible con producción minificada)
+  qz.security.setSignaturePromise(function (toSign) {
+    return function (resolve, reject) {
+      getWebCryptoKey()
+        .then(function (key) {
+          if (key && window.crypto && window.crypto.subtle) {
+            const enc = new TextEncoder();
+            const dataBuf = enc.encode(toSign);
+            return window.crypto.subtle
+              .sign('RSASSA-PKCS1-v1_5', key, dataBuf)
+              .then(function (sigBuf) {
+                let binary = '';
+                const bytes = new Uint8Array(sigBuf);
+                for (let i = 0; i < bytes.byteLength; i++) {
+                  binary += String.fromCharCode(bytes[i]);
+                }
+                const sigB64 = window.btoa(binary);
+                resolve(sigB64);
+              });
+          }
 
-      // Fallback a endpoint de firma
-      const res = await fetch('/api/printing/qz-sign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: toSign
-      });
-      return await res.text();
-    } catch (err) {
-      console.error('⚠️ [QZ Tray] Error al firmar digitalmente la petición:', err);
-      throw err;
-    }
+          // Fallback a API
+          return fetch('/api/printing/qz-sign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: toSign
+          })
+            .then(function (res) {
+              return res.text();
+            })
+            .then(resolve);
+        })
+        .catch(function (err) {
+          console.error('⚠️ [QZ Tray] Error al firmar digitalmente la petición:', err);
+          reject(err);
+        });
+    };
   });
 };
 
