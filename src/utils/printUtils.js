@@ -245,7 +245,7 @@ const getBusinessHeaderHTML = (settings, paperWidth = '80mm') => {
  */
 const getBaseThermalStyles = (paperWidth = '80mm') => `
   @page {
-    margin: 0;
+    margin: 0 !important;
     size: auto;
   }
   * {
@@ -256,19 +256,21 @@ const getBaseThermalStyles = (paperWidth = '80mm') => `
   html, body {
     margin: 0 !important;
     padding: 0 !important;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
+    width: 100% !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     color: #000000 !important;
     background: #ffffff !important;
     -webkit-font-smoothing: antialiased;
   }
   .receipt-wrapper {
-    width: ${paperWidth === '58mm' ? '270px' : '350px'} !important;
-    max-width: 100% !important;
-    padding: 16px 14px !important;
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
-    font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'} !important;
-    line-height: 1.35 !important;
-    font-weight: 500 !important;
+    width: 100% !important;
+    max-width: ${paperWidth === '58mm' ? '58mm' : '80mm'} !important;
+    margin: 0 auto !important;
+    padding: 4px 6px !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+    font-size: ${paperWidth === '58mm' ? '12px' : '13px'} !important;
+    line-height: 1.3 !important;
+    font-weight: 600 !important;
     color: #000000 !important;
     background: #ffffff !important;
     box-sizing: border-box !important;
@@ -278,10 +280,10 @@ const getBaseThermalStyles = (paperWidth = '80mm') => `
   .left { text-align: left; }
   .bold { font-weight: 800 !important; color: #000000 !important; }
   .black { font-weight: 900 !important; color: #000000 !important; }
-  .solid-line { border-top: 1px solid #000000; margin: 5px 0; }
-  .double-line { border-top: 2px solid #000000; margin: 5px 0; }
-  .dashed-line { border-top: 1px dashed #000000; margin: 5px 0; }
-  .flex-between { display: flex; justify-content: space-between; align-items: flex-start; margin: 2.5px 0; color: #000000; font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'}; }
+  .solid-line { border-top: 1.5px solid #000000; margin: 5px 0; }
+  .double-line { border-top: 2.5px solid #000000; margin: 5px 0; }
+  .dashed-line { border-top: 1.5px dashed #000000; margin: 5px 0; }
+  .flex-between { display: flex; justify-content: space-between; align-items: flex-start; margin: 2.5px 0; color: #000000; font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; }
   table { width: 100%; border-collapse: collapse; text-align: left; }
   td, th { vertical-align: top; padding: 2.5px 0; color: #000000; }
   .thermal-logo {
