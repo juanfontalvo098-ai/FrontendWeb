@@ -39,7 +39,11 @@ export const KamiaIcon = ({ size = 36, className = '', style = {} }) => {
 /**
  * Cápsula / Píldora Luminosa del Eslogan (Handcrafted Vector Component)
  */
-export const KamiaSloganPill = ({ style = {} }) => {
+export const KamiaSloganPill = ({ theme: explicitTheme, style = {} }) => {
+  const storeTheme = useUiStore(state => state.theme);
+  const activeTheme = explicitTheme || storeTheme || 'dark';
+  const isDark = activeTheme === 'dark';
+
   return (
     <div
       style={{
@@ -48,20 +52,23 @@ export const KamiaSloganPill = ({ style = {} }) => {
         gap: '9px',
         padding: '6px 16px',
         borderRadius: '999px',
-        background: 'rgba(17, 24, 39, 0.95)',
-        border: '1px solid rgba(139, 92, 246, 0.45)',
-        boxShadow: '0 0 16px rgba(139, 92, 246, 0.25), inset 0 0 12px rgba(99, 102, 241, 0.1)',
+        background: isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(238, 242, 255, 0.95)',
+        border: isDark ? '1px solid rgba(139, 92, 246, 0.45)' : '1px solid rgba(99, 102, 241, 0.35)',
+        boxShadow: isDark
+          ? '0 0 16px rgba(139, 92, 246, 0.25), inset 0 0 12px rgba(99, 102, 241, 0.1)'
+          : '0 2px 10px rgba(99, 102, 241, 0.12), inset 0 0 8px rgba(99, 102, 241, 0.05)',
         userSelect: 'none',
+        transition: 'all 0.25s ease',
         ...style
       }}
     >
       {/* Icono Vectorial de Nodos Interconectados */}
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-        <circle cx="5" cy="6" r="3" stroke="#8B5CF6" strokeWidth="2" />
-        <circle cx="19" cy="6" r="3" stroke="#6366F1" strokeWidth="2" />
-        <circle cx="19" cy="18" r="3" stroke="#8B5CF6" strokeWidth="2" />
-        <circle cx="5" cy="18" r="3" stroke="#6366F1" strokeWidth="2" />
-        <path d="M7.5 7.5L16.5 16.5M7.5 16.5L16.5 7.5" stroke="#C4B5FD" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="5" cy="6" r="3" stroke={isDark ? "#8B5CF6" : "#6366F1"} strokeWidth="2" />
+        <circle cx="19" cy="6" r="3" stroke={isDark ? "#6366F1" : "#4F46E5"} strokeWidth="2" />
+        <circle cx="19" cy="18" r="3" stroke={isDark ? "#8B5CF6" : "#6366F1"} strokeWidth="2" />
+        <circle cx="5" cy="18" r="3" stroke={isDark ? "#6366F1" : "#4F46E5"} strokeWidth="2" />
+        <path d="M7.5 7.5L16.5 16.5M7.5 16.5L16.5 7.5" stroke={isDark ? "#C4B5FD" : "#4F46E5"} strokeWidth="1.6" strokeLinecap="round" />
       </svg>
 
       <span
@@ -70,7 +77,7 @@ export const KamiaSloganPill = ({ style = {} }) => {
           fontSize: '10px',
           fontWeight: 800,
           letterSpacing: '0.22em',
-          color: '#C4B5FD',
+          color: isDark ? '#C4B5FD' : '#4338CA',
           textTransform: 'uppercase',
           lineHeight: 1
         }}
@@ -110,6 +117,9 @@ export const KamiaLogo = ({
   // Versión Stacked (Vertical para Login)
   if (variant === 'stacked') {
     const stackedHeight = size === 'xl' ? 120 : size === 'lg' ? 95 : size === 'md' ? 75 : 55;
+    const stackedSrc = isDark
+      ? '/assets/branding/kamia-logo-stacked-light.png'
+      : '/assets/branding/kamia-logo-stacked-dark.png';
 
     return (
       <div
@@ -123,7 +133,7 @@ export const KamiaLogo = ({
         }}
       >
         <img
-          src={isDark ? '/assets/branding/kamia-logo-stacked-dark.png' : '/assets/branding/kamia-logo-stacked-light.png'}
+          src={stackedSrc}
           alt="KAMIA by JF"
           style={{
             height: `${stackedHeight}px`,
@@ -134,14 +144,13 @@ export const KamiaLogo = ({
         />
 
         {showSlogan && (
-          <KamiaSloganPill />
+          <KamiaSloganPill theme={activeTheme} />
         )}
       </div>
     );
   }
 
   // Versión Horizontal (Sidebar y Header)
-  // En modo claro se utiliza el logo oficial kamia-logo-main.png solicitado
   const logoSrc = isDark
     ? '/assets/branding/kamia-logo-sidebar.png'
     : '/assets/branding/kamia-logo-main.png';
@@ -170,7 +179,7 @@ export const KamiaLogo = ({
       />
 
       {showSlogan && (
-        <KamiaSloganPill />
+        <KamiaSloganPill theme={activeTheme} />
       )}
     </div>
   );
