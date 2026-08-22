@@ -1,6 +1,7 @@
 // src/utils/qzTrayService.js
 // Servicio centralizado para la integración con QZ Tray en el sistema POS
 import qz from 'qz-tray';
+import { KEYUTIL, KJUR, hextorstr, stob64 } from 'jsrsasign';
 
 // Certificado Digital X.509 v3 CA para KAMIA GastrosPOS Printing System
 const GASTROS_CERTIFICATE_PEM = `-----BEGIN CERTIFICATE-----
@@ -15,8 +16,8 @@ RKFmegH/KDZm0kfWJbbRJZbgLrGcND0aiMfmGgNbf6jB93Kr/a6eRUtCP9eYvelf
 IvmivpW5zuZ2mUxrP1wVCjaiVwUKutzcCrc4tfa1e7wlbXg8V7LSTcKFMz5XIN2d
 mJ/KbujSek79WffNUFH7wWQ2Bxn/+UBLhmjMcWootF4HAoZs1laYxbYcoQPeRaxH
 do3w2rpry2ldBLMIv9onsmTlMfiv0EbRabeawMM4uqyOQxmT1wYGs/au1ohI/erF
-z/5rAgMBAAGjYzBhMB0GA1UdDgQWBBTiVpGggnmelQSvKrSYV7KRPOwOPDAfBgNV
-HSMEGDAWgBTiVpGggnmelQSvKrSYV7KRPOwOPDAPBgNVHRMBAf8EBTADAQH/MA4G
+z/5rAgMBAAGjYzBhMB0GA1UdDgQWBBSWJ0rWxPPa/C/KmqeerlM43+kBjjAfBgNV
+HSMEGDAWgBSWJ0rWxPPa/C/KmqeerlM43+kBjjAPBgNVHRMBAf8EBTADAQH/MA4G
 A1UdDwEB/wQEAwIBhjANBgkqhkiG9w0BAQsFAAOCAQEArzv4om65r5jNiSXhg5ps
 A9jyY2SK4xPRmVD1XrVJi/QqAPXZMuvcvOmsIjHiZeXOaLbQgQU3Ew3m0V7QQ+zc
 A7XjHTKFk4BfFAb469u3KzGll6zatRp4yJNQ17EoWufsWSyj2xxdqU1SnMjBFhxJ
@@ -27,7 +28,8 @@ DyKZqibPlbfy1ThNuleqOsdTGqSTHfjXCpqiCkfZA6rbJs2/CJZe/ySxzk7qn24k
 -----END CERTIFICATE-----`;
 
 // Llave privada PKCS#8 para firma digital local RSA-SHA512
-const GASTROS_PRIVATE_KEY_B64 = `MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC9uFRj1hlCQco6
+const GASTROS_PRIVATE_KEY_PEM = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC9uFRj1hlCQco6
 55M0RKFmegH/KDZm0kfWJbbRJZbgLrGcND0aiMfmGgNbf6jB93Kr/a6eRUtCP9eY
 velf2VdFJRDk1a8UHKVrBATYv9px/S3sr6rQ9zaxPDRidIDfqaLVLxv5t9hbL+AV
 ciNDIvmivpW5zuZ2mUxrP1wVCjaiVwUKutzcCrc4tfa1e7wlbXg8V7LSTcKFMz5X
@@ -55,34 +57,24 @@ fxUwDy0PH7akKffDQVfIde5VOzlPy7Lgi1chdfaZnhGX8mT2GqAZEUFoZIdXC00N
 rflf6GDSYBDRaBzKF4JFQcUC
 -----END PRIVATE KEY-----`;
 
-let cachedCryptoKey = null;
+let cachedParsedKey = null;
 
-// Importar llave privada con WebCrypto nativo del navegador
-const getWebCryptoKey = async () => {
-  if (cachedCryptoKey) return cachedCryptoKey;
+const getParsedKey = () => {
+  if (cachedParsedKey) return cachedParsedKey;
   try {
-    if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) return null;
-    const cleanB64 = GASTROS_PRIVATE_KEY_B64.replace(/\s+/g, '');
-    const binaryDer = Uint8Array.from(atob(cleanB64), c => c.charCodeAt(0));
-    cachedCryptoKey = await window.crypto.subtle.importKey(
-      'pkcs8',
-      binaryDer.buffer,
-      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-512' },
-      false,
-      ['sign']
-    );
-    return cachedCryptoKey;
+    cachedParsedKey = KEYUTIL.getKey(GASTROS_PRIVATE_KEY_PEM);
+    return cachedParsedKey;
   } catch (err) {
     console.error('Error al inicializar llave criptográfica de QZ:', err);
     return null;
   }
 };
 
-// Configurar seguridad digital de QZ Tray (Certificado X.509 y Firma Digital RSA-SHA512)
+// Configurar seguridad digital de QZ Tray (Certificado X.509 y Firma Digital RSA-SHA512 oficial)
 const initQzSecurity = () => {
   if (typeof qz === 'undefined' || !qz.security) return;
 
-  // 1. Promesa de Certificado Digital (0ms, siempre disponible)
+  // 1. Certificado Digital
   qz.security.setCertificatePromise((resolve) => {
     resolve(GASTROS_CERTIFICATE_PEM);
   });
@@ -90,42 +82,22 @@ const initQzSecurity = () => {
   // 2. Algoritmo RSA-SHA512
   qz.security.setSignatureAlgorithm('SHA512');
 
-  // 3. Promesa de Firma Digital (Resolver universal compatible con producción minificada)
+  // 3. Firma Digital Sincronica Infalible con jsrsasign (estándar oficial de QZ Tray)
   qz.security.setSignaturePromise(function (toSign) {
     return function (resolve, reject) {
-      getWebCryptoKey()
-        .then(function (key) {
-          if (key && window.crypto && window.crypto.subtle) {
-            const enc = new TextEncoder();
-            const dataBuf = enc.encode(toSign);
-            return window.crypto.subtle
-              .sign('RSASSA-PKCS1-v1_5', key, dataBuf)
-              .then(function (sigBuf) {
-                let binary = '';
-                const bytes = new Uint8Array(sigBuf);
-                for (let i = 0; i < bytes.byteLength; i++) {
-                  binary += String.fromCharCode(bytes[i]);
-                }
-                const sigB64 = window.btoa(binary);
-                resolve(sigB64);
-              });
-          }
-
-          // Fallback a API
-          return fetch('/api/printing/qz-sign', {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: toSign
-          })
-            .then(function (res) {
-              return res.text();
-            })
-            .then(resolve);
-        })
-        .catch(function (err) {
-          console.error('⚠️ [QZ Tray] Error al firmar digitalmente la petición:', err);
-          reject(err);
-        });
+      try {
+        const pk = getParsedKey();
+        if (!pk) throw new Error('Llave privada de firma no disponible');
+        const sig = new KJUR.crypto.Signature({ alg: 'SHA512withRSA' });
+        sig.init(pk);
+        sig.updateString(toSign);
+        const hex = sig.sign();
+        const sigB64 = stob64(hextorstr(hex));
+        resolve(sigB64);
+      } catch (err) {
+        console.error('⚠️ [QZ Tray] Error en firma digital jsrsasign:', err);
+        reject(err);
+      }
     };
   });
 };
