@@ -107,14 +107,27 @@ export const Header = ({ title = '' }) => {
         playBellSound();
       };
 
+      const handleCashStatus = (data) => {
+        if (data?.status === 'abierta') setCashOpen(true);
+        else if (data?.status === 'cerrada') setCashOpen(false);
+      };
+      const handleCashOpened = () => setCashOpen(true);
+      const handleCashClosed = () => setCashOpen(false);
+
       socket.on('kitchen:new-ticket', handleTicket);
       socket.on('table:status-changed', handleTableChange);
       socket.on('kitchen:ticket-ready', handleTicketReady);
+      socket.on('cash:status-changed', handleCashStatus);
+      socket.on('cash:opened', handleCashOpened);
+      socket.on('cash:closed', handleCashClosed);
 
       return () => {
         socket.off('kitchen:new-ticket', handleTicket);
         socket.off('table:status-changed', handleTableChange);
         socket.off('kitchen:ticket-ready', handleTicketReady);
+        socket.off('cash:status-changed', handleCashStatus);
+        socket.off('cash:opened', handleCashOpened);
+        socket.off('cash:closed', handleCashClosed);
       };
     }
   }, [activeBranchId]);

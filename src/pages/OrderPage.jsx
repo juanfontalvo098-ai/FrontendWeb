@@ -407,12 +407,6 @@ export const OrderPage = () => {
       }
 
       addToast('Orden enviada a cocina con éxito', 'success');
-
-      try {
-        handlePrintKitchenTicket(orderItems, activeId);
-      } catch (printErr) {
-        console.warn('[OrderPage] Error al invocar impresión local de comanda:', printErr);
-      }
       await fetchData();
     } catch (err) {
       addToast(err.message || 'Error al enviar a cocina', 'danger');
