@@ -3,16 +3,30 @@
 // Garantiza formatos idénticos, máxima legibilidad y soporte de logo
 
 import { formatCOP, formatDateTime, api } from '../api/client';
+import { qzService } from './qzTrayService';
 
 /**
  * Imprime un documento térmico:
- * 1. Prioridad 1: Si hay plainText y Print Bridge (puerto 8088) está activo, imprime de forma directa, instantánea y 100% silenciosa (sin ventanas ni permisos).
- * 2. Prioridad 2: Fallback transparente al diálogo nativo de Windows (iframe limpio).
+ * 1. Prioridad 1: Si QZ Tray está activo, imprime de forma 100% silenciosa y directa (firmado criptográficamente con Certificado Digital X.509).
+ * 2. Prioridad 2: Si KAMIA Print Bridge (puerto 8088) está activo, imprime vía ESC/POS directo al spooler.
+ * 3. Fallback: Diálogo nativo de Windows (iframe limpio).
  */
 export const printThermalDocument = async (htmlContent, printerName = null, options = {}) => {
   const { title = 'Impresión POS', paperWidth = '80mm', cut = true, plainText = null, bridgeUrl = 'http://localhost:8088' } = options;
 
-  // 1. Intentar impresión silenciosa directa mediante el Print Bridge nativo de KAMIA
+  // 1. Intentar impresión silenciosa directa mediante QZ Tray firmado con Certificado Digital
+  if (qzService.isQzConnected()) {
+    try {
+      const res = await qzService.printHtml(htmlContent, printerName, { paperWidth, cut, jobName: title });
+      if (res && res.success) {
+        return { success: true, mode: 'qz_tray', printer: res.printer };
+      }
+    } catch (err) {
+      console.warn('⚠️ [printUtils] QZ Tray falló, intentando Print Bridge o diálogo:', err.message);
+    }
+  }
+
+  // 2. Intentar impresión silenciosa directa mediante el Print Bridge nativo de KAMIA
   if (plainText) {
     try {
       const res = await sendToThermalBridge(plainText, printerName, bridgeUrl, { cutPaper: cut });
@@ -24,7 +38,7 @@ export const printThermalDocument = async (htmlContent, printerName = null, opti
     }
   }
 
-  // 2. Fallback estándar al diálogo de impresión del navegador (Iframe) sin cuadros molestos de QZ Tray
+  // 3. Fallback estándar al diálogo de impresión del navegador (Iframe)
   printWithIframe(htmlContent, title);
   return { success: true, mode: 'iframe_dialog' };
 };
@@ -64,6 +78,9 @@ export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 
  * Envía el pulso de apertura de cajón monedero (RJ11) a la impresora
  */
 export const openCashDrawer = async (printerName = null, bridgeUrl = 'http://localhost:8088') => {
+  if (qzService.isQzConnected()) {
+    return qzService.openCashDrawer(printerName);
+  }
   return sendToThermalBridge('', printerName, bridgeUrl, { openDrawer: true, cutPaper: false });
 };
 

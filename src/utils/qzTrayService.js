@@ -2,6 +2,47 @@
 // Servicio centralizado para la integración con QZ Tray en el sistema POS
 import qz from 'qz-tray';
 
+// Configurar seguridad digital de QZ Tray (Certificado X.509 y Firma Digital RSA-SHA512)
+const initQzSecurity = () => {
+  if (typeof qz === 'undefined' || !qz.security) return;
+
+  qz.security.setCertificatePromise((resolve, reject) => {
+    fetch('/api/printing/qz-certificate')
+      .then(res => {
+        if (!res.ok) throw new Error('Certificado digital no disponible');
+        return res.text();
+      })
+      .then(resolve)
+      .catch(err => {
+        console.warn('⚠️ [QZ Tray] No se pudo cargar el certificado digital:', err.message);
+        reject(err);
+      });
+  });
+
+  qz.security.setSignatureAlgorithm('SHA512');
+
+  qz.security.setSignaturePromise((toSign) => {
+    return (resolve, reject) => {
+      fetch('/api/printing/qz-sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: toSign
+      })
+        .then(res => {
+          if (!res.ok) throw new Error('Error al generar firma digital');
+          return res.text();
+        })
+        .then(resolve)
+        .catch(err => {
+          console.warn('⚠️ [QZ Tray] Error en firma digital:', err.message);
+          reject(err);
+        });
+    };
+  });
+};
+
+initQzSecurity();
+
 class QzTrayService {
   constructor() {
     this.connected = false;
