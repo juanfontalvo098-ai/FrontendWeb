@@ -8,6 +8,7 @@ import {
   sendToThermalBridge, 
   buildKitchenTicketPlainText, 
   buildInvoicePlainText,
+  isSilentPrintingActive,
   DEFAULT_BRIDGE_URL
 } from '../../utils/printUtils';
 
@@ -70,9 +71,10 @@ export const AutoPrintManager = () => {
       }
       if (!settings) return;
 
-      const isAutoKitchenEnabled = settings.auto_print_kitchen_tickets !== undefined ? !!settings.auto_print_kitchen_tickets : true;
+      const isSilentActive = isSilentPrintingActive(settings);
+      const isAutoKitchenEnabled = isSilentActive && (settings.auto_print_kitchen_tickets !== false && settings.auto_print_kitchen_tickets !== 0 && settings.auto_print_kitchen_tickets !== 'false');
       if (!isAutoKitchenEnabled) {
-        console.log('ℹ️ [AutoPrintManager] Auto-impresión de comandas desactivada en configuración');
+        console.log('ℹ️ [AutoPrintManager] Auto-impresión de comandas desactivada o impresión silenciosa inactiva');
         return;
       }
 
@@ -150,7 +152,8 @@ export const AutoPrintManager = () => {
       }
       if (!settings) return;
 
-      const isAutoInvoiceEnabled = !!settings.auto_print_invoices;
+      const isSilentActive = isSilentPrintingActive(settings);
+      const isAutoInvoiceEnabled = isSilentActive && (settings.auto_print_invoices === true || settings.auto_print_invoices === 1 || settings.auto_print_invoices === 'true');
       if (!isAutoInvoiceEnabled) return;
 
       try {

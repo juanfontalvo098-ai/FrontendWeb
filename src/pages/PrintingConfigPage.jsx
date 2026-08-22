@@ -62,14 +62,18 @@ export const PrintingConfigPage = () => {
     try {
       const data = await api.get('/settings');
       setSettings(data);
-      setEnableSilentPrinting(data.enable_silent_printing !== undefined ? !!data.enable_silent_printing : true);
-      setAutoPrintKitchenTickets(data.auto_print_kitchen_tickets !== undefined ? !!data.auto_print_kitchen_tickets : true);
-      setAutoPrintInvoices(!!data.auto_print_invoices);
+      const isBool = (val, defaultVal = false) => {
+        if (val === undefined || val === null) return defaultVal;
+        return val === true || val === 1 || val === 'true' || val === '1';
+      };
+      setEnableSilentPrinting(isBool(data.enable_silent_printing, false));
+      setAutoPrintKitchenTickets(isBool(data.auto_print_kitchen_tickets, true));
+      setAutoPrintInvoices(isBool(data.auto_print_invoices, false));
+      setOpenDrawerOnPayment(isBool(data.open_drawer_on_payment, true));
       setPrinterKitchenName(data.printer_kitchen_name || '');
       setPrinterReceiptName(data.printer_receipt_name || '');
       setPrinterBarName(data.printer_bar_name || '');
       setPaperWidth(data.paper_width || data.default_paper_width || '80mm');
-      setOpenDrawerOnPayment(data.open_drawer_on_payment !== undefined ? !!data.open_drawer_on_payment : true);
       setSilentPrintBridgeUrl(data.silent_print_bridge_url || DEFAULT_BRIDGE_URL);
     } catch (err) {
       addToast('Error al cargar configuración de impresión: ' + err.message, 'danger');
@@ -120,20 +124,21 @@ export const PrintingConfigPage = () => {
     try {
       const payload = {
         ...settings,
-        enable_silent_printing: enableSilentPrinting,
-        auto_print_kitchen_tickets: autoPrintKitchenTickets,
-        auto_print_invoices: autoPrintInvoices,
+        enable_silent_printing: Boolean(enableSilentPrinting),
+        auto_print_kitchen_tickets: Boolean(autoPrintKitchenTickets),
+        auto_print_invoices: Boolean(autoPrintInvoices),
         printer_kitchen_name: printerKitchenName,
         printer_receipt_name: printerReceiptName,
         printer_bar_name: printerBarName,
         paper_width: paperWidth,
         default_paper_width: paperWidth,
-        open_drawer_on_payment: openDrawerOnPayment,
+        open_drawer_on_payment: Boolean(openDrawerOnPayment),
         silent_print_bridge_url: silentPrintBridgeUrl.trim() || DEFAULT_BRIDGE_URL
       };
 
-      await api.put('/settings', payload);
-      setSettings(payload);
+      const res = await api.put('/settings', payload);
+      const updated = (res && res.settings) ? res.settings : payload;
+      setSettings(updated);
       addToast('Configuración de impresión guardada correctamente', 'success');
     } catch (err) {
       addToast('Error al guardar configuración: ' + err.message, 'danger');
@@ -156,7 +161,6 @@ export const PrintingConfigPage = () => {
   };
 
   const handleDownloadInstaller = () => {
-    // Intentar descarga directa desde el servidor backend
     const backendUrl = (import.meta.env.VITE_API_URL || '').replace(/\/+api\/?$/, '');
     const directUrl = `${backendUrl}/print-bridge/Instalar_Print_Bridge_KAMIA.bat`;
 
@@ -252,21 +256,27 @@ export const PrintingConfigPage = () => {
     }
   ];
 
-  // 5. Pruebas de Impresión con Formato Real y Silencioso
+  // 5. Pruebas de Impresión con Formato Real (Silencioso o Diálogo según esté configurado)
   const handleTestKitchen = async () => {
     setTestingKitchen(true);
     try {
-      const res = await sendTestPrint(printerKitchenName || null, 'cocina', silentPrintBridgeUrl);
-      if (res && res.success) {
-        addToast(`✅ Comanda de prueba enviada a "${printerKitchenName || 'Predeterminada'}"`, 'success');
+      const effectiveSettings = {
+        ...settings,
+        enable_silent_printing: enableSilentPrinting,
+        printer_kitchen_name: printerKitchenName,
+        paper_width: paperWidth,
+        silent_print_bridge_url: silentPrintBridgeUrl
+      };
+      await printKitchenTicket(
+        sampleKitchenOrder,
+        sampleKitchenItems,
+        effectiveSettings,
+        paperWidth
+      );
+      if (enableSilentPrinting) {
+        addToast(`✅ Comanda de prueba enviada silenciosamente a "${printerKitchenName || 'Predeterminada'}"`, 'success');
       } else {
-        await printKitchenTicket(
-          sampleKitchenOrder,
-          sampleKitchenItems,
-          { ...settings, enable_silent_printing: false },
-          paperWidth
-        );
-        addToast('Comanda enviada a diálogo de impresión (Modo Fallback)', 'info');
+        addToast('Comanda enviada al cuadro de diálogo de Windows', 'info');
       }
     } catch (e) {
       addToast('Error al enviar prueba: ' + e.message, 'danger');
@@ -278,12 +288,18 @@ export const PrintingConfigPage = () => {
   const handleTestReceipt = async () => {
     setTestingReceipt(true);
     try {
-      const res = await sendTestPrint(printerReceiptName || null, 'caja', silentPrintBridgeUrl);
-      if (res && res.success) {
-        addToast(`✅ Factura de prueba enviada a "${printerReceiptName || 'Predeterminada'}"`, 'success');
+      const effectiveSettings = {
+        ...settings,
+        enable_silent_printing: enableSilentPrinting,
+        printer_receipt_name: printerReceiptName,
+        paper_width: paperWidth,
+        silent_print_bridge_url: silentPrintBridgeUrl
+      };
+      await printInvoiceReceipt(sampleInvoice, effectiveSettings, paperWidth);
+      if (enableSilentPrinting) {
+        addToast(`✅ Factura de prueba enviada silenciosamente a "${printerReceiptName || 'Predeterminada'}"`, 'success');
       } else {
-        await printInvoiceReceipt(sampleInvoice, { ...settings, enable_silent_printing: false }, paperWidth);
-        addToast('Factura enviada a diálogo de impresión (Modo Fallback)', 'info');
+        addToast('Factura enviada al cuadro de diálogo de Windows', 'info');
       }
     } catch (e) {
       addToast('Error al enviar prueba: ' + e.message, 'danger');

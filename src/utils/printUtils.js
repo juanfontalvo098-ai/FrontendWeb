@@ -7,6 +7,17 @@ import { formatCOP, formatDateTime, api } from '../api/client';
 export const DEFAULT_BRIDGE_URL = 'http://localhost:8182';
 
 /**
+ * Evalúa de forma estricta si la impresión silenciosa está activada en la configuración
+ */
+export const isSilentPrintingActive = (settings = null, explicitOption = null) => {
+  if (explicitOption === false) return false;
+  if (explicitOption === true) return true;
+  if (!settings) return false;
+  const val = settings.enable_silent_printing;
+  return val === true || val === 1 || val === 'true' || val === '1';
+};
+
+/**
  * Obtiene lista de URLs candidatas (localhost, 127.0.0.1 y personalizada)
  */
 export const getCandidateBridgeUrls = (preferredUrl = null) => {
@@ -148,8 +159,10 @@ export const openCashDrawer = async (printerName = null, bridgeUrl = DEFAULT_BRI
 
 /**
  * Imprime un documento térmico:
- * 1. Prioridad 1: Si KAMIA Print Bridge (puerto 8182) está activo y silent printing habilitado, imprime vía ESC/POS directo al spooler sin diálogo.
- * 2. Fallback: Diálogo nativo de Windows / iframe limpio.
+ * 1. Si la impresión silenciosa está activada (enable_silent_printing === true) y hay texto plano:
+ *    Intenta enviar directamente al Print Bridge sin diálogos.
+ * 2. Si la impresión silenciosa está DESACTIVADA (o falló el bridge):
+ *    SIEMPRE abre el cuadro de diálogo de impresión de Windows (iframe limpio).
  */
 export const printThermalDocument = async (htmlContent, printerName = null, options = {}) => {
   const { 
@@ -158,13 +171,13 @@ export const printThermalDocument = async (htmlContent, printerName = null, opti
     cut = true, 
     plainText = null, 
     bridgeUrl = DEFAULT_BRIDGE_URL,
-    enableSilentPrinting = true,
+    enableSilentPrinting = null,
     settings = null
   } = options;
 
-  const isSilentEnabled = enableSilentPrinting !== false && (settings?.enable_silent_printing !== false);
+  const isSilentEnabled = isSilentPrintingActive(settings, enableSilentPrinting);
 
-  // 1. Intentar impresión silenciosa directa mediante el Print Bridge nativo de KAMIA SI está habilitada
+  // 1. SI Y SOLO SI la impresión silenciosa está habilitada explícitamente:
   if (isSilentEnabled && plainText) {
     try {
       const effectiveBridgeUrl = settings?.silent_print_bridge_url || bridgeUrl || DEFAULT_BRIDGE_URL;
@@ -172,18 +185,19 @@ export const printThermalDocument = async (htmlContent, printerName = null, opti
       if (res && res.success) {
         return { success: true, mode: 'print_bridge', printer: printerName || 'Predeterminada' };
       }
+      console.warn('⚠️ [printUtils] Print Bridge falló, procediendo a abrir cuadro de diálogo');
     } catch (err) {
-      console.warn('⚠️ [printUtils] Print Bridge no disponible, continuando fallback:', err.message);
+      console.warn('⚠️ [printUtils] Error al conectar con Print Bridge:', err.message);
     }
   }
 
-  // 2. Diálogo de impresión nativo del navegador (con vista previa visual exacta)
+  // 2. Si la impresión silenciosa está desactivada (o falló): Abrir cuadro de diálogo nativo de Windows
   printWithIframe(htmlContent, title);
   return { success: true, mode: 'iframe_dialog' };
 };
 
 /**
- * Crea e inyecta un iframe oculto para imprimir directamente sin ventanas emergentes descentradas
+ * Crea e inyecta un iframe oculto para abrir el cuadro de diálogo de impresión nativo del navegador/Windows
  */
 const printWithIframe = (htmlContent, title = 'Impresión POS') => {
   const prevIframe = document.getElementById('pos-print-iframe');
@@ -194,14 +208,12 @@ const printWithIframe = (htmlContent, title = 'Impresión POS') => {
   const iframe = document.createElement('iframe');
   iframe.id = 'pos-print-iframe';
   iframe.style.position = 'fixed';
-  iframe.style.top = '0px';
-  iframe.style.left = '0px';
-  iframe.style.width = '100%';
-  iframe.style.height = '100%';
+  iframe.style.right = '0px';
+  iframe.style.bottom = '0px';
+  iframe.style.width = '0px';
+  iframe.style.height = '0px';
   iframe.style.border = 'none';
-  iframe.style.opacity = '0.001';
-  iframe.style.pointerEvents = 'none';
-  iframe.style.zIndex = '-99999';
+  iframe.style.zIndex = '-9999';
   document.body.appendChild(iframe);
 
   const doc = iframe.contentWindow.document;
@@ -214,7 +226,8 @@ const printWithIframe = (htmlContent, title = 'Impresión POS') => {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
     } catch (e) {
-      console.error('Error al invocar impresión en iframe:', e);
+      console.warn('Fallback a window.print()');
+      try { window.print(); } catch (e2) {}
     }
     setTimeout(() => {
       if (document.body.contains(iframe)) {
@@ -233,7 +246,7 @@ const printWithIframe = (htmlContent, title = 'Impresión POS') => {
       loaded++;
       if (loaded >= total) {
         if (timer) clearTimeout(timer);
-        setTimeout(doPrint, 150);
+        setTimeout(doPrint, 100);
       }
     };
 
@@ -247,12 +260,12 @@ const printWithIframe = (htmlContent, title = 'Impresión POS') => {
     }
 
     if (loaded >= total) {
-      setTimeout(doPrint, 150);
+      setTimeout(doPrint, 100);
     } else {
-      timer = setTimeout(doPrint, 500);
+      timer = setTimeout(doPrint, 400);
     }
   } else {
-    setTimeout(doPrint, 180);
+    setTimeout(doPrint, 120);
   }
 };
 
@@ -588,7 +601,7 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
   }
 
   const isCredit = invoice.payment_method === 'credito' || parseFloat(invoice.credit_balance || invoice.credit_amount || 0) > 0;
-  const creditBalance = parseFloat(invoice.credit_balance !== undefined ? invoice.credit_balance : (invoice.credit_amount || (invoice.payment_method === 'credito' ? total : 0)));
+  const creditBalance = parseFloat(invoice.credit_balance !== undefined ? invoice.credit_balance : (invoice.credit_amount || (invoice.payment_method === 'credito' ? invoice.total : 0)));
   const paidInitial = Math.max(0, parseFloat(invoice.total || 0) - creditBalance);
 
   if (isCredit && creditBalance > 0) {
@@ -649,9 +662,6 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
 
 // =========================================================================
 // 1. COMANDA DE COCINA (TICKET TÉRMICO OPERATIVO UNIFICADO)
-// Soporta llamadas con firma:
-// printKitchenTicket(orderData, itemsList, settings, paperWidth)
-// printKitchenTicket(orderData, itemsList, notes, waiter, settings, paperWidth)
 // =========================================================================
 export const printKitchenTicket = async (orderData = {}, itemsList = [], arg3 = {}, arg4 = '80mm', arg5 = null, arg6 = null) => {
   let settings = {};
@@ -678,12 +688,6 @@ export const printKitchenTicket = async (orderData = {}, itemsList = [], arg3 = 
 
   const plainText = buildKitchenTicketPlainText(orderData, itemsList, notes, waiter);
   const bridgeUrl = settings?.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
-
-  // Intentar impresión silenciosa directa si está configurada
-  if (settings?.enable_silent_printing !== false) {
-    const silentRes = await sendToThermalBridge(plainText, settings?.printer_kitchen_name || null, bridgeUrl);
-    if (silentRes && silentRes.success) return { success: true, mode: 'print_bridge' };
-  }
 
   const html = `
     <!DOCTYPE html>
@@ -816,12 +820,6 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
 
   const plainText = buildPreFacturaPlainText(orderData, itemsList, mergedSettings, extras);
   const bridgeUrl = mergedSettings?.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
-
-  // Intentar impresión silenciosa directa
-  if (mergedSettings?.enable_silent_printing !== false) {
-    const silentRes = await sendToThermalBridge(plainText, mergedSettings?.printer_receipt_name || null, bridgeUrl);
-    if (silentRes && silentRes.success) return { success: true, mode: 'print_bridge' };
-  }
 
   const html = `
     <!DOCTYPE html>
@@ -975,12 +973,6 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
 
   const plainText = buildInvoicePlainText(invoice, mergedSettings);
   const bridgeUrl = mergedSettings?.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
-
-  // Intentar impresión silenciosa directa
-  if (mergedSettings?.enable_silent_printing !== false) {
-    const silentRes = await sendToThermalBridge(plainText, mergedSettings?.printer_receipt_name || null, bridgeUrl);
-    if (silentRes && silentRes.success) return { success: true, mode: 'print_bridge' };
-  }
 
   const html = `
     <!DOCTYPE html>
@@ -1219,6 +1211,7 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
     paperWidth, 
     cut: true, 
     plainText, 
-    bridgeUrl 
+    bridgeUrl,
+    settings
   });
 };
