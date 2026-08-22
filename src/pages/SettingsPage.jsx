@@ -97,38 +97,89 @@ export const SettingsPage = () => {
 
   // Descargar el instalador todo-en-uno que configura e inicia el Print Bridge automáticamente con Windows
   const downloadUnifiedInstallerBat = () => {
-    const b64Payload = 'IyBHYXN0cm9zUE9TIC0gUHJpbnQgQnJpZGdlIE5hdGl2byBkZSBXaW5kb3dzIChQb3dlclNoZWxsKQokRXJyb3JBY3Rpb25QcmVmZXJlbmNlID0gJ1NpbGVudGx5Q29udGludWUnCgokcG9ydCA9IDgwODgKJGxpc3RlbmVyID0gTmV3LU9iamVjdCBTeXN0ZW0uTmV0Lkh0dHBMaXN0ZW5lcgokbGlzdGVuZXIuUHJlZml4ZXMuQWRkKCJodHRwOi8vbG9jYWxob3N0OiRwb3J0LyIpCgp0cnkgewogICAgJGxpc3RlbmVyLlN0YXJ0KCkKICAgIFdyaXRlLUhvc3QgIltPS10gUHJpbnQgQnJpZGdlIGFjdGl2byBlbiBodHRwOi8vbG9jYWxob3N0OiRwb3J0LyIgLUZvcmVncm91bmRDb2xvciBHcmVlbgp9IGNhdGNoIHsKICAgIFdyaXRlLUhvc3QgIltBVklTT10gUHVlcnRvICRwb3J0IHlhIGFjdGl2byBvIGVuIHVzby4iIC1Gb3JlZ3JvdW5kQ29sb3IgWWVsbG93CiAgICBleGl0IDAKfQoKd2hpbGUgKCR0cnVlKSB7CiAgICB0cnkgewogICAgICAgICRjb250ZXh0ID0gJGxpc3RlbmVyLkdldENvbnRleHQoKQogICAgICAgICRyZXEgPSAkY29udGV4dC5SZXF1ZXN0CiAgICAgICAgJHJlcyA9ICRjb250ZXh0LlJlc3BvbnNlCgogICAgICAgICRyZXMuSGVhZGVycy5BZGQoJ0FjY2Vzcy1Db250cm9sLUFsbG93LU9yaWdpbicsICcqJykKICAgICAgICAkcmVzLkhlYWRlcnMuQWRkKCdBY2Nlc3MtQ29udHJvbC1BbGxvdy1NZXRob2RzJywgJ0dFVCwgUE9TVCwgT1BUSU9OUycpCiAgICAgICAgJHJlcy5IZWFkZXJzLkFkZCgnQWNjZXNzLUNvbnRyb2wtQWxsb3ctSGVhZGVycycsICdDb250ZW50LVR5cGUsIEF1dGhvcml6YXRpb24nKQoKICAgICAgICBpZiAoJHJlcS5IdHRwTWV0aG9kIC1lcSAnT1BUSU9OUycpIHsKICAgICAgICAgICAgJHJlcy5TdGF0dXNDb2RlID0gMjA0CiAgICAgICAgICAgICRyZXMuQ2xvc2UoKQogICAgICAgICAgICBjb250aW51ZQogICAgICAgIH0KCiAgICAgICAgJHBhdGggPSAkcmVxLlVybC5BYnNvbHV0ZVBhdGgKCiAgICAgICAgaWYgKCRyZXEuSHR0cE1ldGhvZCAtZXEgJ0dFVCcgLWFuZCAoJHBhdGggLWVxICcvaGVhbHRoJyAtb3IgJHBhdGggLWVxICcvJykpIHsKICAgICAgICAgICAgJGpzb24gPSAneyJzdGF0dXMiOiJvbmxpbmUiLCJzZXJ2aWNlIjoiR2FzdHJvc1BPUyBOYXRpdmUgUHJpbnQgQnJpZGdlIiwicG9ydCI6ODA4OCwidmVyc2lvbiI6IjEuMC4wIn0nCiAgICAgICAgICAgICRidWYgPSBbU3lzdGVtLlRleHQuRW5jb2RpbmddOjpVVEY4LkdldEJ5dGVzKCRqc29uKQogICAgICAgICAgICAkcmVzLkNvbnRlbnRUeXBlID0gJ2FwcGxpY2F0aW9uL2pzb247IGNoYXJzZXQ9dXRmLTgnCiAgICAgICAgICAgICRyZXMuQ29udGVudExlbmd0aDY0ID0gJGJ1Zi5MZW5ndGgKICAgICAgICAgICAgJHJlcy5PdXRwdXRTdHJlYW0uV3JpdGUoJGJ1ZiwgMCwgJGJ1Zi5MZW5ndGgpCiAgICAgICAgICAgICRyZXMuQ2xvc2UoKQogICAgICAgICAgICBjb250aW51ZQogICAgICAgIH0KCiAgICAgICAgaWYgKCRyZXEuSHR0cE1ldGhvZCAtZXEgJ0dFVCcgLWFuZCAkcGF0aCAtZXEgJy9wcmludGVycycpIHsKICAgICAgICAgICAgJHBMaXN0ID0gQCgpCiAgICAgICAgICAgIHRyeSB7CiAgICAgICAgICAgICAgICAkcHJpbnRlcnMgPSBHZXQtQ2ltSW5zdGFuY2UgV2luMzJfUHJpbnRlciAtRXJyb3JBY3Rpb24gU2lsZW50bHlDb250aW51ZSB8IFNlbGVjdC1PYmplY3QgTmFtZSwgRGVmYXVsdCwgUG9ydE5hbWUKICAgICAgICAgICAgICAgIGZvcmVhY2ggKCRwIGluICRwcmludGVycykgewogICAgICAgICAgICAgICAgICAgICRwTGlzdCArPSBAewogICAgICAgICAgICAgICAgICAgICAgICBuYW1lID0gW3N0cmluZ10kcC5OYW1lCiAgICAgICAgICAgICAgICAgICAgICAgIGlzRGVmYXVsdCA9IFtib29sXSRwLkRlZmF1bHQKICAgICAgICAgICAgICAgICAgICAgICAgcG9ydCA9IFtzdHJpbmddJHAuUG9ydE5hbWUKICAgICAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0gY2F0Y2gge30KICAgICAgICAgICAgJGpzb25PYmogPSBAeyBwcmludGVycyA9ICRwTGlzdCB9CiAgICAgICAgICAgICRqc29uID0gQ29udmVydFRvLUpzb24gJGpzb25PYmoKICAgICAgICAgICAgJGJ1ZiA9IFtTeXN0ZW0uVGV4dC5FbmNvZGluZ106OlVURjguR2V0Qnl0ZXMoJGpzb24pCiAgICAgICAgICAgICRyZXMuQ29udGVudFR5cGUgPSAnYXBwbGljYXRpb24vanNvbjsgY2hhcnNldD11dGYtOCcKICAgICAgICAgICAgJHJlcy5Db250ZW50TGVuZ3RoNjQgPSAkYnVmLkxlbmd0aAogICAgICAgICAgICAkcmVzLk91dHB1dFN0cmVhbS5Xcml0ZSgkYnVmLCAwLCAkYnVmLkxlbmd0aCkKICAgICAgICAgICAgJHJlcy5DbG9zZSgpCiAgICAgICAgICAgIGNvbnRpbnVlCiAgICAgICAgfQoKICAgICAgICBpZiAoJHJlcS5IdHRwTWV0aG9kIC1lcSAnUE9TVCcgLWFuZCAkcGF0aCAtZXEgJy9wcmludCcpIHsKICAgICAgICAgICAgJHJlYWRlciA9IE5ldy1PYmplY3QgU3lzdGVtLklPLlN0cmVhbVJlYWRlcigkcmVxLklucHV0U3RyZWFtLCBbU3lzdGVtLlRleHQuRW5jb2RpbmddOjpVVEY4KQogICAgICAgICAgICAkYm9keSA9ICRyZWFkZXIuUmVhZFRvRW5kKCkKICAgICAgICAgICAgJHBheWxvYWQgPSBDb252ZXJ0RnJvbS1Kc29uICRib2R5CiAgICAgICAgICAgICR0ZXh0VG9QcmludCA9ICRwYXlsb2FkLnRleHQKICAgICAgICAgICAgJHByaW50ZXJOYW1lID0gJHBheWxvYWQucHJpbnRlck5hbWUKCiAgICAgICAgICAgIGlmICghW3N0cmluZ106OklzTnVsbE9yV2hpdGVTcGFjZSgkdGV4dFRvUHJpbnQpKSB7CiAgICAgICAgICAgICAgICAkdGVtcEZpbGUgPSBbU3lzdGVtLklPLlBhdGhdOjpDb21iaW5lKFtTeXN0ZW0uSU8uUGF0aF06OkdldFRlbXBQYXRoKCksICJwb3NfdGlja2V0XyQoW1N5c3RlbS5HdWlkXTo6TmV3R3VpZCgpLlRvU3RyaW5nKCdOJykpLnR4dCIpCiAgICAgICAgICAgICAgICBbU3lzdGVtLklPLkZpbGVdOjpXcml0ZUFsbFRleHQoJHRlbXBGaWxlLCAkdGV4dFRvUHJpbnQgKyAiYHJgbmByYG5gcmBuYHJgbiIsIFtTeXN0ZW0uVGV4dC5FbmNvZGluZ106OlVURjgpCiAgICAgICAgICAgICAgICB0cnkgewogICAgICAgICAgICAgICAgICAgIGlmICghW3N0cmluZ106OklzTnVsbE9yV2hpdGVTcGFjZSgkcHJpbnRlck5hbWUpKSB7CiAgICAgICAgICAgICAgICAgICAgICAgIEdldC1Db250ZW50IC1QYXRoICR0ZW1wRmlsZSAtRW5jb2RpbmcgdXRmOCB8IE91dC1QcmludGVyIC1OYW1lICRwcmludGVyTmFtZS5UcmltKCkKICAgICAgICAgICAgICAgICAgICB9IGVsc2UgewogICAgICAgICAgICAgICAgICAgICAgICBHZXQtQ29udGVudCAtUGF0aCAkdGVtcEZpbGUgLUVuY29kaW5nIHV0ZjggfCBPdXQtUHJpbnRlcgogICAgICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgICAgICAgICBSZW1vdmUtSXRlbSAkdGVtcEZpbGUgLUZvcmNlIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlCiAgICAgICAgICAgICAgICB9IGNhdGNoIHsKICAgICAgICAgICAgICAgICAgICBSZW1vdmUtSXRlbSAkdGVtcEZpbGUgLUZvcmNlIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0KCiAgICAgICAgICAgICRidWYgPSBbU3lzdGVtLlRleHQuRW5jb2RpbmddOjpVVEY4LkdldEJ5dGVzKCd7InN1Y2Nlc3MiOnRydWV9JykKICAgICAgICAgICAgJHJlcy5Db250ZW50VHlwZSA9ICdhcHBsaWNhdGlvbi9qc29uOyBjaGFyc2V0PXV0Zi04JwogICAgICAgICAgICAkcmVzLkNvbnRlbnRMZW5ndGg2NCA9ICRidWYuTGVuZ3RoCiAgICAgICAgICAgICRyZXMuT3V0cHV0U3RyZWFtLldyaXRlKCRidWYsIDAsICRidWYuTGVuZ3RoKQogICAgICAgICAgICAkcmVzLkNsb3NlKCkKICAgICAgICAgICAgY29udGludWUKICAgICAgICB9CgogICAgICAgICRyZXMuU3RhdHVzQ29kZSA9IDQwNAogICAgICAgICRyZXMuQ2xvc2UoKQogICAgfSBjYXRjaCB7CiAgICAgICAgdHJ5IHsgJHJlcy5DbG9zZSgpIH0gY2F0Y2gge30KICAgIH0KfQo=';
+    const origin = window.location.origin;
+    const downloadUrl = `${origin}/print-bridge/bridge.js`;
 
     const batContent = `@echo off\r
-title GastrosPOS - Instalador de Impresion Directa Silenciosa\r
-color 0A\r
+title KAMIA POS - Instalador de Servicio Print Bridge (Node.js)\r
+color 0B\r
 cls\r
 echo ======================================================================\r
-echo          GASTROSPOS - INSTALADOR DE IMPRESION DIRECTA SILENCIOSA\r
+echo           KAMIA POS - INSTALADOR DE SERVICIO PRINT BRIDGE (NODE.JS)\r
 echo ======================================================================\r
 echo.\r
-echo   [1/3] Creando directorio del agente en el equipo...\r
+\r
+:: 1. Verificar Node.js\r
+where node >nul 2>nul\r
+if %errorlevel% neq 0 (\r
+    color 0C\r
+    echo [ALERTA] Node.js no esta instalado en este computador.\r
+    echo Node.js es OBLIGATORIO para el Print Bridge.\r
+    echo.\r
+    echo Abriendo la pagina de descarga oficial de Node.js...\r
+    start https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi\r
+    echo.\r
+    echo Por favor completa la instalacion de Node.js y vuelve a ejecutar este instalador.\r
+    echo.\r
+    pause\r
+    exit /b 1\r
+)\r
+for /f "tokens=*" %%i in ('node -v') do set NODE_VERSION=%%i\r
+echo   [1/4] Node.js verificado: %NODE_VERSION%\r
+\r
+:: 2. Preparar directorio local en AppData\r
 set "TARGET_DIR=%LOCALAPPDATA%\\GastrosPOS\\PrintBridge"\r
 if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"\r
-echo   [2/3] Instalando motor de impresion termica nativo...\r
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$b64 = '${b64Payload}'; [System.IO.File]::WriteAllBytes('%TARGET_DIR%\\bridge.ps1', [System.Convert]::FromBase64String($b64))"\r
-echo   [3/3] Configurando inicio automatico e invisible con Windows...\r
+set "BRIDGE_FILE=%TARGET_DIR%\\bridge.js"\r
+\r
+:: 3. Copiar o descargar bridge.js\r
+if exist "%~dp0bridge.js" (\r
+    copy /y "%~dp0bridge.js" "%BRIDGE_FILE%" >nul\r
+    echo   [2/4] Archivo bridge.js copiado localmente.\r
+) else (\r
+    echo   [2/4] Descargando componentes del Print Bridge...\r
+    curl -fsSL -o "%BRIDGE_FILE%" "${downloadUrl}" 2>nul\r
+    if not exist "%BRIDGE_FILE%" (\r
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { (New-Object Net.WebClient).DownloadFile('${downloadUrl}', '%BRIDGE_FILE%') } catch {}"\r
+    )\r
+)\r
+\r
+if not exist "%BRIDGE_FILE%" (\r
+    color 0C\r
+    echo.\r
+    echo   [ERROR] No se pudo descargar bridge.js.\r
+    echo   URL: ${downloadUrl}\r
+    echo   Verifica tu conexion a internet e intenta nuevamente.\r
+    echo.\r
+    pause\r
+    exit /b 1\r
+)\r
+echo   [2/4] Archivos del puente instalados en: %TARGET_DIR%\r
+\r
+:: 4. Detener instancias previas\r
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Get-NetTCPConnection -LocalPort 8088 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } } catch {}; try { Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*PrintBridge*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } } catch {}"\r
+\r
+:: 5. Crear script de inicio automatico\r
 set "STARTUP_FOLDER=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"\r
-set "VBS_PATH=%STARTUP_FOLDER%\\GastrosPOS_PrintBridge.vbs"\r
+set "VBS_PATH=%STARTUP_FOLDER%\\KAMIA_PrintBridge.vbs"\r
 > "%VBS_PATH%" echo Set WshShell = CreateObject("WScript.Shell")\r
->> "%VBS_PATH%" echo WshShell.Run "powershell -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File ""%TARGET_DIR%\\bridge.ps1""", 0, False\r
+>> "%VBS_PATH%" echo WshShell.Run "node """ ^& "%TARGET_DIR%\\bridge.js"""", 0, False\r
 >> "%VBS_PATH%" echo Set WshShell = Nothing\r
+echo   [3/4] Inicio automatico con Windows configurado.\r
+\r
+:: 6. Iniciar el servicio inmediatamente en segundo plano\r
+echo   [4/4] Iniciando servicio en segundo plano...\r
 wscript "%VBS_PATH%"\r
+\r
 echo.\r
 echo ======================================================================\r
-echo    INSTALACION COMPLETADA EXITOSAMENTE (TODO EN UNO)\r
+echo    INSTALACION COMPLETADA EXITOSAMENTE\r
 echo ======================================================================\r
 echo.\r
-echo   [OK] El Print Bridge ya esta activo en segundo plano (Puerto: 8088).\r
-echo   [OK] Se ejecutara automaticamente cada vez que enciendas la PC.\r
-echo   [OK] Ya puedes imprimir tickets termicos sin cuadros de dialogo.\r
+echo   [OK] El Print Bridge Node.js ya esta activo en http://localhost:8088\r
+echo   [OK] Se ejecutara de forma silenciosa cada vez que inicies Windows.\r
+echo   [OK] Ya puedes imprimir tickets termicos de forma directa y silenciosa.\r
 echo.\r
-echo ======================================================================\r
 echo Presiona cualquier tecla para cerrar esta ventana...\r
 pause >nul\r
 `;
