@@ -346,16 +346,19 @@ const getBaseThermalStyles = (paperWidth = '80mm') => `
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
+    text-align: left !important;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     color: #000000 !important;
     background: #ffffff !important;
     -webkit-font-smoothing: antialiased;
   }
   .receipt-wrapper {
-    width: 100% !important;
+    width: ${paperWidth === '58mm' ? '58mm' : '80mm'} !important;
     max-width: ${paperWidth === '58mm' ? '58mm' : '80mm'} !important;
-    margin: 0 auto !important;
-    padding: 4px 6px !important;
+    margin: 0 !important;
+    padding: 0 4px !important;
+    float: left !important;
+    text-align: left !important;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     font-size: ${paperWidth === '58mm' ? '12px' : '13px'} !important;
     line-height: 1.3 !important;
