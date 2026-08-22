@@ -3,28 +3,28 @@
 // Garantiza formatos idénticos, máxima legibilidad y soporte de logo
 
 import { formatCOP, formatDateTime, api } from '../api/client';
-import { qzService } from './qzTrayService';
 
 /**
- * Imprime un documento térmico HTML:
- * 1. Si QZ Tray está conectado en este equipo, lo imprime de forma silenciosa directa al spooler.
- * 2. Si QZ Tray no está conectado, realiza un fallback transparente al diálogo de impresión de Windows (iframe).
+ * Imprime un documento térmico:
+ * 1. Prioridad 1: Si hay plainText y Print Bridge (puerto 8088) está activo, imprime de forma directa, instantánea y 100% silenciosa (sin ventanas ni permisos).
+ * 2. Prioridad 2: Fallback transparente al diálogo nativo de Windows (iframe limpio).
  */
 export const printThermalDocument = async (htmlContent, printerName = null, options = {}) => {
-  const { title = 'Impresión POS', paperWidth = '80mm', cut = true } = options;
+  const { title = 'Impresión POS', paperWidth = '80mm', cut = true, plainText = null, bridgeUrl = 'http://localhost:8088' } = options;
 
-  if (qzService.isQzConnected()) {
+  // 1. Intentar impresión silenciosa directa mediante el Print Bridge nativo de KAMIA
+  if (plainText) {
     try {
-      const res = await qzService.printHtml(htmlContent, printerName, { paperWidth, cut, jobName: title });
+      const res = await sendToThermalBridge(plainText, printerName, bridgeUrl, { cutPaper: cut });
       if (res && res.success) {
-        return { success: true, mode: 'qz_tray', printer: res.printer };
+        return { success: true, mode: 'print_bridge', printer: printerName || 'Predeterminada' };
       }
     } catch (err) {
-      console.warn('⚠️ [printUtils] QZ Tray falló, ejecutando fallback a diálogo de Windows:', err.message);
+      console.warn('⚠️ [printUtils] Print Bridge no disponible, continuando fallback:', err.message);
     }
   }
 
-  // Fallback transparente a diálogo de Windows (Iframe)
+  // 2. Fallback estándar al diálogo de impresión del navegador (Iframe) sin cuadros molestos de QZ Tray
   printWithIframe(htmlContent, title);
   return { success: true, mode: 'iframe_dialog' };
 };
@@ -64,9 +64,6 @@ export const sendToThermalBridge = async (text, printerName = null, bridgeUrl = 
  * Envía el pulso de apertura de cajón monedero (RJ11) a la impresora
  */
 export const openCashDrawer = async (printerName = null, bridgeUrl = 'http://localhost:8088') => {
-  if (qzService.isQzConnected()) {
-    return qzService.openCashDrawer(printerName);
-  }
   return sendToThermalBridge('', printerName, bridgeUrl, { openDrawer: true, cutPaper: false });
 };
 
@@ -567,6 +564,40 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
   return text;
 };
 
+export const buildShiftClosePlainText = (shift, settings = {}) => {
+  if (!shift) return '';
+  const snapshot = shift.snapshot || {};
+  const initialFloat = parseFloat(shift.opening_amount ?? snapshot.initialFloat ?? snapshot.openingAmount ?? 0);
+  const width = 38;
+  const line = '-'.repeat(width);
+  const doubleLine = '='.repeat(width);
+
+  let text = '';
+  text += doubleLine + '\n';
+  text += `        ${(settings?.business_name || 'GASTROSPOS').toUpperCase()}\n`;
+  text += doubleLine + '\n';
+  text += '       *** CIERRE DE TURNO ***\n';
+  text += line + '\n';
+  text += `Turno: #${shift.id}\n`;
+  text += `Cajero: ${shift.user_name || 'Cajero'}\n`;
+  text += `Apertura: ${formatDateTime(shift.opened_at)}\n`;
+  text += `Cierre: ${formatDateTime(shift.closed_at || Date.now())}\n`;
+  text += line + '\n';
+  text += '        -- RESUMEN ARQUEO --\n';
+  text += `(+) Base Inicial:`.padEnd(20) + `${formatCOP(initialFloat)}`.padStart(18) + '\n';
+  text += `(+) Ventas Efectivo:`.padEnd(20) + `${formatCOP(snapshot.cashSales || 0)}`.padStart(18) + '\n';
+  text += `(+) Ingresos:`.padEnd(20) + `${formatCOP(snapshot.cashInflows || 0)}`.padStart(18) + '\n';
+  text += `(-) Egresos:`.padEnd(20) + `${formatCOP(snapshot.cashOutflows || 0)}`.padStart(18) + '\n';
+  text += line + '\n';
+  text += `EFECTIVO ESPERADO:`.padEnd(20) + `${formatCOP(snapshot.expectedCash || 0)}`.padStart(18) + '\n';
+  text += `EFECTIVO CONTADO:`.padEnd(20) + `${formatCOP(shift.declared_amount || 0)}`.padStart(18) + '\n';
+  text += `DIFERENCIA:`.padEnd(20) + `${formatCOP(shift.difference || 0)}`.padStart(18) + '\n';
+  text += doubleLine + '\n';
+  text += `VENTAS BRUTAS:`.padEnd(20) + `${formatCOP(shift.gross_revenue || 0)}`.padStart(18) + '\n';
+  text += doubleLine + '\n';
+  return text;
+};
+
 // =========================================================================
 // 1. COMANDA DE COCINA (TICKET TÉRMICO OPERATIVO UNIFICADO)
 // =========================================================================
@@ -576,11 +607,12 @@ export const printKitchenTicket = async (orderData, itemsList = [], settings = {
   const orderId = orderData.id || 'NUEVA';
   const notes = orderData.notes || orderData.delivery_notes || '';
 
+  const plainText = buildKitchenTicketPlainText(orderData, itemsList, notes, waiter);
+
   // Intentar impresión silenciosa directa si está configurada
   if (settings?.enable_silent_printing) {
-    const plainText = buildKitchenTicketPlainText(orderData, itemsList, notes, waiter);
     const silentRes = await sendToThermalBridge(plainText, settings?.printer_kitchen_name || null, settings?.silent_print_bridge_url);
-    if (silentRes.success) return true;
+    if (silentRes && silentRes.success) return true;
   }
 
   const html = `
@@ -669,7 +701,13 @@ export const printKitchenTicket = async (orderData, itemsList = [], settings = {
     </html>
   `;
 
-  return printThermalDocument(html, settings?.printer_kitchen_name || null, { title: `Comanda Cocina #${orderId}`, paperWidth, cut: true });
+  return printThermalDocument(html, settings?.printer_kitchen_name || null, { 
+    title: `Comanda Cocina #${orderId}`, 
+    paperWidth, 
+    cut: true, 
+    plainText, 
+    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088' 
+  });
 };
 
 // =========================================================================
@@ -823,7 +861,14 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
     </html>
   `;
 
-  return printThermalDocument(html, settings?.printer_receipt_name || null, { title: `Pre-Factura #${orderData.id || ''}`, paperWidth, cut: true });
+  const plainText = buildPreFacturaPlainText(orderData, itemsList, mergedSettings, extras);
+  return printThermalDocument(html, settings?.printer_receipt_name || null, { 
+    title: `Pre-Factura #${orderData.id || ''}`, 
+    paperWidth, 
+    cut: true, 
+    plainText, 
+    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088' 
+  });
 };
 
 // =========================================================================
@@ -1006,7 +1051,14 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
     </html>
   `;
 
-  return printThermalDocument(html, settings?.printer_receipt_name || null, { title: `Factura POS #${invoice.invoice_number || ''}`, paperWidth, cut: true });
+  const plainText = buildInvoicePlainText(invoice, mergedSettings);
+  return printThermalDocument(html, settings?.printer_receipt_name || null, { 
+    title: `Factura POS #${invoice.invoice_number || ''}`, 
+    paperWidth, 
+    cut: true, 
+    plainText, 
+    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088' 
+  });
 };
 
 // =========================================================================
@@ -1084,6 +1136,13 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
     </html>
   `;
 
-  return printThermalDocument(html, settings?.printer_receipt_name || null, { title: `Cierre de Turno #${shift.id}`, paperWidth, cut: true });
+  const plainText = buildShiftClosePlainText(shift, settings);
+  return printThermalDocument(html, settings?.printer_receipt_name || null, { 
+    title: `Cierre de Turno #${shift.id}`, 
+    paperWidth, 
+    cut: true, 
+    plainText, 
+    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088' 
+  });
 };
 

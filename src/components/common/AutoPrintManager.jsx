@@ -4,13 +4,17 @@ import { getSocket } from '../../api/socket';
 import { api } from '../../api/client';
 import { useUiStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
-import { qzService } from '../../utils/qzTrayService';
-import { printKitchenTicket, printInvoiceReceipt } from '../../utils/printUtils';
+import { 
+  sendToThermalBridge, 
+  buildKitchenTicketPlainText, 
+  buildInvoicePlainText,
+  checkPrintBridgeHealth
+} from '../../utils/printUtils';
 
 /**
  * Gestor Global en segundo plano para Auto-Impresión Remota de Comandas y Facturas
- * Solo actúa en navegadores designados como "Estación de Impresión" o que tengan QZ Tray conectado localmente.
- * Los teléfonos móviles de los meseros ignoran la auto-impresión para no generar errores.
+ * Utiliza KAMIA Print Bridge (puerto 8088) de forma 100% silenciosa y directa al spooler de Windows.
+ * Cero cuadros de confirmación, cero permisos de QZ Tray.
  */
 export const AutoPrintManager = () => {
   const user = useAuthStore((state) => state.user);
@@ -31,23 +35,11 @@ export const AutoPrintManager = () => {
     if (!user) return;
     loadSettings();
 
-    // Intentar conectar silenciosamente con QZ Tray si este equipo está en segundo plano
-    qzService.connect().catch(() => {});
-
     const socket = getSocket();
     if (!socket) return;
 
     // 1. Escuchar nuevas comandas de cocina enviadas remotamente por meseros
     const handleKitchenTicket = async (ticketData) => {
-      // Verificar si este navegador es una estación de impresión o tiene QZ Tray activo
-      const isStation = qzService.isPrintStation();
-      const isQzActive = qzService.isQzConnected();
-
-      // Si no es estación de impresión ni tiene QZ Tray conectado (ej: celular de mesero), omitir
-      if (!isStation && !isQzActive) {
-        return;
-      }
-
       let settings = settingsRef.current;
       if (!settings) {
         try {
@@ -68,20 +60,31 @@ export const AutoPrintManager = () => {
             order_type: ticketData.order_type || 'mesa',
             table_number: ticketData.table_number || '',
             customer_name: ticketData.customer_name || '',
+            delivery_address: ticketData.delivery_address || '',
+            delivery_phone: ticketData.delivery_phone || '',
+            notes: ticketData.notes || '',
             created_at: ticketData.created_at || new Date().toISOString()
           };
 
-          await printKitchenTicket(
+          const plainText = buildKitchenTicketPlainText(
             orderObj,
             ticketData.items,
             ticketData.notes || '',
-            ticketData.waiter_name || user?.name || 'Móvil / Salón',
-            settings,
-            settings.paper_width || '80mm'
+            ticketData.waiter_name || user?.full_name || 'Móvil / Salón'
           );
 
-          const tableLabel = ticketData.table_number ? `Mesa ${ticketData.table_number}` : (ticketData.order_type === 'delivery' ? 'Domicilio' : 'Para Llevar');
-          addToast(`🍳 Comanda de ${tableLabel} (#${orderObj.id}) impresa automáticamente`, 'info');
+          const bridgeUrl = settings.silent_print_bridge_url || 'http://localhost:8088';
+          const res = await sendToThermalBridge(
+            plainText,
+            settings.printer_kitchen_name || null,
+            bridgeUrl,
+            { cutPaper: true }
+          );
+
+          if (res && res.success) {
+            const tableLabel = ticketData.table_number ? `Mesa ${ticketData.table_number}` : (ticketData.order_type === 'delivery' ? 'Domicilio' : 'Para Llevar');
+            addToast(`🍳 Comanda de ${tableLabel} (#${orderObj.id}) impresa automáticamente en Cocina`, 'info');
+          }
         } catch (err) {
           console.error('[AutoPrintManager] Error al auto-imprimir comanda:', err);
         } finally {
@@ -92,13 +95,6 @@ export const AutoPrintManager = () => {
 
     // 2. Escuchar facturas creadas remotamente
     const handleInvoiceCreated = async (invoiceData) => {
-      const isStation = qzService.isPrintStation();
-      const isQzActive = qzService.isQzConnected();
-
-      if (!isStation && !isQzActive) {
-        return;
-      }
-
       let settings = settingsRef.current;
       if (!settings) {
         try {
@@ -114,8 +110,18 @@ export const AutoPrintManager = () => {
       if (isSilentEnabled && isAutoInvoiceEnabled && invoiceData) {
         try {
           isPrintingRef.current = true;
-          await printInvoiceReceipt(invoiceData, settings, settings.paper_width || '80mm');
-          addToast(`🧾 Factura #${invoiceData.invoice_number || ''} impresa automáticamente en Caja`, 'info');
+          const plainText = buildInvoicePlainText(invoiceData, settings);
+          const bridgeUrl = settings.silent_print_bridge_url || 'http://localhost:8088';
+          const res = await sendToThermalBridge(
+            plainText,
+            settings.printer_receipt_name || null,
+            bridgeUrl,
+            { cutPaper: true }
+          );
+
+          if (res && res.success) {
+            addToast(`🧾 Factura #${invoiceData.invoice_number || ''} impresa automáticamente en Caja`, 'info');
+          }
         } catch (err) {
           console.error('[AutoPrintManager] Error al auto-imprimir factura:', err);
         } finally {
@@ -135,4 +141,3 @@ export const AutoPrintManager = () => {
 
   return null;
 };
-
