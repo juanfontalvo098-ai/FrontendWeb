@@ -12,10 +12,21 @@ import { qzService } from './qzTrayService';
  * 3. Fallback: Diálogo nativo de Windows (iframe limpio).
  */
 export const printThermalDocument = async (htmlContent, printerName = null, options = {}) => {
-  const { title = 'Impresión POS', paperWidth = '80mm', cut = true, plainText = null, bridgeUrl = 'http://localhost:8088' } = options;
+  const { 
+    title = 'Impresión POS', 
+    paperWidth = '80mm', 
+    cut = true, 
+    plainText = null, 
+    bridgeUrl = 'http://localhost:8088',
+    enableSilentPrinting = true,
+    settings = null
+  } = options;
 
-  // 1. Intentar impresión silenciosa directa mediante QZ Tray firmado con Certificado Digital
-  if (qzService.isQzConnected()) {
+  // Determinar si la impresión silenciosa está activada en la configuración
+  const isSilentEnabled = enableSilentPrinting !== false && (settings?.enable_silent_printing !== false);
+
+  // 1. Intentar impresión silenciosa directa mediante QZ Tray firmado SI está habilitada
+  if (isSilentEnabled && qzService.isQzConnected()) {
     try {
       const res = await qzService.printHtml(htmlContent, printerName, { paperWidth, cut, jobName: title });
       if (res && res.success) {
@@ -26,8 +37,8 @@ export const printThermalDocument = async (htmlContent, printerName = null, opti
     }
   }
 
-  // 2. Intentar impresión silenciosa directa mediante el Print Bridge nativo de KAMIA
-  if (plainText) {
+  // 2. Intentar impresión silenciosa directa mediante el Print Bridge nativo de KAMIA SI está habilitada
+  if (isSilentEnabled && plainText) {
     try {
       const res = await sendToThermalBridge(plainText, printerName, bridgeUrl, { cutPaper: cut });
       if (res && res.success) {
@@ -38,7 +49,7 @@ export const printThermalDocument = async (htmlContent, printerName = null, opti
     }
   }
 
-  // 3. Fallback estándar al diálogo de impresión del navegador (Iframe)
+  // 3. Diálogo de impresión nativo del navegador (con vista previa visual exacta)
   printWithIframe(htmlContent, title);
   return { success: true, mode: 'iframe_dialog' };
 };
@@ -723,7 +734,8 @@ export const printKitchenTicket = async (orderData, itemsList = [], settings = {
     paperWidth, 
     cut: true, 
     plainText, 
-    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088' 
+    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088',
+    settings
   });
 };
 
@@ -884,7 +896,8 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
     paperWidth, 
     cut: true, 
     plainText, 
-    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088' 
+    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088',
+    settings: mergedSettings
   });
 };
 
@@ -1074,7 +1087,8 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
     paperWidth, 
     cut: true, 
     plainText, 
-    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088' 
+    bridgeUrl: settings?.silent_print_bridge_url || 'http://localhost:8088',
+    settings: mergedSettings
   });
 };
 
