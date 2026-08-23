@@ -550,6 +550,19 @@ export const OrdersListPage = () => {
   const [creditDueDate, setCreditDueDate] = useState('');
   const [billingNotes, setBillingNotes] = useState('');
 
+  // Pago Mixto y Dinero Entregado en Efectivo / Vueltos
+  const [mixedCashAmount, setMixedCashAmount] = useState('');
+  const [mixedTransferAmount, setMixedTransferAmount] = useState('');
+  const [mixedDigitalType, setMixedDigitalType] = useState('transferencia'); // 'transferencia' | 'tarjeta'
+  const [amountTenderedCash, setAmountTenderedCash] = useState('');
+
+  // Modificación de Precio de Ítems (Solo >= catálogo base)
+  const [priceEditModalOpen, setPriceEditModalOpen] = useState(false);
+  const [priceEditTargetItem, setPriceEditTargetItem] = useState(null);
+  const [priceEditTargetIdx, setPriceEditTargetIdx] = useState(null);
+  const [priceEditInputVal, setPriceEditInputVal] = useState('');
+  const [priceEditMinPrice, setPriceEditMinPrice] = useState(0);
+
   // Estado del Modo Edición de Orden
   const [editOrderItems, setEditOrderItems] = useState([]);
   const [editCustomerId, setEditCustomerId] = useState('');
@@ -886,6 +899,38 @@ export const OrdersListPage = () => {
     return { totalPaid, totalPending, totalCreditBalance, totalTips, countPaid, countPending, countCredit, totalCount: filteredOrders.length };
   }, [filteredOrders]);
 
+  // Producto(s) Destacado(s) en Estadísticas Superiores de Órdenes
+  const highlightedProducts = useMemo(() => {
+    return products.filter(p => Boolean(p.show_in_order_stats));
+  }, [products]);
+
+  const highlightedStats = useMemo(() => {
+    if (highlightedProducts.length === 0) return [];
+
+    return highlightedProducts.map(prod => {
+      let totalRevenue = 0;
+      let totalQty = 0;
+
+      filteredOrders.forEach(o => {
+        if (o.status === 'cancelada') return;
+        (o.items || []).forEach(it => {
+          if (it.product_id === prod.id || it.product?.id === prod.id || (it.name && it.name.trim().toLowerCase() === prod.name.trim().toLowerCase())) {
+            const qty = parseInt(it.quantity || 0, 10);
+            const price = parseFloat(it.unit_price || prod.price || 0);
+            totalQty += qty;
+            totalRevenue += (qty * price);
+          }
+        });
+      });
+
+      return {
+        product: prod,
+        totalRevenue,
+        totalQty
+      };
+    });
+  }, [highlightedProducts, filteredOrders]);
+
   // --- MODAL: DETALLE, FACTURACIÓN Y EDICIÓN ---
   const handleOpenOrderDetail = async (order, initialTab = 'billing') => {
     try {
@@ -1018,6 +1063,57 @@ export const OrdersListPage = () => {
     const gross = Math.max(0, itemsTotal - initDisc) + delFee;
     const suggestedTotal = gross + Math.round(gross * 0.1);
     setAmountReceived(Math.round(suggestedTotal).toString());
+
+    // Reset pago mixto y vueltos
+    setMixedCashAmount('');
+    setMixedTransferAmount('');
+    setMixedDigitalType('transferencia');
+    setAmountTenderedCash('');
+  };
+
+  const handleOpenPriceEdit = (item, idx) => {
+    const prod = products.find(p => p.id === item.product_id || p.id === item.product?.id || (p.name && item.name && p.name.trim().toLowerCase() === item.name.trim().toLowerCase()));
+    const minP = parseFloat(prod?.price || item.unit_price || 0);
+    setPriceEditTargetItem(item);
+    setPriceEditTargetIdx(idx);
+    setPriceEditMinPrice(minP);
+    setPriceEditInputVal(item.unit_price ? Math.round(parseFloat(item.unit_price)).toString() : Math.round(minP).toString());
+    setPriceEditModalOpen(true);
+  };
+
+  const handleSaveItemPrice = async () => {
+    const newPrice = parseFloat(priceEditInputVal);
+    if (isNaN(newPrice) || newPrice < priceEditMinPrice) {
+      addToast(`Solo se permite modificar el precio hacia arriba. El precio base de catálogo es ${formatCOP(priceEditMinPrice)}`, 'warning');
+      return;
+    }
+
+    if (priceEditTargetIdx !== null && editOrderItems[priceEditTargetIdx]) {
+      const updated = [...editOrderItems];
+      updated[priceEditTargetIdx] = {
+        ...updated[priceEditTargetIdx],
+        unit_price: newPrice
+      };
+      setEditOrderItems(updated);
+    }
+
+    if (selectedOrder && priceEditTargetItem?.id) {
+      try {
+        await api.put(`/orders/${selectedOrder.id}/items/${priceEditTargetItem.id}/price`, { unit_price: newPrice });
+        addToast(`Precio unitario actualizado a ${formatCOP(newPrice)}`, 'success');
+        const freshOrder = await api.get(`/orders/${selectedOrder.id}`);
+        setSelectedOrder(freshOrder);
+        loadBillingState(freshOrder);
+        loadEditState(freshOrder);
+        fetchData();
+      } catch (e) {
+        addToast(e.message || 'Error al actualizar precio en backend', 'danger');
+      }
+    } else {
+      addToast(`Precio asignado: ${formatCOP(newPrice)}`, 'success');
+    }
+
+    setPriceEditModalOpen(false);
   };
 
   const loadEditState = (order) => {
@@ -1450,6 +1546,30 @@ export const OrdersListPage = () => {
 
     setBillingSubmitting(true);
     try {
+      let cashAmount = 0;
+      let transferAmount = 0;
+      let cardAmount = 0;
+      const totalBilled = billingCalculations.grandTotal;
+
+      if (paymentMethod === 'mixto') {
+        cashAmount = parseFloat(mixedCashAmount) || 0;
+        if (mixedDigitalType === 'tarjeta') {
+          cardAmount = parseFloat(mixedTransferAmount) || 0;
+        } else {
+          transferAmount = parseFloat(mixedTransferAmount) || 0;
+        }
+      } else if (paymentMethod === 'efectivo') {
+        cashAmount = totalBilled;
+      } else if (paymentMethod === 'transferencia') {
+        transferAmount = totalBilled;
+      } else if (paymentMethod === 'tarjeta') {
+        cardAmount = totalBilled;
+      }
+
+      const tenderedVal = parseFloat(amountTenderedCash) || 0;
+      const cashExpected = paymentMethod === 'mixto' ? cashAmount : (paymentMethod === 'efectivo' ? totalBilled : 0);
+      const changeVal = tenderedVal > cashExpected ? (tenderedVal - cashExpected) : 0;
+
       const payload = {
         order_id: selectedOrder.id,
         customer_id: finalCustId,
@@ -1459,6 +1579,11 @@ export const OrdersListPage = () => {
         tip_percentage: tipMode === 'percentage' ? (parseFloat(tipPercentage) || 0) / 100 : 0,
         custom_tip_amount: (tipMode === 'custom' || billingCalculations.tipVal > 0) ? billingCalculations.tipVal : null,
         amount_paid: paymentMethod === 'credito' ? 0 : Math.min(paymentDiff.received, billingCalculations.grandTotal),
+        cash_amount: cashAmount,
+        transfer_amount: transferAmount,
+        card_amount: cardAmount,
+        amount_tendered: tenderedVal > 0 ? tenderedVal : null,
+        change_given: changeVal > 0 ? changeVal : null,
         credit_amount: paymentMethod === 'credito' ? billingCalculations.totalSinPropina : (recordRemainingAsCredit ? paymentDiff.missingAmount : 0),
         credit_due_date: creditDueDate || null,
         notes: billingNotes || null
@@ -2165,6 +2290,34 @@ export const OrdersListPage = () => {
             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Voluntarias del personal</div>
           </div>
         </Card>
+
+        {/* Tarjetas de Productos Destacados en Estadísticas Superiores */}
+        {highlightedStats.map(stat => (
+          <Card key={stat.product.id} style={{ 
+            padding: '12px 16px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px', 
+            border: '1.5px solid #f59e0b', 
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(245, 158, 11, 0.03) 100%)',
+            boxShadow: '0 2px 8px rgba(245, 158, 11, 0.15)'
+          }}>
+            <div style={{ padding: '10px', background: 'rgba(245, 158, 11, 0.25)', borderRadius: '8px', color: '#f59e0b' }}>
+              <Star size={22} fill="#f59e0b" />
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Ventas: {stat.product.name}
+              </div>
+              <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                {formatCOP(stat.totalRevenue)}
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                {stat.totalQty} {stat.totalQty === 1 ? 'unidad vendida' : 'unidades vendidas'}
+              </div>
+            </div>
+          </Card>
+        ))}
       </div>
 
       {/* Barra de Búsqueda y Filtros Avanzados de Órdenes */}
@@ -3345,8 +3498,9 @@ export const OrdersListPage = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '4px' }}>
                       {[
                         { id: 'efectivo', label: 'Efectivo' },
+                        { id: 'transferencia', label: 'Nequi / Transf' },
                         { id: 'tarjeta', label: 'Tarjeta' },
-                        { id: 'transferencia', label: 'Nequi/Transf' },
+                        { id: 'mixto', label: 'Pago Mixto' },
                         { id: 'credito', label: 'Crédito CxC' }
                       ].map(pm => (
                         <button
@@ -3362,6 +3516,11 @@ export const OrdersListPage = () => {
                               setAmountReceived('0');
                               setRecordRemainingAsCredit(true);
                               if (!creditDueDate) handleSelectCreditDays(30);
+                            } else if (pm.id === 'mixto') {
+                              const half = Math.round(billingCalculations.grandTotal / 2);
+                              setMixedCashAmount(half.toString());
+                              setMixedTransferAmount((billingCalculations.grandTotal - half).toString());
+                              setAmountReceived(Math.round(billingCalculations.grandTotal).toString());
                             } else {
                               setAmountReceived(Math.round(billingCalculations.grandTotal).toString());
                             }
@@ -3379,6 +3538,82 @@ export const OrdersListPage = () => {
                       ))}
                     </div>
                   </div>
+
+                  {/* Panel Configuración Pago Mixto */}
+                  {paymentMethod === 'mixto' && (
+                    <div style={{ background: 'var(--bg-primary)', padding: '10px', borderRadius: '8px', border: '1.5px solid var(--accent-primary)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-primary)', textTransform: 'uppercase' }}>
+                          División de Pago Mixto
+                        </span>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const half = Math.round(billingCalculations.grandTotal / 2);
+                              setMixedCashAmount(half.toString());
+                              setMixedTransferAmount((billingCalculations.grandTotal - half).toString());
+                            }}
+                            style={{ fontSize: '9.5px', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', cursor: 'pointer', fontWeight: 700 }}
+                          >
+                            50% / 50%
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, marginBottom: '2px' }}>
+                            Parte en Efectivo ($)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            value={mixedCashAmount}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setMixedCashAmount(val);
+                              const num = parseFloat(val) || 0;
+                              const rem = Math.max(0, billingCalculations.grandTotal - num);
+                              setMixedTransferAmount(Math.round(rem).toString());
+                            }}
+                            style={{ width: '100%', padding: '6px 8px', fontSize: '12px', fontWeight: 700, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
+                          />
+                        </div>
+
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                            <label style={{ fontSize: '10.5px', fontWeight: 700 }}>
+                              Parte Digital ($)
+                            </label>
+                            <select
+                              value={mixedDigitalType}
+                              onChange={(e) => setMixedDigitalType(e.target.value)}
+                              style={{ fontSize: '9.5px', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                            >
+                              <option value="transferencia">Transferencia</option>
+                              <option value="tarjeta">Tarjeta</option>
+                            </select>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            value={mixedTransferAmount}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setMixedTransferAmount(val);
+                              const num = parseFloat(val) || 0;
+                              const rem = Math.max(0, billingCalculations.grandTotal - num);
+                              setMixedCashAmount(Math.round(rem).toString());
+                            }}
+                            style={{ width: '100%', padding: '6px 8px', fontSize: '12px', fontWeight: 700, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Monto Recibido / Monto a Pagar */}
                   {paymentMethod !== 'credito' && (
@@ -3457,6 +3692,74 @@ export const OrdersListPage = () => {
                         placeholder="0"
                         style={{ marginBottom: '4px', fontSize: '13px', fontWeight: 800, color: 'var(--accent-primary)' }}
                       />
+
+                      {/* Control de Dinero Entregado en Efectivo y Cambio a Devolver */}
+                      {(paymentMethod === 'efectivo' || (paymentMethod === 'mixto' && parseFloat(mixedCashAmount) > 0)) && (
+                        <div style={{ marginTop: '8px', background: 'var(--bg-primary)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {(() => {
+                            const cashToPay = paymentMethod === 'mixto' ? (parseFloat(mixedCashAmount) || 0) : billingCalculations.grandTotal;
+                            const tendered = parseFloat(amountTenderedCash) || 0;
+                            const changeVal = tendered > cashToPay ? (tendered - cashToPay) : 0;
+
+                            return (
+                              <>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                    💵 Dinero Entregado en Efectivo por el Cliente ($)
+                                  </label>
+                                  <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                                    {[20000, 50000, 100000].map(b => (
+                                      <button
+                                        key={b}
+                                        type="button"
+                                        onClick={() => setAmountTenderedCash(b.toString())}
+                                        style={{ fontSize: '9px', padding: '2px 5px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 700 }}
+                                      >
+                                        ${b / 1000}k
+                                      </button>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => setAmountTenderedCash(Math.round(cashToPay).toString())}
+                                      style={{ fontSize: '9px', padding: '2px 5px', borderRadius: '4px', border: '1px solid #10b981', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', cursor: 'pointer', fontWeight: 700 }}
+                                    >
+                                      Exacto
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <input
+                                  type="number"
+                                  min="0"
+                                  placeholder={`Ej: ${cashToPay > 0 ? (cashToPay + 10000) : '50000'}`}
+                                  value={amountTenderedCash}
+                                  onChange={(e) => setAmountTenderedCash(e.target.value)}
+                                  style={{ width: '100%', padding: '6px 8px', fontSize: '13px', fontWeight: 800, background: 'var(--bg-secondary)', border: '1.5px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}
+                                />
+
+                                {tendered > 0 && (
+                                  <div style={{
+                                    padding: '8px 10px',
+                                    borderRadius: '6px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    background: changeVal > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.1)',
+                                    border: `1.5px solid ${changeVal > 0 ? '#10b981' : 'var(--accent-primary)'}`
+                                  }}>
+                                    <span style={{ fontSize: '11.5px', fontWeight: 800, color: changeVal > 0 ? '#10b981' : 'var(--text-primary)' }}>
+                                      {changeVal > 0 ? 'CAMBIO / VUELTOS A DEVOLVER:' : 'PAGO EXACTO EN EFECTIVO:'}
+                                    </span>
+                                    <span style={{ fontSize: '15px', fontWeight: 900, color: changeVal > 0 ? '#10b981' : 'var(--accent-primary)' }}>
+                                      {formatCOP(changeVal)}
+                                    </span>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
 
                       {/* ALERTA DE PAGO INFERIOR / CONSULTA DE SALDO A CRÉDITO */}
                       {paymentDiff.isUnderpaid && (
@@ -4032,9 +4335,31 @@ export const OrdersListPage = () => {
                               <strong style={{ fontSize: '11.5px', color: 'var(--text-primary)' }}>{it.name}</strong>
                               {!it.id && <Badge variant="warning" style={{ fontSize: '9px', marginLeft: '4px', padding: '1px 4px' }}>Nuevo</Badge>}
                             </div>
-                            <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--accent-primary)' }}>
-                              {formatCOP(it.unit_price * it.quantity)}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPriceEdit(it, idx)}
+                                style={{
+                                  background: 'rgba(99, 102, 241, 0.1)',
+                                  border: '1px solid var(--accent-primary)',
+                                  color: 'var(--accent-primary)',
+                                  borderRadius: '4px',
+                                  padding: '1px 5px',
+                                  fontSize: '10px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  fontWeight: 700
+                                }}
+                                title="Modificar precio unitario (solo superior al base)"
+                              >
+                                <Edit3 size={10} /> {formatCOP(it.unit_price)}
+                              </button>
+                              <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--accent-primary)' }}>
+                                {formatCOP(it.unit_price * it.quantity)}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Sabores y Toppings configurados */}
@@ -5095,6 +5420,57 @@ export const OrdersListPage = () => {
         initialModifiers={editingCartInitialModifiers}
         onConfirm={handleConfirmCartModifiers}
       />
+
+      {/* Modal Modificar Precio Unitario (Solo Superior) */}
+      <Modal
+        isOpen={priceEditModalOpen}
+        onClose={() => setPriceEditModalOpen(false)}
+        title="Modificar Precio de Ítem"
+        maxWidth="420px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ background: 'var(--bg-secondary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <strong style={{ fontSize: '14px', color: 'var(--text-primary)', display: 'block' }}>
+              {priceEditTargetItem?.name || 'Producto'}
+            </strong>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Precio base en catálogo: <strong style={{ color: 'var(--accent-primary)' }}>{formatCOP(priceEditMinPrice)}</strong>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              ℹ️ Por política del sistema, solo se permite ajustar el precio para un valor igual o superior al precio base.
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, marginBottom: '4px', color: 'var(--text-primary)' }}>
+              Nuevo Precio Unitario ($) *
+            </label>
+            <input
+              type="number"
+              min={priceEditMinPrice}
+              step="100"
+              value={priceEditInputVal}
+              onChange={(e) => setPriceEditInputVal(e.target.value)}
+              placeholder="0"
+              style={{
+                width: '100%',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: '1.5px solid var(--accent-primary)',
+                background: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                fontSize: '15px',
+                fontWeight: 800
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+            <Button variant="ghost" onClick={() => setPriceEditModalOpen(false)}>Cancelar</Button>
+            <Button variant="primary" onClick={handleSaveItemPrice}>Guardar Precio</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -241,42 +241,48 @@ export const ReportsPage = () => {
             {shifts.length === 0 ? (
               <tr><td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>No hay reportes de turnos registrados en este período</td></tr>
             ) : (
-              shifts.map(shift => (
-                <tr key={shift.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '13px' }}>
-                  <td style={{ padding: '12px 8px', fontWeight: 700 }}>#{shift.id}</td>
-                  <td style={{ padding: '12px 8px' }}>{shift.shift_name}</td>
-                  <td style={{ padding: '12px 8px', fontWeight: 600 }}>{shift.user_name}</td>
-                  <td style={{ padding: '12px 8px', color: 'var(--text-secondary)', fontSize: '12px' }}>{shift.closed_at}</td>
-                  <td style={{ padding: '12px 8px', fontWeight: 700, color: 'var(--accent-primary)' }}>{formatCOP(shift.gross_revenue)}</td>
-                  <td style={{ padding: '12px 8px' }}>{formatCOP(shift.net_revenue)}</td>
-                  <td style={{ padding: '12px 8px', fontWeight: 700, color: shift.difference < 0 ? 'var(--accent-danger)' : 'var(--accent-success)' }}>
-                    {formatCOP(shift.difference)}
-                  </td>
-                  <td style={{ padding: '12px 8px', textAlign: 'right' }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                      <Button size="sm" variant="secondary" icon={<Eye size={14} />} onClick={() => handleOpenDetail(shift.id)}>
-                        Ver Reporte Completo
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="primary" 
-                        loading={downloadingId === shift.id} 
-                        icon={<FileSpreadsheet size={14} />} 
-                        onClick={() => handleDownloadExcel(shift.id)}
-                      >
-                        Excel (.xlsx)
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              shifts.map(shift => {
+                const shiftNum = shift.cash_register_id || shift.id;
+                return (
+                  <tr key={shift.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '13px' }}>
+                    <td style={{ padding: '12px 8px', fontWeight: 700 }}>#{shiftNum}</td>
+                    <td style={{ padding: '12px 8px' }}>{shift.shift_name}</td>
+                    <td style={{ padding: '12px 8px', fontWeight: 600 }}>{shift.user_name}</td>
+                    <td style={{ padding: '12px 8px', color: 'var(--text-secondary)', fontSize: '12px' }}>{shift.closed_at}</td>
+                    <td style={{ padding: '12px 8px', fontWeight: 700, color: 'var(--accent-primary)' }}>{formatCOP(shift.gross_revenue)}</td>
+                    <td style={{ padding: '12px 8px' }}>{formatCOP(shift.net_revenue)}</td>
+                    <td style={{ padding: '12px 8px', fontWeight: 700, color: shift.difference < 0 ? 'var(--accent-danger)' : 'var(--accent-success)' }}>
+                      {formatCOP(shift.difference)}
+                    </td>
+                    <td style={{ padding: '12px 8px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                        <Button size="sm" variant="ghost" icon={<Printer size={14} />} onClick={() => handlePrintShiftTicket(shift)}>
+                          Ticket
+                        </Button>
+                        <Button size="sm" variant="secondary" icon={<Eye size={14} />} onClick={() => handleOpenDetail(shift.id)}>
+                          Ver Detalle
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="primary" 
+                          loading={downloadingId === shift.id} 
+                          icon={<FileSpreadsheet size={14} />} 
+                          onClick={() => handleDownloadExcel(shift.id)}
+                        >
+                          Excel
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </Card>
 
       {/* Modal Detalle Reporte con Auditoría Íntegra */}
-      <Modal isOpen={detailModalOpen} onClose={() => setDetailModalOpen(false)} title={`Reporte Exhaustivo - Turno N° ${selectedShift?.id || ''}`} maxWidth="740px">
+      <Modal isOpen={detailModalOpen} onClose={() => setDetailModalOpen(false)} title={`Reporte Exhaustivo - Turno #${selectedShift?.cash_register_id || selectedShift?.id || ''}`} maxWidth="740px">
         {loadingDetail || !selectedShift ? (
           <div style={{ padding: '20px', textAlign: 'center' }}>Cargando resumen de cierre exhaustivo...</div>
         ) : (

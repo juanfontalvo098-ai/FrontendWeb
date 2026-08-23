@@ -608,6 +608,12 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
   const isCredit = invoice.payment_method === 'credito' || parseFloat(invoice.credit_balance || invoice.credit_amount || 0) > 0;
   const creditBalance = parseFloat(invoice.credit_balance !== undefined ? invoice.credit_balance : (invoice.credit_amount || (invoice.payment_method === 'credito' ? invoice.total : 0)));
   const paidInitial = Math.max(0, parseFloat(invoice.total || 0) - creditBalance);
+  const isMixed = String(invoice.payment_method).includes('mixto') || (parseFloat(invoice.cash_amount || 0) > 0 && (parseFloat(invoice.transfer_amount || 0) > 0 || parseFloat(invoice.card_amount || 0) > 0));
+  const amountTendered = parseFloat(invoice.amount_tendered || 0);
+  const changeGiven = parseFloat(invoice.change_given || 0);
+  const cashAmount = parseFloat(invoice.cash_amount || 0);
+  const transferAmount = parseFloat(invoice.transfer_amount || 0);
+  const cardAmount = parseFloat(invoice.card_amount || 0);
 
   if (isCredit && creditBalance > 0) {
     text += doubleLine + '\n';
@@ -621,8 +627,18 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
     text += doubleLine + '\n';
   } else {
     text += doubleLine + '\n';
-    text += `TOTAL PAGADO:`.padEnd(20) + `${formatCOP(invoice.total || 0)}`.padStart(18) + '\n';
+    text += `TOTAL FACTURADO:`.padEnd(20) + `${formatCOP(invoice.total || 0)}`.padStart(18) + '\n';
     text += `Forma de Pago: ${(invoice.payment_method || 'Efectivo').toUpperCase()}\n`;
+    if (isMixed) {
+      if (cashAmount > 0) text += ` - Efectivo:`.padEnd(20) + `${formatCOP(cashAmount)}`.padStart(18) + '\n';
+      if (transferAmount > 0) text += ` - Transferencia:`.padEnd(20) + `${formatCOP(transferAmount)}`.padStart(18) + '\n';
+      if (cardAmount > 0) text += ` - Tarjeta:`.padEnd(20) + `${formatCOP(cardAmount)}`.padStart(18) + '\n';
+    }
+    if (amountTendered > 0) {
+      text += line + '\n';
+      text += `Dinero Recibido:`.padEnd(20) + `${formatCOP(amountTendered)}`.padStart(18) + '\n';
+      text += `CAMBIO / VUELTOS:`.padEnd(20) + `${formatCOP(changeGiven)}`.padStart(18) + '\n';
+    }
     text += line + '\n';
   }
   text += `  ${mergedSettings?.receipt_footer || '¡Gracias por su compra!'}\n`;
@@ -634,7 +650,23 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
 export const buildShiftClosePlainText = (shift, settings = {}) => {
   if (!shift) return '';
   const snapshot = shift.snapshot || {};
+  const shiftNum = shift.cash_register_id || shift.id || '';
   const initialFloat = parseFloat(shift.opening_amount ?? snapshot.initialFloat ?? snapshot.openingAmount ?? 0);
+  const cashSales = parseFloat(shift.cash_sales ?? snapshot.cashSales ?? 0);
+  const cardSales = parseFloat(shift.card_sales ?? snapshot.cardSales ?? 0);
+  const transferSales = parseFloat(shift.transfer_sales ?? snapshot.transferSales ?? 0);
+  const creditSales = parseFloat(shift.credit_sales ?? snapshot.creditSales ?? 0);
+  const totalTips = parseFloat(shift.total_tips ?? snapshot.totalTips ?? 0);
+  const cashInflows = parseFloat(snapshot.cashInflows ?? snapshot.manualIncomes ?? 0);
+  const cashOutflows = parseFloat(shift.total_withdrawals ?? snapshot.cashOutflows ?? snapshot.manualExpenses ?? 0);
+  const expectedCash = parseFloat(shift.expected_amount ?? snapshot.expectedCash ?? snapshot.expected_amount ?? ((initialFloat + cashSales + cashInflows) - cashOutflows));
+  const declaredCash = parseFloat(shift.closing_amount ?? shift.declared_amount ?? snapshot.declaredCash ?? 0);
+  const declaredTransfers = shift.declared_transfers !== undefined && shift.declared_transfers !== null 
+    ? parseFloat(shift.declared_transfers) 
+    : (snapshot.declaredTransfers !== undefined && snapshot.declaredTransfers !== null ? parseFloat(snapshot.declaredTransfers) : null);
+  const difference = parseFloat(shift.difference ?? snapshot.difference ?? (declaredCash - expectedCash));
+  const grossRevenue = parseFloat(shift.gross_revenue ?? snapshot.grossRevenue ?? (cashSales + cardSales + transferSales + creditSales));
+
   const width = 38;
   const line = '-'.repeat(width);
   const doubleLine = '='.repeat(width);
@@ -645,22 +677,37 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
   text += doubleLine + '\n';
   text += '       *** CIERRE DE TURNO ***\n';
   text += line + '\n';
-  text += `Turno: #${shift.id}\n`;
+  text += `Turno: #${shiftNum}\n`;
+  text += `Jornada: ${shift.shift_name || 'Turno Principal'}\n`;
   text += `Cajero: ${shift.user_name || 'Cajero'}\n`;
   text += `Apertura: ${formatDateTime(shift.opened_at)}\n`;
   text += `Cierre: ${formatDateTime(shift.closed_at || Date.now())}\n`;
   text += line + '\n';
   text += '        -- RESUMEN ARQUEO --\n';
   text += `(+) Base Inicial:`.padEnd(20) + `${formatCOP(initialFloat)}`.padStart(18) + '\n';
-  text += `(+) Ventas Efectivo:`.padEnd(20) + `${formatCOP(snapshot.cashSales || 0)}`.padStart(18) + '\n';
-  text += `(+) Ingresos:`.padEnd(20) + `${formatCOP(snapshot.cashInflows || 0)}`.padStart(18) + '\n';
-  text += `(-) Egresos:`.padEnd(20) + `${formatCOP(snapshot.cashOutflows || 0)}`.padStart(18) + '\n';
+  text += `(+) Ventas Efectivo:`.padEnd(20) + `${formatCOP(cashSales)}`.padStart(18) + '\n';
+  text += `(+) Ingresos Manuales:`.padEnd(20) + `${formatCOP(cashInflows)}`.padStart(18) + '\n';
+  text += `(-) Egresos Manuales:`.padEnd(20) + `${formatCOP(cashOutflows)}`.padStart(18) + '\n';
   text += line + '\n';
-  text += `EFECTIVO ESPERADO:`.padEnd(20) + `${formatCOP(snapshot.expectedCash || 0)}`.padStart(18) + '\n';
-  text += `EFECTIVO CONTADO:`.padEnd(20) + `${formatCOP(shift.declared_amount || 0)}`.padStart(18) + '\n';
-  text += `DIFERENCIA:`.padEnd(20) + `${formatCOP(shift.difference || 0)}`.padStart(18) + '\n';
+  text += `EFECTIVO ESPERADO:`.padEnd(20) + `${formatCOP(expectedCash)}`.padStart(18) + '\n';
+  text += `EFECTIVO CONTADO:`.padEnd(20) + `${formatCOP(declaredCash)}`.padStart(18) + '\n';
+  text += `DIFERENCIA TOTAL:`.padEnd(20) + `${formatCOP(difference)}`.padStart(18) + '\n';
+  text += line + '\n';
+  text += '      -- DESGLOSE DE VENTAS --\n';
+  text += `Ventas Efectivo:`.padEnd(20) + `${formatCOP(cashSales)}`.padStart(18) + '\n';
+  text += `Ventas Transferencia:`.padEnd(20) + `${formatCOP(transferSales)}`.padStart(18) + '\n';
+  if (declaredTransfers !== null) {
+    text += `Transf. Declaradas:`.padEnd(20) + `${formatCOP(declaredTransfers)}`.padStart(18) + '\n';
+  }
+  text += `Ventas Tarjeta:`.padEnd(20) + `${formatCOP(cardSales)}`.padStart(18) + '\n';
+  if (creditSales > 0) {
+    text += `Ventas Credito:`.padEnd(20) + `${formatCOP(creditSales)}`.padStart(18) + '\n';
+  }
+  if (totalTips > 0) {
+    text += `Propinas Recaudadas:`.padEnd(20) + `${formatCOP(totalTips)}`.padStart(18) + '\n';
+  }
   text += doubleLine + '\n';
-  text += `VENTAS BRUTAS:`.padEnd(20) + `${formatCOP(shift.gross_revenue || 0)}`.padStart(18) + '\n';
+  text += `VENTAS BRUTAS:`.padEnd(20) + `${formatCOP(grossRevenue)}`.padStart(18) + '\n';
   text += doubleLine + '\n';
   return text;
 };
@@ -1097,9 +1144,16 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
               `;
             }
 
+            const isMixed = String(invoice.payment_method).includes('mixto') || (parseFloat(invoice.cash_amount || 0) > 0 && (parseFloat(invoice.transfer_amount || 0) > 0 || parseFloat(invoice.card_amount || 0) > 0));
+            const amountTendered = parseFloat(invoice.amount_tendered || 0);
+            const changeGiven = parseFloat(invoice.change_given || 0);
+            const cashAmount = parseFloat(invoice.cash_amount || 0);
+            const transferAmount = parseFloat(invoice.transfer_amount || 0);
+            const cardAmount = parseFloat(invoice.card_amount || 0);
+
             return `
               <div class="flex-between bold" style="font-size: ${paperWidth === '58mm' ? '14px' : '16px'}; color: #000000;">
-                <span>TOTAL PAGADO:</span>
+                <span>TOTAL FACTURADO:</span>
                 <span>${formatCOP(total)}</span>
               </div>
 
@@ -1107,6 +1161,26 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
                 <span>Forma de Pago:</span>
                 <span class="bold" style="text-transform: capitalize;">${invoice.payment_method || 'Efectivo'}</span>
               </div>
+
+              ${isMixed ? `
+                <div style="margin-top: 4px; padding-left: 6px; font-size: ${paperWidth === '58mm' ? '11px' : '12px'}; border-left: 2px solid #333;">
+                  ${cashAmount > 0 ? `<div class="flex-between"><span>- Efectivo:</span><span class="bold">${formatCOP(cashAmount)}</span></div>` : ''}
+                  ${transferAmount > 0 ? `<div class="flex-between"><span>- Transferencia:</span><span class="bold">${formatCOP(transferAmount)}</span></div>` : ''}
+                  ${cardAmount > 0 ? `<div class="flex-between"><span>- Tarjeta:</span><span class="bold">${formatCOP(cardAmount)}</span></div>` : ''}
+                </div>
+              ` : ''}
+
+              ${amountTendered > 0 ? `
+                <div class="dashed-line"></div>
+                <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'}; color: #000000;">
+                  <span>Dinero Recibido:</span>
+                  <span class="bold">${formatCOP(amountTendered)}</span>
+                </div>
+                <div class="flex-between bold" style="font-size: ${paperWidth === '58mm' ? '12.5px' : '14px'}; color: #000000; margin-top: 2px; background: #f0fdf4; padding: 2px 4px; border-radius: 4px;">
+                  <span>CAMBIO / VUELTOS:</span>
+                  <span>${formatCOP(changeGiven)}</span>
+                </div>
+              ` : ''}
             `;
           })()}
 
@@ -1140,13 +1214,31 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
   if (!shift) return;
   const snapshot = shift.snapshot || {};
   const audit = snapshot.audit || { canceledOrdersCount: 0, canceledAmount: 0 };
+  const shiftNum = shift.cash_register_id || shift.id || '';
   const initialFloat = parseFloat(shift.opening_amount ?? snapshot.initialFloat ?? snapshot.openingAmount ?? 0);
+  const cashSales = parseFloat(shift.cash_sales ?? snapshot.cashSales ?? 0);
+  const cardSales = parseFloat(shift.card_sales ?? snapshot.cardSales ?? 0);
+  const transferSales = parseFloat(shift.transfer_sales ?? snapshot.transferSales ?? 0);
+  const creditSales = parseFloat(shift.credit_sales ?? snapshot.creditSales ?? 0);
+  const totalTips = parseFloat(shift.total_tips ?? snapshot.totalTips ?? 0);
+  const cashInflows = parseFloat(snapshot.cashInflows ?? snapshot.manualIncomes ?? 0);
+  const cashOutflows = parseFloat(shift.total_withdrawals ?? snapshot.cashOutflows ?? snapshot.manualExpenses ?? 0);
+  const cashRefunds = parseFloat(snapshot.cashRefunds ?? 0);
+  const expectedCash = parseFloat(shift.expected_amount ?? snapshot.expectedCash ?? snapshot.expected_amount ?? ((initialFloat + cashSales + cashInflows) - (cashOutflows + cashRefunds)));
+  const declaredCash = parseFloat(shift.closing_amount ?? shift.declared_amount ?? snapshot.declaredCash ?? 0);
+  const declaredTransfers = shift.declared_transfers !== undefined && shift.declared_transfers !== null 
+    ? parseFloat(shift.declared_transfers) 
+    : (snapshot.declaredTransfers !== undefined && snapshot.declaredTransfers !== null ? parseFloat(snapshot.declaredTransfers) : null);
+  const difference = parseFloat(shift.difference ?? snapshot.difference ?? (declaredCash - expectedCash));
+  const grossRevenue = parseFloat(shift.gross_revenue ?? snapshot.grossRevenue ?? (cashSales + cardSales + transferSales + creditSales));
+  const canceledOrdersCount = parseInt(audit.canceledOrdersCount || snapshot.audit?.canceledOrdersCount || 0);
+  const canceledAmount = parseFloat(shift.total_voids ?? audit.canceledAmount ?? snapshot.audit?.canceledAmount ?? 0);
 
   const html = `
     <!DOCTYPE html>
     <html>
       <head>
-        <title>Cierre de Turno - #${shift.id}</title>
+        <title>Cierre de Turno - #${shiftNum}</title>
         <style>
           ${getBaseThermalStyles(paperWidth)}
         </style>
@@ -1158,7 +1250,7 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
           <div class="center black" style="font-size: ${paperWidth === '58mm' ? '13px' : '15px'};">*** CIERRE DE TURNO ***</div>
           <div class="solid-line"></div>
 
-          <div class="flex-between"><span>Turno N°:</span><span class="black">#${shift.id}</span></div>
+          <div class="flex-between"><span>Turno N°:</span><span class="black">#${shiftNum}</span></div>
           <div class="flex-between"><span>Jornada:</span><span class="bold">${shift.shift_name || 'Turno Principal'}</span></div>
           <div class="flex-between"><span>Responsable:</span><span class="bold">${shift.user_name || 'Cajero'}</span></div>
           <div class="flex-between"><span>Apertura:</span><span>${formatDateTime(shift.opened_at)}</span></div>
@@ -1166,35 +1258,36 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
           <div class="solid-line"></div>
 
           <div class="center bold">-- RESUMEN ARQUEO EFECTIVO --</div>
-          <div class="flex-between"><span>(+) Base Inicial Float:</span><span>${formatCOP(initialFloat)}</span></div>
-          <div class="flex-between"><span>(+) Ventas Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
-          <div class="flex-between"><span>(+) Ingresos Manuales:</span><span>${formatCOP(snapshot.cashInflows || snapshot.manualIncomes || 0)}</span></div>
-          <div class="flex-between"><span>(-) Egresos Manuales:</span><span>${formatCOP(snapshot.cashOutflows || snapshot.manualExpenses || 0)}</span></div>
+          <div class="flex-between"><span>(+) Base Inicial:</span><span>${formatCOP(initialFloat)}</span></div>
+          <div class="flex-between"><span>(+) Ventas Efectivo:</span><span>${formatCOP(cashSales)}</span></div>
+          <div class="flex-between"><span>(+) Ingresos Manuales:</span><span>${formatCOP(cashInflows)}</span></div>
+          <div class="flex-between"><span>(-) Egresos Manuales:</span><span>${formatCOP(cashOutflows)}</span></div>
           <div class="solid-line"></div>
-          <div class="flex-between bold" style="font-size: 12px;"><span>EFECTIVO ESPERADO:</span><span>${formatCOP(snapshot.expectedCash || 0)}</span></div>
-          <div class="flex-between bold" style="font-size: 12px;"><span>EFECTIVO CONTADO:</span><span>${formatCOP(shift.declared_amount || 0)}</span></div>
+          <div class="flex-between bold" style="font-size: 12px;"><span>EFECTIVO ESPERADO:</span><span>${formatCOP(expectedCash)}</span></div>
+          <div class="flex-between bold" style="font-size: 12px;"><span>EFECTIVO CONTADO:</span><span>${formatCOP(declaredCash)}</span></div>
           <div class="flex-between bold" style="font-size: 13px; margin-top: 2px;">
-            <span>DIFERENCIA EFECTIVO:</span>
-            <span>${formatCOP(shift.difference || 0)}</span>
+            <span>DIFERENCIA TOTAL:</span>
+            <span>${formatCOP(difference)}</span>
           </div>
           <div class="solid-line"></div>
 
           <div class="center bold">-- DESGLOSE DE VENTAS --</div>
-          <div class="flex-between"><span>Ventas Efectivo:</span><span>${formatCOP(snapshot.cashSales || 0)}</span></div>
-          <div class="flex-between"><span>Ventas Tarjeta:</span><span>${formatCOP(snapshot.cardSales || 0)}</span></div>
-          <div class="flex-between"><span>Ventas Transferencia/Nequi:</span><span>${formatCOP(snapshot.transferSales || 0)}</span></div>
-          <div class="flex-between"><span>Ventas a Crédito (CxC):</span><span>${formatCOP(snapshot.creditSales || 0)}</span></div>
+          <div class="flex-between"><span>Ventas Efectivo:</span><span>${formatCOP(cashSales)}</span></div>
+          <div class="flex-between"><span>Ventas Transferencia/Nequi:</span><span>${formatCOP(transferSales)}</span></div>
+          ${declaredTransfers !== null ? `<div class="flex-between"><span>Transf. Declaradas:</span><span>${formatCOP(declaredTransfers)}</span></div>` : ''}
+          <div class="flex-between"><span>Ventas Tarjeta:</span><span>${formatCOP(cardSales)}</span></div>
+          ${creditSales > 0 ? `<div class="flex-between"><span>Ventas a Crédito (CxC):</span><span>${formatCOP(creditSales)}</span></div>` : ''}
           <div class="double-line"></div>
           <div class="flex-between bold" style="font-size: 14px;">
             <span>VENTAS BRUTAS:</span>
-            <span>${formatCOP(shift.gross_revenue || 0)}</span>
+            <span>${formatCOP(grossRevenue)}</span>
           </div>
           <div class="solid-line"></div>
 
           <div class="center bold">-- OTROS CONCEPTOS --</div>
-          <div class="flex-between"><span>Propinas Recaudadas:</span><span>${formatCOP(snapshot.totalTips || 0)}</span></div>
-          <div class="flex-between"><span>Devoluciones Pagadas:</span><span>${formatCOP(snapshot.cashRefunds || 0)}</span></div>
-          <div class="flex-between"><span>Anulaciones (${audit.canceledOrdersCount || 0}):</span><span>${formatCOP(audit.canceledAmount || 0)}</span></div>
+          <div class="flex-between"><span>Propinas Recaudadas:</span><span>${formatCOP(totalTips)}</span></div>
+          ${cashRefunds > 0 ? `<div class="flex-between"><span>Devoluciones Pagadas:</span><span>${formatCOP(cashRefunds)}</span></div>` : ''}
+          <div class="flex-between"><span>Anulaciones (${canceledOrdersCount}):</span><span>${formatCOP(canceledAmount)}</span></div>
           <div class="dashed-line"></div>
 
           <br/><br/>
@@ -1212,7 +1305,7 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
   const bridgeUrl = settings?.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
 
   return printThermalDocument(html, settings?.printer_receipt_name || null, { 
-    title: `Cierre de Turno #${shift.id}`, 
+    title: `Cierre de Turno #${shiftNum}`, 
     paperWidth, 
     cut: true, 
     plainText, 

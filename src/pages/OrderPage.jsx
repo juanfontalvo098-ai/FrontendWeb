@@ -403,7 +403,6 @@ export const OrderPage = () => {
         activeId = newOrderRes.id || newOrderRes.order?.id;
       } else {
         await api.put(`/orders/${activeId}`, { items: payloadItems, send_to_kitchen: true });
-        await api.post(`/orders/${activeId}/send-to-kitchen`).catch(() => {});
       }
 
       addToast('Orden enviada a cocina con éxito', 'success');

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Plus, Edit2, Trash2, Upload, Image as ImageIcon,
   Layers, Package, Search, DollarSign, Barcode, Tag,
-  FileJson, Download, CheckCircle2, AlertCircle, RefreshCw, FileText, Sparkles,
+  FileJson, Download, CheckCircle2, AlertCircle, RefreshCw, FileText, Sparkles, Star,
   SlidersHorizontal, ChevronDown, X, XCircle, RotateCcw, Filter, Check
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
@@ -57,6 +57,7 @@ export const ProductsPage = () => {
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [showInOrderStats, setShowInOrderStats] = useState(false);
 
   // Form states para categoría
   const [catName, setCatName] = useState('');
@@ -114,6 +115,7 @@ export const ProductsPage = () => {
     setTaxIncluded(1);
     setDescription('');
     setImageUrl('');
+    setShowInOrderStats(false);
     if (categories.length > 0) setCategoryId(categories[0].id.toString());
     setIsProductModalOpen(true);
   };
@@ -132,8 +134,20 @@ export const ProductsPage = () => {
     setTaxIncluded(prod.tax_included ? 1 : 0);
     setDescription(prod.description || '');
     setImageUrl(prod.image_url || '');
+    setShowInOrderStats(Boolean(prod.show_in_order_stats));
     setCategoryId(prod.category_id ? prod.category_id.toString() : (categories[0]?.id?.toString() || ''));
     setIsProductModalOpen(true);
+  };
+
+  const handleToggleOrderStats = async (prod) => {
+    try {
+      const newVal = !prod.show_in_order_stats;
+      await api.put(`/products/${prod.id}`, { show_in_order_stats: newVal });
+      addToast(newVal ? `⭐ "${prod.name}" ahora se destacará en estadísticas de órdenes` : `"${prod.name}" ya no se destacará en estadísticas`, 'info');
+      fetchData();
+    } catch (err) {
+      addToast('Error al actualizar destaque del producto', 'danger');
+    }
   };
 
   const handleOpenModifiers = (prod) => {
@@ -184,7 +198,8 @@ export const ProductsPage = () => {
         tax_included: Boolean(parseInt(taxIncluded, 10)),
         category_id: parseInt(categoryId, 10),
         description: description || undefined,
-        image_url: imageUrl || undefined
+        image_url: imageUrl || undefined,
+        show_in_order_stats: Boolean(showInOrderStats)
       };
 
       if (editingProduct) {
@@ -1087,6 +1102,13 @@ export const ProductsPage = () => {
                         <td style={{ padding: '8px 10px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
                             <button
+                              onClick={() => handleToggleOrderStats(prod)}
+                              style={{ background: 'none', border: 'none', color: prod.show_in_order_stats ? '#f59e0b' : 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                              title={prod.show_in_order_stats ? 'Producto destacado en estadísticas de órdenes (Clic para desmarcar)' : 'Destacar ventas de este producto en estadísticas de órdenes'}
+                            >
+                              <Star size={14} fill={prod.show_in_order_stats ? '#f59e0b' : 'none'} />
+                            </button>
+                            <button
                               onClick={() => handleOpenModifiers(prod)}
                               style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: '4px' }}
                               title="Configurar Sabores, Toppings y Modificadores"
@@ -1353,6 +1375,32 @@ export const ProductsPage = () => {
                   border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
                   color: 'var(--text-primary)', fontSize: 'var(--font-xs)', resize: 'vertical'
                 }}
+              />
+            </div>
+
+            {/* Switch Destacar en Estadísticas de Órdenes */}
+            <div style={{
+              padding: '10px 12px',
+              background: showInOrderStats ? 'rgba(245, 158, 11, 0.12)' : 'var(--bg-secondary)',
+              border: showInOrderStats ? '1px solid #f59e0b' : '1px solid var(--border-color)',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Star size={18} color={showInOrderStats ? '#f59e0b' : 'var(--text-muted)'} fill={showInOrderStats ? '#f59e0b' : 'none'} />
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Destacar en Estadísticas de Órdenes (Top KPI)</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Muestra un recuadro con la plata y unidades vendidas de este producto arriba en la Lista de Órdenes.</div>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={showInOrderStats}
+                onChange={(e) => setShowInOrderStats(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#f59e0b' }}
               />
             </div>
 

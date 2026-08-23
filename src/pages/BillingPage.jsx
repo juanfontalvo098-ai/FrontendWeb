@@ -68,6 +68,12 @@ export const BillingPage = () => {
   const [splitCount, setSplitCount] = useState(1);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
 
+  // Pago Mixto y Dinero Entregado / Vueltos
+  const [mixedCashAmount, setMixedCashAmount] = useState('');
+  const [mixedTransferAmount, setMixedTransferAmount] = useState('');
+  const [mixedDigitalType, setMixedDigitalType] = useState('transferencia'); // 'transferencia' | 'tarjeta'
+  const [cashTendered, setCashTendered] = useState('');
+
   // Formato Térmico (58mm vs 80mm)
   const [paperWidth, setPaperWidth] = useState('80mm');
   const [generatedInvoice, setGeneratedInvoice] = useState(null);
@@ -328,6 +334,29 @@ export const BillingPage = () => {
     if (!selectedOrder) return;
     setSubmitting(true);
     try {
+      let cashAmount = 0;
+      let transferAmount = 0;
+      let cardAmount = 0;
+
+      if (paymentMethod === 'mixto') {
+        cashAmount = parseFloat(mixedCashAmount) || 0;
+        if (mixedDigitalType === 'tarjeta') {
+          cardAmount = parseFloat(mixedTransferAmount) || 0;
+        } else {
+          transferAmount = parseFloat(mixedTransferAmount) || 0;
+        }
+      } else if (paymentMethod === 'efectivo') {
+        cashAmount = grandTotal;
+      } else if (paymentMethod === 'transferencia') {
+        transferAmount = grandTotal;
+      } else if (paymentMethod === 'tarjeta') {
+        cardAmount = grandTotal;
+      }
+
+      const tenderedVal = parseFloat(cashTendered) || 0;
+      const cashExpected = paymentMethod === 'mixto' ? cashAmount : (paymentMethod === 'efectivo' ? grandTotal : 0);
+      const changeVal = tenderedVal > cashExpected ? (tenderedVal - cashExpected) : 0;
+
       const payload = {
         order_id: selectedOrder.id,
         customer_id: selectedCustomerId ? parseInt(selectedCustomerId, 10) : null,
@@ -335,6 +364,11 @@ export const BillingPage = () => {
         delivery_fee: currentDeliveryFee,
         discount_amount: appliedDiscountAmount,
         discount_type: appliedDiscountLabel || (appliedDiscountAmount > 0 ? 'Descuento Comercial' : null),
+        cash_amount: cashAmount,
+        transfer_amount: transferAmount,
+        card_amount: cardAmount,
+        amount_tendered: tenderedVal > 0 ? tenderedVal : null,
+        change_given: changeVal > 0 ? changeVal : null,
         ...(tipMode === 'custom'
           ? { custom_tip_amount: computedTip }
           : { tip_percentage: tipPercentage / 100 })
@@ -996,15 +1030,24 @@ export const BillingPage = () => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px', marginBottom: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px', marginBottom: '8px' }}>
             <Select
               label="Forma de Pago"
               value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setPaymentMethod(val);
+                if (val === 'mixto') {
+                  const half = Math.round(grandTotal / 2);
+                  setMixedCashAmount(half.toString());
+                  setMixedTransferAmount((grandTotal - half).toString());
+                }
+              }}
               options={[
                 { value: 'efectivo', label: 'Efectivo' },
-                { value: 'tarjeta', label: 'Tarjeta de Crédito / Débito' },
                 { value: 'transferencia', label: 'Transferencia / Nequi / Daviplata' },
+                { value: 'tarjeta', label: 'Tarjeta de Crédito / Débito' },
+                { value: 'mixto', label: 'Pago Mixto (Efectivo + Digital)' },
                 { value: 'credito', label: 'Crédito Cliente (Cuenta por Cobrar)' }
               ]}
             />
@@ -1018,6 +1061,135 @@ export const BillingPage = () => {
               ]}
             />
           </div>
+
+          {/* Panel Pago Mixto */}
+          {paymentMethod === 'mixto' && (
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px', borderRadius: '6px', border: '1px solid var(--accent-primary)', marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-primary)' }}>División Pago Mixto</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const half = Math.round(grandTotal / 2);
+                    setMixedCashAmount(half.toString());
+                    setMixedTransferAmount((grandTotal - half).toString());
+                  }}
+                  style={{ fontSize: '9.5px', padding: '2px 6px', borderRadius: '3px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', fontWeight: 700 }}
+                >
+                  50% / 50%
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                <div>
+                  <label style={{ fontSize: '10px', fontWeight: 700, display: 'block', marginBottom: '2px' }}>Efectivo ($)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={mixedCashAmount}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setMixedCashAmount(v);
+                      const num = parseFloat(v) || 0;
+                      setMixedTransferAmount(Math.max(0, grandTotal - num).toString());
+                    }}
+                    style={{ padding: '3px 6px', fontSize: '11px', marginBottom: 0 }}
+                  />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700 }}>Digital ($)</label>
+                    <select
+                      value={mixedDigitalType}
+                      onChange={(e) => setMixedDigitalType(e.target.value)}
+                      style={{ fontSize: '9px', padding: '1px 3px', borderRadius: '2px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                    >
+                      <option value="transferencia">Transf</option>
+                      <option value="tarjeta">Tarjeta</option>
+                    </select>
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={mixedTransferAmount}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setMixedTransferAmount(v);
+                      const num = parseFloat(v) || 0;
+                      setMixedCashAmount(Math.max(0, grandTotal - num).toString());
+                    }}
+                    style={{ padding: '3px 6px', fontSize: '11px', marginBottom: 0 }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Dinero Entregado en Efectivo y Cambio a Devolver */}
+          {(paymentMethod === 'efectivo' || (paymentMethod === 'mixto' && parseFloat(mixedCashAmount) > 0)) && (
+            <div style={{ background: 'var(--bg-secondary)', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {(() => {
+                const cashToPay = paymentMethod === 'mixto' ? (parseFloat(mixedCashAmount) || 0) : grandTotal;
+                const tendered = parseFloat(cashTendered) || 0;
+                const changeVal = tendered > cashToPay ? (tendered - cashToPay) : 0;
+
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '10.5px', fontWeight: 700 }}>💵 Dinero Entregado en Efectivo ($)</label>
+                      <div style={{ display: 'flex', gap: '3px' }}>
+                        {[20000, 50000, 100000].map(b => (
+                          <button
+                            key={b}
+                            type="button"
+                            onClick={() => setCashTendered(b.toString())}
+                            style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', cursor: 'pointer', fontWeight: 700 }}
+                          >
+                            ${b / 1000}k
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setCashTendered(Math.round(cashToPay).toString())}
+                          style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', border: '1px solid #10b981', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          Exacto
+                        </button>
+                      </div>
+                    </div>
+
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder={`Ej: ${cashToPay > 0 ? (cashToPay + 10000) : '50000'}`}
+                      value={cashTendered}
+                      onChange={(e) => setCashTendered(e.target.value)}
+                      style={{ padding: '4px 8px', fontSize: '12px', fontWeight: 800, marginBottom: 0 }}
+                    />
+
+                    {tendered > 0 && (
+                      <div style={{
+                        padding: '6px 8px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        background: changeVal > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.1)',
+                        border: `1px solid ${changeVal > 0 ? '#10b981' : 'var(--accent-primary)'}`
+                      }}>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: changeVal > 0 ? '#10b981' : 'var(--text-primary)' }}>
+                          {changeVal > 0 ? 'CAMBIO A DEVOLVER:' : 'PAGO EXACTO:'}
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: 900, color: changeVal > 0 ? '#10b981' : 'var(--accent-primary)' }}>
+                          {formatCOP(changeVal)}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
 
           <Button style={{ width: '100%' }} size="md" loading={submitting} icon={<Check size={16} />} onClick={handleGenerateInvoice} disabled={items.length === 0}>
             Generar Factura Oficial POS e Imprimir

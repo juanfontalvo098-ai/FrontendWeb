@@ -50,15 +50,15 @@ export const AutoPrintManager = () => {
       const now = Date.now();
 
       // Deduplicación estricta: evitar imprimir la misma comanda más de una vez en una ventana de 15 segundos
-      const dedupKey = `${orderId}_${ticketData.items ? ticketData.items.length : 'full'}`;
-      if (processedTicketsRef.current.has(dedupKey)) {
-        const lastPrinted = processedTicketsRef.current.get(dedupKey);
+      const orderKey = `order_${orderId}`;
+      if (processedTicketsRef.current.has(orderKey)) {
+        const lastPrinted = processedTicketsRef.current.get(orderKey);
         if (now - lastPrinted < 15000) {
-          console.log('ℹ️ [AutoPrintManager] Señal duplicada ignorada (deduplicada):', dedupKey);
+          console.log('ℹ️ [AutoPrintManager] Señal de comanda duplicada ignorada:', orderKey);
           return;
         }
       }
-      processedTicketsRef.current.set(dedupKey, now);
+      processedTicketsRef.current.set(orderKey, now);
 
       console.log('⚡ [AutoPrintManager] Procesando comanda de cocina vía WebSocket:', ticketData);
 

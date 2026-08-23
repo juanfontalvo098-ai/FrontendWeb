@@ -26,6 +26,9 @@ export const DashboardPage = () => {
     }
   }, [user, navigate]);
 
+  const [filterMode, setFilterMode] = useState('period'); // 'period' | 'shift'
+  const [selectedShiftId, setSelectedShiftId] = useState('');
+  const [shiftsList, setShiftsList] = useState([]);
   const [period, setPeriod] = useState('today'); // 'today', 'yesterday', 'last7', 'month', 'custom'
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -35,11 +38,29 @@ export const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [hoveredBar, setHoveredBar] = useState(null);
 
+  // Cargar lista de turnos para el selector de filtro por turno
+  useEffect(() => {
+    const loadShifts = async () => {
+      try {
+        const data = await api.get('/reports/shifts');
+        if (Array.isArray(data)) setShiftsList(data);
+      } catch (e) {
+        console.warn('No se pudo cargar la lista de turnos para el dashboard:', e.message);
+      }
+    };
+    loadShifts();
+  }, [activeBranchId, user?.businessId]);
+
   const fetchMetrics = async () => {
     try {
-      let url = `/dashboard/metrics?period=${period}`;
-      if (period === 'custom' && startDate && endDate) {
-        url += `&startDate=${startDate}&endDate=${endDate}`;
+      let url = '/dashboard/metrics';
+      if (filterMode === 'shift' && selectedShiftId) {
+        url += `?shift_id=${selectedShiftId}`;
+      } else {
+        url += `?period=${period}`;
+        if (period === 'custom' && startDate && endDate) {
+          url += `&startDate=${startDate}&endDate=${endDate}`;
+        }
       }
       const data = await api.get(url);
 
@@ -78,7 +99,7 @@ export const DashboardPage = () => {
 
   useEffect(() => {
     fetchMetrics();
-  }, [period, startDate, endDate, activeBranchId, user?.businessId]);
+  }, [filterMode, selectedShiftId, period, startDate, endDate, activeBranchId, user?.businessId]);
 
   // Real-Time Live Refresh
   useEffect(() => {
@@ -143,7 +164,7 @@ export const DashboardPage = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1600px', margin: '0 auto' }}>
       
-      {/* 1. Barra de Control de Período y Estado en Vivo */}
+      {/* 1. Barra de Control de Período y Turno */}
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -157,38 +178,113 @@ export const DashboardPage = () => {
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>
-            <Calendar size={18} color="var(--accent-primary)" /> Período:
-          </div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {[
-              { id: 'today', label: 'Hoy' },
-              { id: 'yesterday', label: 'Ayer' },
-              { id: 'last7', label: 'Últimos 7 Días' },
-              { id: 'month', label: 'Este Mes' },
-              { id: 'custom', label: 'Personalizado' }
-            ].map(p => (
-              <button
-                key={p.id}
-                onClick={() => setPeriod(p.id)}
-                style={{
-                  padding: '6px 14px', 
-                  borderRadius: '8px', 
-                  border: period === p.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                  background: period === p.id ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                  color: period === p.id ? '#ffffff' : 'var(--text-secondary)', 
-                  cursor: 'pointer', 
-                  fontWeight: period === p.id ? 700 : 500, 
-                  fontSize: '13px',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {p.label}
-              </button>
-            ))}
+          {/* Selector de Modo de Filtro */}
+          <div style={{ display: 'flex', background: 'var(--bg-secondary)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <button
+              onClick={() => { setFilterMode('period'); setSelectedShiftId(''); }}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                background: filterMode === 'period' ? 'var(--accent-primary)' : 'transparent',
+                color: filterMode === 'period' ? '#ffffff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '12.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <Calendar size={14} /> Por Período
+            </button>
+            <button
+              onClick={() => { 
+                setFilterMode('shift'); 
+                if (!selectedShiftId && currentShift?.id) setSelectedShiftId(currentShift.id.toString());
+                else if (!selectedShiftId && shiftsList.length > 0) setSelectedShiftId((shiftsList[0].cash_register_id || shiftsList[0].id).toString());
+              }}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                background: filterMode === 'shift' ? 'var(--accent-primary)' : 'transparent',
+                color: filterMode === 'shift' ? '#ffffff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '12.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <Clock size={14} /> Por Turno de Caja
+            </button>
           </div>
 
-          {period === 'custom' && (
+          {filterMode === 'period' ? (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {[
+                { id: 'today', label: 'Hoy' },
+                { id: 'yesterday', label: 'Ayer' },
+                { id: 'last7', label: 'Últimos 7 Días' },
+                { id: 'month', label: 'Este Mes' },
+                { id: 'custom', label: 'Personalizado' }
+              ].map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setPeriod(p.id)}
+                  style={{
+                    padding: '6px 14px', 
+                    borderRadius: '8px', 
+                    border: period === p.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    background: period === p.id ? 'var(--accent-primary)' : 'var(--bg-secondary)',
+                    color: period === p.id ? '#ffffff' : 'var(--text-secondary)', 
+                    cursor: 'pointer', 
+                    fontWeight: period === p.id ? 700 : 500, 
+                    fontSize: '13px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <select
+                value={selectedShiftId}
+                onChange={(e) => setSelectedShiftId(e.target.value)}
+                style={{
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  border: '1.5px solid var(--accent-primary)',
+                  background: 'var(--bg-primary)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  maxWidth: '380px',
+                  cursor: 'pointer'
+                }}
+              >
+                {currentShift && (
+                  <option value={currentShift.id}>
+                    🟢 Turno Actual (Abierto) - {currentShift.user_name || 'Cajero'}
+                  </option>
+                )}
+                {shiftsList.map(s => {
+                  const sNum = s.cash_register_id || s.id;
+                  return (
+                    <option key={s.id} value={sNum}>
+                      Turno #{sNum} - {s.user_name} ({s.shift_name}) - {formatCOP(s.gross_revenue)}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
+          {filterMode === 'period' && period === 'custom' && (
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'var(--bg-secondary)', padding: '4px 10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
               <input 
                 type="date" 
@@ -240,6 +336,45 @@ export const DashboardPage = () => {
           </Button>
         </div>
       </div>
+
+      {/* Banner de Turno Seleccionado (si se filtra por un turno específico) */}
+      {filterMode === 'shift' && metrics?.selectedShiftInfo && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(79, 70, 229, 0.08) 100%)',
+          border: '1.5px solid var(--accent-primary)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '14px 20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          boxShadow: '0 4px 12px rgba(99, 102, 241, 0.12)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ background: 'var(--accent-primary)', padding: '10px', borderRadius: '10px', color: '#fff' }}>
+              <Clock size={22} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                  Visualizando: Turno #{metrics.selectedShiftInfo.cash_register_id || metrics.selectedShiftInfo.id} — {metrics.selectedShiftInfo.shift_name || 'Turno'}
+                </span>
+                <Badge variant={metrics.selectedShiftInfo.status === 'abierta' ? 'success' : 'secondary'} style={{ fontSize: '11px' }}>
+                  {metrics.selectedShiftInfo.status === 'abierta' ? '● En Curso' : 'Cerrado'}
+                </Badge>
+              </div>
+              <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                <strong>Responsable:</strong> {metrics.selectedShiftInfo.user_name || 'Cajero'} | <strong>Apertura:</strong> {new Date(metrics.selectedShiftInfo.opened_at).toLocaleString('es-CO')} {metrics.selectedShiftInfo.closed_at ? `| Cierre: ${new Date(metrics.selectedShiftInfo.closed_at).toLocaleString('es-CO')}` : ''}
+              </div>
+            </div>
+          </div>
+
+          <Button size="sm" variant="secondary" onClick={() => { setFilterMode('period'); setSelectedShiftId(''); }}>
+            Volver a Vista General
+          </Button>
+        </div>
+      )}
 
       {/* 2. Turno de Caja Actual en Vivo */}
       <div style={{

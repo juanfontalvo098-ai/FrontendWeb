@@ -193,12 +193,15 @@ export const CashPage = () => {
 
     setSubmitting(true);
     try {
-      const res = await api.post('/cash/close', { closing_amount: declaredCashVal });
+      const res = await api.post('/cash/close', { 
+        closing_amount: declaredCashVal,
+        declared_transfers: declaredTransfersInput !== '' ? declaredTransfersVal : null
+      });
       
       setZReportFinal({
         ...res,
         declaredCash: declaredCashVal,
-        declaredTransfers: declaredTransfersVal,
+        declaredTransfers: declaredTransfersInput !== '' ? declaredTransfersVal : null,
         cashId: currentCash.id,
         openedAt: currentCash.opened_at,
         opening_amount: res.opening_amount || currentCash.opening_amount || summaryData?.initialFloat,
@@ -206,7 +209,7 @@ export const CashPage = () => {
         summary: summaryData
       });
 
-      addToast(`Caja cerrada exitosamente. Diferencia Efectivo: ${formatCurrency(res.difference || 0)}`, 'info');
+      addToast(`Caja cerrada exitosamente. Diferencia Total: ${formatCurrency(res.difference || 0)}`, 'info');
       setModalType('zreport');
       fetchCashState();
     } catch (err) {
@@ -417,43 +420,50 @@ export const CashPage = () => {
               const cashDiff = declaredCash - expectedCash;
 
               const declaredTransfers = parseFloat(declaredTransfersInput || 0);
-              const expectedTransfers = summaryData.transferSales;
-              const transfersDiff = declaredTransfersInput !== '' ? (declaredTransfers - expectedTransfers) : null;
+              const expectedTransfers = summaryData.transferSales || 0;
+              const hasTransfers = declaredTransfersInput !== '';
+              const transfersDiff = hasTransfers ? (declaredTransfers - expectedTransfers) : 0;
+              const totalDiff = cashDiff + transfersDiff;
 
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                   
-                  {/* BLOQUE DESTACADO DE DIFERENCIA (VARIANCE BLOCK) */}
+                  {/* BLOQUE DESTACADO DE DIFERENCIA TOTAL (EFECTIVO + TRANSFERENCIAS) */}
                   <div style={{ 
                     padding: '18px 20px', 
                     borderRadius: 'var(--radius-lg)', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'space-between',
-                    background: cashDiff === 0 ? 'rgba(22, 163, 74, 0.15)' : cashDiff < 0 ? 'rgba(225, 29, 72, 0.15)' : 'rgba(217, 119, 6, 0.15)',
-                    border: `2px solid ${cashDiff === 0 ? 'var(--accent-primary)' : cashDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)'}`
+                    background: totalDiff === 0 ? 'rgba(22, 163, 74, 0.15)' : totalDiff < 0 ? 'rgba(225, 29, 72, 0.15)' : 'rgba(217, 119, 6, 0.15)',
+                    border: `2px solid ${totalDiff === 0 ? 'var(--accent-primary)' : totalDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)'}`
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                      {cashDiff === 0 ? (
+                      {totalDiff === 0 ? (
                         <CheckCircle2 size={32} color="var(--accent-primary)" />
                       ) : (
-                        <AlertTriangle size={32} color={cashDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)'} />
+                        <AlertTriangle size={32} color={totalDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)'} />
                       )}
                       <div>
                         <div style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
-                          Resultado Arqueo de Efectivo
+                          Resultado Arqueo Total (Efectivo + Transferencias)
                         </div>
-                        <div style={{ fontSize: '17px', fontWeight: 800, color: cashDiff === 0 ? 'var(--accent-primary)' : cashDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)' }}>
-                          {cashDiff === 0 ? 'Caja Cuadrada Perfectamente' : cashDiff < 0 ? 'Faltante de Efectivo en Caja' : 'Sobrante de Efectivo en Caja'}
+                        <div style={{ fontSize: '17px', fontWeight: 800, color: totalDiff === 0 ? 'var(--accent-primary)' : totalDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)' }}>
+                          {totalDiff === 0 ? 'Caja y Cuentas Cuadradas' : totalDiff < 0 ? 'Faltante Total en Arqueo' : 'Sobrante Total en Arqueo'}
                         </div>
                       </div>
                     </div>
 
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '24px', fontWeight: 900, color: cashDiff === 0 ? 'var(--accent-primary)' : cashDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)' }}>
-                        {formatCurrency(cashDiff)}
+                      <div style={{ fontSize: '24px', fontWeight: 900, color: totalDiff === 0 ? 'var(--accent-primary)' : totalDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)' }}>
+                        {formatCurrency(totalDiff)}
                       </div>
-                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>Contado: {formatCurrency(declaredCash)}</div>
+                      <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        Efectivo: <span style={{ color: cashDiff === 0 ? 'inherit' : cashDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)' }}>{cashDiff >= 0 ? '+' : ''}{formatCurrency(cashDiff)}</span>
+                        {hasTransfers && (
+                          <span> | Transf: <span style={{ color: transfersDiff === 0 ? 'inherit' : transfersDiff < 0 ? 'var(--accent-danger)' : 'var(--accent-warning)' }}>{transfersDiff >= 0 ? '+' : ''}{formatCurrency(transfersDiff)}</span></span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
