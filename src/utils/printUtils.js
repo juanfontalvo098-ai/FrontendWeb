@@ -461,6 +461,12 @@ export const buildPreFacturaPlainText = (orderData, itemsList = [], settings = {
   const totalConPropina = baseTotal + propinaSugerida;
   const tableOrType = getCleanTableOrType(orderData);
 
+  const isDelivery = orderData.order_type === 'delivery' || !!(orderData.delivery_address);
+  const deliveryAddr = orderData.delivery_address || orderData.customer_address || '';
+  const deliveryPhone = orderData.delivery_phone || orderData.customer_phone || '';
+  const deliveryNotes = orderData.delivery_notes || '';
+  const driverName = orderData.driver_name || orderData.delivery_driver_name || '';
+
   const isConsumidorFinal = !orderData.customer_name || orderData.customer_name.trim().toLowerCase() === 'consumidor final';
   const width = 38;
   const line = '-'.repeat(width);
@@ -481,7 +487,16 @@ export const buildPreFacturaPlainText = (orderData, itemsList = [], settings = {
   text += `Cliente: ${isConsumidorFinal ? 'Consumidor Final' : orderData.customer_name}\n`;
   text += `NIT/CC: ${orderData.customer_document || (isConsumidorFinal ? '222222222222' : '')}\n`;
   if (!isConsumidorFinal && orderData.customer_phone) text += `Tel: ${orderData.customer_phone}\n`;
-  if (!isConsumidorFinal && (orderData.delivery_address || orderData.customer_address)) text += `Dir: ${orderData.delivery_address || orderData.customer_address}\n`;
+  if (!isConsumidorFinal && orderData.customer_address && !isDelivery) text += `Dir: ${orderData.customer_address}\n`;
+
+  if (isDelivery && deliveryAddr) {
+    text += line + '\n';
+    text += `*** DATOS DE ENTREGA DOMICILIO ***\n`;
+    text += `DIRECCION: ${deliveryAddr}\n`;
+    if (deliveryPhone) text += `TEL. CONTACTO: ${deliveryPhone}\n`;
+    if (driverName) text += `REPARTIDOR: ${driverName}\n`;
+    if (deliveryNotes) text += `NOTAS ENVIO: ${deliveryNotes}\n`;
+  }
   text += line + '\n';
   text += 'Cant  Producto                   Total\n';
   text += line + '\n';
@@ -536,6 +551,12 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
   const address = mergedSettings?.address || '';
   const phone = mergedSettings?.phone || '';
 
+  const isDelivery = invoice.order_type === 'delivery' || !!(invoice.delivery_address);
+  const deliveryAddr = invoice.delivery_address || invoice.customer_address || '';
+  const deliveryPhone = invoice.delivery_phone || invoice.customer_phone || '';
+  const deliveryNotes = invoice.delivery_notes || '';
+  const driverName = invoice.driver_name || invoice.delivery_driver_name || '';
+
   let text = '';
   text += doubleLine + '\n';
   text += `        ${bName}\n`;
@@ -558,10 +579,19 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
   const isConsumidorFinal = !invoice.customer_name || invoice.customer_name.trim().toLowerCase() === 'consumidor final';
   text += `Cliente: ${isConsumidorFinal ? 'Consumidor Final' : invoice.customer_name}\n`;
   text += `NIT/CC: ${invoice.customer_document || (isConsumidorFinal ? '222222222222' : '')}\n`;
-  text += `Tel: ${isConsumidorFinal ? '' : (invoice.customer_phone || '')}\n`;
-  text += `Direccion: ${isConsumidorFinal ? '' : (invoice.customer_address || '')}\n`;
+  if (!isConsumidorFinal && invoice.customer_phone) text += `Tel: ${invoice.customer_phone}\n`;
+  if (!isConsumidorFinal && invoice.customer_address && !isDelivery) text += `Direccion: ${invoice.customer_address}\n`;
   if (!isConsumidorFinal && invoice.customer_city) text += `Ciudad: ${invoice.customer_city}\n`;
   if (!isConsumidorFinal && invoice.customer_email) text += `Email: ${invoice.customer_email}\n`;
+
+  if (isDelivery && deliveryAddr) {
+    text += line + '\n';
+    text += `*** DATOS DE ENTREGA DOMICILIO ***\n`;
+    text += `DIRECCION: ${deliveryAddr}\n`;
+    if (deliveryPhone) text += `TEL. CONTACTO: ${deliveryPhone}\n`;
+    if (driverName) text += `REPARTIDOR: ${driverName}\n`;
+    if (deliveryNotes) text += `NOTAS ENVIO: ${deliveryNotes}\n`;
+  }
   text += line + '\n';
 
   text += 'Cant  Descripcion               Total\n';
@@ -862,11 +892,17 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
   const totalConPropina = baseTotal + propinaSugerida;
   const tableOrType = getCleanTableOrType(orderData);
 
+  const isDelivery = orderData.order_type === 'delivery' || !!(orderData.delivery_address);
+  const deliveryAddr = orderData.delivery_address || orderData.customer_address || '';
+  const deliveryPhone = orderData.delivery_phone || orderData.customer_phone || '';
+  const deliveryNotes = orderData.delivery_notes || '';
+  const driverName = orderData.driver_name || orderData.delivery_driver_name || '';
+
   const isConsumidorFinal = !orderData.customer_name || orderData.customer_name.trim().toLowerCase() === 'consumidor final';
   const customerName = isConsumidorFinal ? 'Consumidor Final' : orderData.customer_name;
   const customerDoc = orderData.customer_document || (isConsumidorFinal ? '222222222222' : '');
   const customerPhone = isConsumidorFinal ? '' : (orderData.customer_phone || '');
-  const customerAddress = isConsumidorFinal ? '' : (orderData.delivery_address || orderData.customer_address || '');
+  const customerAddress = isConsumidorFinal ? '' : (orderData.customer_address || '');
   const customerEmail = !isConsumidorFinal ? (orderData.customer_email || orderData.email || '') : '';
   const customerCity = !isConsumidorFinal ? (orderData.customer_city || orderData.city || '') : '';
 
@@ -898,11 +934,22 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
           <div style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; line-height: 1.4;">
             <div><strong>Cliente:</strong> ${customerName}</div>
             <div><strong>NIT/CC:</strong> ${customerDoc}</div>
-            <div><strong>Tel.:</strong> ${customerPhone}</div>
-            <div><strong>Dirección:</strong> ${customerAddress}</div>
+            ${customerPhone ? `<div><strong>Tel.:</strong> ${customerPhone}</div>` : ''}
+            ${customerAddress && !isDelivery ? `<div><strong>Dirección:</strong> ${customerAddress}</div>` : ''}
             ${customerCity ? `<div><strong>Ciudad:</strong> ${customerCity}</div>` : ''}
             ${customerEmail ? `<div><strong>Email:</strong> ${customerEmail}</div>` : ''}
           </div>
+
+          ${isDelivery && deliveryAddr ? `
+            <div class="solid-line"></div>
+            <div style="border: 1.5px solid #000000; padding: 5px 7px; margin: 4px 0; background: #f0fdf4; font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'}; color: #000000; line-height: 1.35; border-radius: 4px;">
+              <div class="bold" style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; text-transform: uppercase;">🛵 DATOS DE DOMICILIO / ENTREGA</div>
+              <div><strong>Dirección Entrega:</strong> ${deliveryAddr}</div>
+              ${deliveryPhone ? `<div><strong>Tel. Contacto:</strong> ${deliveryPhone}</div>` : ''}
+              ${driverName ? `<div><strong>Repartidor:</strong> ${driverName}</div>` : ''}
+              ${deliveryNotes ? `<div><strong>Instrucciones:</strong> ${deliveryNotes}</div>` : ''}
+            </div>
+          ` : ''}
           <div class="solid-line"></div>
 
           <table>
@@ -1015,6 +1062,12 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
   const total = parseFloat(invoice.total || 0);
   const subtotal = parseFloat(invoice.subtotal || 0);
 
+  const isDelivery = invoice.order_type === 'delivery' || !!(invoice.delivery_address);
+  const deliveryAddr = invoice.delivery_address || invoice.customer_address || '';
+  const deliveryPhone = invoice.delivery_phone || invoice.customer_phone || '';
+  const deliveryNotes = invoice.delivery_notes || '';
+  const driverName = invoice.driver_name || invoice.delivery_driver_name || '';
+
   const isConsumidorFinal = !invoice.customer_name || invoice.customer_name.trim().toLowerCase() === 'consumidor final';
   const customerName = isConsumidorFinal ? 'Consumidor Final' : invoice.customer_name;
   const customerDoc = invoice.customer_document || (isConsumidorFinal ? '222222222222' : '');
@@ -1053,11 +1106,22 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
           <div style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; line-height: 1.4;">
             <div><strong>Cliente:</strong> ${customerName}</div>
             <div><strong>NIT/CC:</strong> ${customerDoc}</div>
-            <div><strong>Tel.:</strong> ${customerPhone}</div>
-            <div><strong>Dirección:</strong> ${customerAddress}</div>
+            ${customerPhone ? `<div><strong>Tel.:</strong> ${customerPhone}</div>` : ''}
+            ${customerAddress && !isDelivery ? `<div><strong>Dirección:</strong> ${customerAddress}</div>` : ''}
             ${customerCity ? `<div><strong>Ciudad:</strong> ${customerCity}</div>` : ''}
             ${customerEmail ? `<div><strong>Email:</strong> ${customerEmail}</div>` : ''}
           </div>
+
+          ${isDelivery && deliveryAddr ? `
+            <div class="solid-line"></div>
+            <div style="border: 1.5px solid #000000; padding: 5px 7px; margin: 4px 0; background: #f0fdf4; font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'}; color: #000000; line-height: 1.35; border-radius: 4px;">
+              <div class="bold" style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; text-transform: uppercase;">🛵 DATOS DE DOMICILIO / ENTREGA</div>
+              <div><strong>Dirección Entrega:</strong> ${deliveryAddr}</div>
+              ${deliveryPhone ? `<div><strong>Tel. Contacto:</strong> ${deliveryPhone}</div>` : ''}
+              ${driverName ? `<div><strong>Repartidor:</strong> ${driverName}</div>` : ''}
+              ${deliveryNotes ? `<div><strong>Instrucciones:</strong> ${deliveryNotes}</div>` : ''}
+            </div>
+          ` : ''}
 
           <div class="solid-line"></div>
           <table>
