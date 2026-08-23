@@ -562,6 +562,7 @@ export const OrdersListPage = () => {
   const [priceEditTargetIdx, setPriceEditTargetIdx] = useState(null);
   const [priceEditInputVal, setPriceEditInputVal] = useState('');
   const [priceEditMinPrice, setPriceEditMinPrice] = useState(0);
+  const [priceEditSource, setPriceEditSource] = useState('edit'); // 'edit' | 'cart'
 
   // Estado del Modo Edición de Orden
   const [editOrderItems, setEditOrderItems] = useState([]);
@@ -1071,13 +1072,15 @@ export const OrdersListPage = () => {
     setAmountTenderedCash('');
   };
 
-  const handleOpenPriceEdit = (item, idx) => {
+  const handleOpenPriceEdit = (item, idx, source = 'edit') => {
     const prod = products.find(p => p.id === item.product_id || p.id === item.product?.id || (p.name && item.name && p.name.trim().toLowerCase() === item.name.trim().toLowerCase()));
-    const minP = parseFloat(prod?.price || item.unit_price || 0);
+    const currentPrice = (item.price !== undefined && item.price !== null) ? item.price : item.unit_price;
+    const minP = parseFloat(prod?.price || currentPrice || 0);
+    setPriceEditSource(source);
     setPriceEditTargetItem(item);
     setPriceEditTargetIdx(idx);
     setPriceEditMinPrice(minP);
-    setPriceEditInputVal(item.unit_price ? Math.round(parseFloat(item.unit_price)).toString() : Math.round(minP).toString());
+    setPriceEditInputVal(currentPrice ? Math.round(parseFloat(currentPrice)).toString() : Math.round(minP).toString());
     setPriceEditModalOpen(true);
   };
 
@@ -1088,29 +1091,47 @@ export const OrdersListPage = () => {
       return;
     }
 
-    if (priceEditTargetIdx !== null && editOrderItems[priceEditTargetIdx]) {
-      const updated = [...editOrderItems];
-      updated[priceEditTargetIdx] = {
-        ...updated[priceEditTargetIdx],
-        unit_price: newPrice
-      };
-      setEditOrderItems(updated);
-    }
-
-    if (selectedOrder && priceEditTargetItem?.id) {
-      try {
-        await api.put(`/orders/${selectedOrder.id}/items/${priceEditTargetItem.id}/price`, { unit_price: newPrice });
-        addToast(`Precio unitario actualizado a ${formatCOP(newPrice)}`, 'success');
-        const freshOrder = await api.get(`/orders/${selectedOrder.id}`);
-        setSelectedOrder(freshOrder);
-        loadBillingState(freshOrder);
-        loadEditState(freshOrder);
-        fetchData();
-      } catch (e) {
-        addToast(e.message || 'Error al actualizar precio en backend', 'danger');
+    if (priceEditSource === 'cart') {
+      // Actualizar ítem en el carrito de Nueva Orden (Para Llevar / Domicilio)
+      if (priceEditTargetIdx !== null && cartItems[priceEditTargetIdx]) {
+        setCartItems(prev => {
+          const copy = [...prev];
+          copy[priceEditTargetIdx] = {
+            ...copy[priceEditTargetIdx],
+            price: newPrice,
+            unit_price: newPrice
+          };
+          return copy;
+        });
+        addToast(`Precio de "${priceEditTargetItem?.name}" ajustado a ${formatCOP(newPrice)} en la comanda`, 'success');
       }
     } else {
-      addToast(`Precio asignado: ${formatCOP(newPrice)}`, 'success');
+      // Modo edición de orden existente
+      if (priceEditTargetIdx !== null && editOrderItems[priceEditTargetIdx]) {
+        const updated = [...editOrderItems];
+        updated[priceEditTargetIdx] = {
+          ...updated[priceEditTargetIdx],
+          unit_price: newPrice,
+          price: newPrice
+        };
+        setEditOrderItems(updated);
+      }
+
+      if (selectedOrder && priceEditTargetItem?.id) {
+        try {
+          await api.put(`/orders/${selectedOrder.id}/items/${priceEditTargetItem.id}/price`, { unit_price: newPrice });
+          addToast(`Precio unitario actualizado a ${formatCOP(newPrice)}`, 'success');
+          const freshOrder = await api.get(`/orders/${selectedOrder.id}`);
+          setSelectedOrder(freshOrder);
+          loadBillingState(freshOrder);
+          loadEditState(freshOrder);
+          fetchData();
+        } catch (e) {
+          addToast(e.message || 'Error al actualizar precio en backend', 'danger');
+        }
+      } else {
+        addToast(`Precio asignado: ${formatCOP(newPrice)}`, 'success');
+      }
     }
 
     setPriceEditModalOpen(false);
@@ -4857,9 +4878,31 @@ export const OrdersListPage = () => {
                         <div key={idx} style={{ background: 'var(--bg-primary)', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <strong style={{ fontSize: '11.5px', color: 'var(--text-primary)' }}>{it.name}</strong>
-                            <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--accent-primary)' }}>
-                              {formatCOP(it.price * it.quantity)}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPriceEdit(it, idx, 'cart')}
+                                style={{
+                                  background: 'rgba(99, 102, 241, 0.1)',
+                                  border: '1px solid var(--accent-primary)',
+                                  color: 'var(--accent-primary)',
+                                  borderRadius: '4px',
+                                  padding: '1px 5px',
+                                  fontSize: '10px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  fontWeight: 700
+                                }}
+                                title="Modificar precio unitario (solo superior al base)"
+                              >
+                                <Edit3 size={10} /> {formatCOP(it.price || it.unit_price)}
+                              </button>
+                              <span style={{ fontSize: '11.5px', fontWeight: 800, color: 'var(--accent-primary)' }}>
+                                {formatCOP((it.price || it.unit_price) * it.quantity)}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Sabores y Toppings configurados */}
