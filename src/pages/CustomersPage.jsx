@@ -113,16 +113,16 @@ export const CustomersPage = () => {
     try {
       setSubmitting(true);
       const payload = {
-        name,
-        document_type: documentType,
-        document_number: documentNumber || null,
-        email: email || null,
-        phone: phone || null,
-        address: address || null,
-        city: city || null,
-        customer_type: customerType,
+        name: name.trim(),
+        document_type: documentType || 'CC',
+        document_number: documentNumber ? documentNumber.trim() : null,
+        email: email ? email.trim() : null,
+        phone: phone ? phone.trim() : null,
+        address: address ? address.trim() : null,
+        city: city ? city.trim() : 'Medellín',
+        customer_type: customerType || 'regular',
         credit_limit: parseFloat(creditLimit) || 0,
-        notes: notes || null
+        notes: notes ? notes.trim() : null
       };
 
       if (editingCustomer) {

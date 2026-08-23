@@ -485,7 +485,7 @@ export const buildPreFacturaPlainText = (orderData, itemsList = [], settings = {
   text += `Fecha / Hora: ${new Date().toLocaleString('es-CO')}\n`;
   text += line + '\n';
   text += `Cliente: ${isConsumidorFinal ? 'Consumidor Final' : orderData.customer_name}\n`;
-  text += `NIT/CC: ${orderData.customer_document || (isConsumidorFinal ? '222222222222' : '')}\n`;
+  text += `NIT/CC: ${orderData.customer_document || '222222222222'}\n`;
   if (!isConsumidorFinal && orderData.customer_phone) text += `Tel: ${orderData.customer_phone}\n`;
   if (!isConsumidorFinal && orderData.customer_address && !isDelivery) text += `Dir: ${orderData.customer_address}\n`;
 
@@ -578,7 +578,7 @@ export const buildInvoicePlainText = (invoice, settings = {}) => {
 
   const isConsumidorFinal = !invoice.customer_name || invoice.customer_name.trim().toLowerCase() === 'consumidor final';
   text += `Cliente: ${isConsumidorFinal ? 'Consumidor Final' : invoice.customer_name}\n`;
-  text += `NIT/CC: ${invoice.customer_document || (isConsumidorFinal ? '222222222222' : '')}\n`;
+  text += `NIT/CC: ${invoice.customer_document || '222222222222'}\n`;
   if (!isConsumidorFinal && invoice.customer_phone) text += `Tel: ${invoice.customer_phone}\n`;
   if (!isConsumidorFinal && invoice.customer_address && !isDelivery) text += `Direccion: ${invoice.customer_address}\n`;
   if (!isConsumidorFinal && invoice.customer_city) text += `Ciudad: ${invoice.customer_city}\n`;
@@ -900,7 +900,7 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
 
   const isConsumidorFinal = !orderData.customer_name || orderData.customer_name.trim().toLowerCase() === 'consumidor final';
   const customerName = isConsumidorFinal ? 'Consumidor Final' : orderData.customer_name;
-  const customerDoc = orderData.customer_document || (isConsumidorFinal ? '222222222222' : '');
+  const customerDoc = orderData.customer_document || '222222222222';
   const customerPhone = isConsumidorFinal ? '' : (orderData.customer_phone || '');
   const customerAddress = isConsumidorFinal ? '' : (orderData.customer_address || '');
   const customerEmail = !isConsumidorFinal ? (orderData.customer_email || orderData.email || '') : '';
@@ -1070,7 +1070,7 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
 
   const isConsumidorFinal = !invoice.customer_name || invoice.customer_name.trim().toLowerCase() === 'consumidor final';
   const customerName = isConsumidorFinal ? 'Consumidor Final' : invoice.customer_name;
-  const customerDoc = invoice.customer_document || (isConsumidorFinal ? '222222222222' : '');
+  const customerDoc = invoice.customer_document || '222222222222';
   const customerPhone = isConsumidorFinal ? '' : (invoice.customer_phone || '');
   const customerAddress = isConsumidorFinal ? '' : (invoice.customer_address || '');
   const customerEmail = !isConsumidorFinal ? (invoice.customer_email || invoice.email || '') : '';

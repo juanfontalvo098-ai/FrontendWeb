@@ -127,9 +127,9 @@ const CustomerSearchSelector = ({
                 {selectedCustomer.customer_type === 'frecuente' && <span style={{ background: '#8b5cf6', color: '#fff', fontSize: '9px', padding: '1px 5px', borderRadius: '3px', fontWeight: 900 }}>Frecuente</span>}
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '1px' }}>
-                <span><strong>{selectedCustomer.document_type || 'CC'}:</strong> {selectedCustomer.document_number}</span>
-                {selectedCustomer.phone && <span>·  {selectedCustomer.phone}</span>}
-                {selectedCustomer.address && <span>·  {selectedCustomer.address}</span>}
+                <span><strong>{selectedCustomer.document_type || 'CC'}:</strong> {selectedCustomer.document_number || 'Sin documento'}</span>
+                {selectedCustomer.phone && <span>· 📞 {selectedCustomer.phone}</span>}
+                {selectedCustomer.address && <span>· 📍 {selectedCustomer.address}</span>}
               </div>
               {isDelivery && selectedCustomer.address && (
                 <div style={{ fontSize: '10px', color: '#06b6d4', fontWeight: 700, marginTop: '2px' }}>
@@ -261,7 +261,7 @@ const CustomerSearchSelector = ({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <strong style={{ color: 'var(--text-primary)' }}>{c.name}</strong>
                       <span style={{ fontSize: '10px', background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: '3px', color: 'var(--text-muted)' }}>
-                        {c.document_type || 'CC'} {c.document_number}
+                        {c.document_number ? `${c.document_type || 'CC'} ${c.document_number}` : 'Sin documento'}
                       </span>
                     </div>
                     <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
@@ -1765,12 +1765,12 @@ export const OrdersListPage = () => {
     setQuickSubmitting(true);
     try {
       const newCust = await api.post('/customers', {
-        name: quickName,
-        document_type: quickDocType,
-        document_number: quickDocNum || '222222222222',
-        phone: quickPhone || null,
-        email: quickEmail || null,
-        address: quickAddress || null,
+        name: quickName.trim(),
+        document_type: quickDocType || 'CC',
+        document_number: quickDocNum ? quickDocNum.trim() : null,
+        phone: quickPhone ? quickPhone.trim() : null,
+        email: quickEmail ? quickEmail.trim() : null,
+        address: quickAddress ? quickAddress.trim() : null,
         customer_type: 'regular'
       });
 
