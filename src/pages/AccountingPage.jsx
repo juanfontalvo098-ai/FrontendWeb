@@ -11,7 +11,7 @@ import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
-import { api, formatCOP } from '../api/client';
+import { api, formatCOP, formatDate, formatDateTime } from '../api/client';
 import { useUiStore } from '../store/uiStore';
 import { useAuth } from '../hooks/useAuth';
 
@@ -35,10 +35,12 @@ export const AccountingPage = () => {
   const [suppliersList, setSuppliersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncingPayroll, setSyncingPayroll] = useState(false);
+  const [syncingMovements, setSyncingMovements] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
 
   // Filtros Libro Diario
   const [journalRefFilter, setJournalRefFilter] = useState('');
+  const [journalSearchQuery, setJournalSearchQuery] = useState('');
 
   // Filtros y Búsquedas en Cartera (CxC) y Proveedores (CxP)
   const [arSearchQuery, setArSearchQuery] = useState('');
@@ -478,12 +480,38 @@ export const AccountingPage = () => {
     setEntryLines(newLines);
   };
 
+  const handleSyncMovements = async () => {
+    try {
+      setSyncingMovements(true);
+      const res = await api.post('/accounting/sync-movements');
+      addToast(res.message || 'Movimientos sincronizados con éxito', 'success');
+      await Promise.all([fetchJournal(), fetchDashboard(), fetchIncomeStatement(), fetchBalanceSheet()]);
+    } catch (err) {
+      addToast(err.message || 'Error al sincronizar movimientos', 'danger');
+    } finally {
+      setSyncingMovements(false);
+    }
+  };
+
   const filteredJournalEntries = (Array.isArray(journalEntries) ? journalEntries : []).filter(e => {
-    if (!journalRefFilter) return true;
-    return (
-      (e.entry_number || '').toLowerCase().includes(journalRefFilter.toLowerCase()) ||
-      (e.description || '').toLowerCase().includes(journalRefFilter.toLowerCase())
-    );
+    // Filtro por tipo de referencia
+    if (journalRefFilter && e.reference_type !== journalRefFilter) {
+      return false;
+    }
+    // Filtro por búsqueda de texto
+    if (journalSearchQuery) {
+      const q = journalSearchQuery.toLowerCase().trim();
+      const matchNum = (e.entry_number || '').toLowerCase().includes(q);
+      const matchDesc = (e.description || '').toLowerCase().includes(q);
+      const matchUser = (e.user_name || '').toLowerCase().includes(q);
+      const matchLines = (e.lines || []).some(l => 
+        (l.account_code || '').toLowerCase().includes(q) ||
+        (l.account_name || '').toLowerCase().includes(q) ||
+        (l.description || '').toLowerCase().includes(q)
+      );
+      if (!matchNum && !matchDesc && !matchUser && !matchLines) return false;
+    }
+    return true;
   });
 
   const filteredAR = (Array.isArray(receivables) ? receivables : []).filter(r => {
@@ -1283,9 +1311,9 @@ export const AccountingPage = () => {
       {/* TAB 6: LIBRO DIARIO */}
       {activeTab === 'journal' && (
         <div>
-          {/* Filtro de Tipo de Asiento */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', gap: '6px' }}>
+          {/* Filtros de Tipo de Asiento & Buscador */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <Button
                 size="sm"
                 variant={journalRefFilter === '' ? 'primary' : 'secondary'}
@@ -1293,6 +1321,24 @@ export const AccountingPage = () => {
                 style={{ fontSize: '11px' }}
               >
                 Todos ({journalEntries.length})
+              </Button>
+              <Button
+                size="sm"
+                variant={journalRefFilter === 'invoice' ? 'primary' : 'secondary'}
+                onClick={() => setJournalRefFilter('invoice')}
+                icon={<Receipt size={13} />}
+                style={{ fontSize: '11px' }}
+              >
+                Ventas POS ({journalEntries.filter(x => x.reference_type === 'invoice').length})
+              </Button>
+              <Button
+                size="sm"
+                variant={journalRefFilter === 'cash_movement' ? 'primary' : 'secondary'}
+                onClick={() => setJournalRefFilter('cash_movement')}
+                icon={<DollarSign size={13} />}
+                style={{ fontSize: '11px' }}
+              >
+                Egresos de Caja ({journalEntries.filter(x => x.reference_type === 'cash_movement').length})
               </Button>
               <Button
                 size="sm"
@@ -1305,12 +1351,45 @@ export const AccountingPage = () => {
               </Button>
               <Button
                 size="sm"
-                variant={journalRefFilter === 'invoice' ? 'primary' : 'secondary'}
-                onClick={() => setJournalRefFilter('invoice')}
-                icon={<Receipt size={13} />}
+                variant={journalRefFilter === 'manual' ? 'primary' : 'secondary'}
+                onClick={() => setJournalRefFilter('manual')}
                 style={{ fontSize: '11px' }}
               >
-                Ventas POS
+                Manuales ({journalEntries.filter(x => x.reference_type === 'manual').length})
+              </Button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ position: 'relative', width: '240px' }}>
+                <Input
+                  placeholder="Buscar asiento, cuenta, monto..."
+                  value={journalSearchQuery}
+                  onChange={(e) => setJournalSearchQuery(e.target.value)}
+                  style={{ marginBottom: 0, fontSize: '11.5px', paddingLeft: '28px' }}
+                />
+                <Search size={13} color="var(--text-muted)" style={{ position: 'absolute', left: '8px', top: '10px', pointerEvents: 'none' }} />
+              </div>
+
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<RefreshCw size={13} className={syncingMovements ? 'spin' : ''} />}
+                loading={syncingMovements}
+                onClick={handleSyncMovements}
+                title="Sincroniza todos los egresos y movimientos de caja al libro diario"
+                style={{ fontSize: '11px' }}
+              >
+                Sincronizar Egresos
+              </Button>
+
+              <Button
+                size="sm"
+                variant="primary"
+                icon={<Plus size={13} />}
+                onClick={() => setJournalModalOpen(true)}
+                style={{ fontSize: '11px' }}
+              >
+                Nuevo Asiento
               </Button>
             </div>
           </div>
@@ -1323,16 +1402,28 @@ export const AccountingPage = () => {
             ) : (
               filteredJournalEntries.map((entry) => {
                 const isPayroll = entry.reference_type === 'payroll';
+                const isCashMovement = entry.reference_type === 'cash_movement';
+                const isInvoice = entry.reference_type === 'invoice';
+
+                let borderLeftColor = undefined;
+                if (isPayroll) borderLeftColor = '3px solid #8b5cf6';
+                else if (isCashMovement) borderLeftColor = '3px solid #f59e0b';
+                else if (isInvoice) borderLeftColor = '3px solid #10b981';
 
                 return (
-                  <Card key={entry.id} style={{ padding: '12px 14px', borderLeft: isPayroll ? '3px solid #8b5cf6' : undefined }}>
+                  <Card key={entry.id} style={{ padding: '12px 14px', borderLeft: borderLeftColor }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary)' }}>{entry.entry_number}</span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{entry.entry_date}</span>
-                        <Badge variant={isPayroll ? 'info' : (entry.status === 'aprobado' ? 'success' : 'warning')} style={{ fontSize: '10px' }}>
-                          {isPayroll ? 'NÓMINA / JORNAL' : entry.status.toUpperCase()}
-                        </Badge>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{formatDate(entry.entry_date)}</span>
+                        {isPayroll && <Badge variant="info" style={{ fontSize: '10px' }}>NÓMINA / JORNAL</Badge>}
+                        {isCashMovement && <Badge variant="warning" style={{ fontSize: '10px' }}>EGRESO / MOVIMIENTO CAJA</Badge>}
+                        {isInvoice && <Badge variant="success" style={{ fontSize: '10px' }}>VENTA POS</Badge>}
+                        {!isPayroll && !isCashMovement && !isInvoice && (
+                          <Badge variant={entry.status === 'aprobado' ? 'secondary' : 'warning'} style={{ fontSize: '10px' }}>
+                            {(entry.reference_type || entry.status).toUpperCase()}
+                          </Badge>
+                        )}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                         {entry.user_name ? `Registrado por: ${entry.user_name}` : ''}
