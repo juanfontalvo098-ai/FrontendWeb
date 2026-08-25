@@ -44,42 +44,71 @@ export const KitchenPage = () => {
   const [orders, setOrders] = useState([]);
   const [now, setNow] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  // Banner de última comanda lista
-  const [readyBanner, setReadyBanner] = useState(null);
+  const lastOrderIdsRef = React.useRef(new Set());
+  const isFirstLoadRef = React.useRef(true);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async (silent = false) => {
     try {
       // Obtener órdenes en cocina
       const allOrders = await api.get('/orders');
       const kitchenOrders = allOrders.filter(o => ['enviado_cocina', 'en_preparacion'].includes(o.status));
+      
+      // Detectar si hay nuevas comandas para sonar el timbre
+      if (!isFirstLoadRef.current && !silent) {
+        const currentIds = new Set(kitchenOrders.map(o => o.id));
+        let hasNew = false;
+        for (const o of kitchenOrders) {
+          if (!lastOrderIdsRef.current.has(o.id)) {
+            hasNew = true;
+            break;
+          }
+        }
+        if (hasNew) {
+          playBellSound();
+          addToast('¡Nueva comanda recibida en cocina!', 'info', 5000);
+        }
+        lastOrderIdsRef.current = currentIds;
+      } else {
+        lastOrderIdsRef.current = new Set(kitchenOrders.map(o => o.id));
+        isFirstLoadRef.current = false;
+      }
+
       setOrders(kitchenOrders);
     } catch (err) {
       console.error('Error al cargar comandas de cocina:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [addToast]);
 
   useEffect(() => {
-    fetchOrders();
+    fetchOrders(true);
 
     // Actualizar estado 'now' cada 1 segundo exacto para el cronómetro activo en vivo
     const timer = setInterval(() => setNow(new Date()), 1000);
+
+    // Auto-polling cada 5 segundos para actualización autónoma en cocina (compatible con Serverless)
+    const pollInterval = setInterval(() => {
+      if (!document.hidden) {
+        fetchOrders(false);
+      }
+    }, 5000);
 
     const socket = getSocket();
     if (socket) {
       const handleNewTicket = () => {
         addToast('¡Nueva comanda enviada a cocina!', 'info');
-        fetchOrders();
+        playBellSound();
+        fetchOrders(false);
       };
-      const handleUpdate = () => fetchOrders();
+      const handleUpdate = () => fetchOrders(true);
 
       const handleTicketReady = (data) => {
         const table = data.table_number || `Orden #${data.orderId}`;
         const summary = data.summary || '';
         addToast(`🔔 ¡Comanda Lista! — ${table}${summary ? ': ' + summary : ''}`, 'success', 8000);
         playBellSound();
-        fetchOrders();
+        fetchOrders(false);
       };
 
       socket.on('kitchen:new-ticket', handleNewTicket);
@@ -88,14 +117,18 @@ export const KitchenPage = () => {
 
       return () => {
         clearInterval(timer);
+        clearInterval(pollInterval);
         socket.off('kitchen:new-ticket', handleNewTicket);
         socket.off('order:updated', handleUpdate);
         socket.off('kitchen:ticket-ready', handleTicketReady);
       };
     }
 
-    return () => clearInterval(timer);
-  }, []);
+    return () => {
+      clearInterval(timer);
+      clearInterval(pollInterval);
+    };
+  }, [fetchOrders, addToast]);
 
   // Formatear el tiempo transcurrido en vivo (Minutos y Segundos)
   const getElapsedFormatted = (createdAtStr) => {

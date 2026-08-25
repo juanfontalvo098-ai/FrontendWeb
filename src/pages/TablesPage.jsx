@@ -70,6 +70,13 @@ export const TablesPage = () => {
   useEffect(() => {
     fetchTables();
 
+    // Auto-polling cada 10 segundos para actualizar estado de mesas entre meseros
+    const pollInterval = setInterval(() => {
+      if (!document.hidden) {
+        fetchTables();
+      }
+    }, 10000);
+
     const socket = getSocket();
     if (socket) {
       const handleStatusChange = () => fetchTables();
@@ -77,10 +84,13 @@ export const TablesPage = () => {
       socket.on('order:updated', handleStatusChange);
 
       return () => {
+        clearInterval(pollInterval);
         socket.off('table:status-changed', handleStatusChange);
         socket.off('order:updated', handleStatusChange);
       };
     }
+
+    return () => clearInterval(pollInterval);
   }, []);
 
   // Abrir mesa directamente (sin crear orden automática hasta que se guarde o envíe a cocina)
