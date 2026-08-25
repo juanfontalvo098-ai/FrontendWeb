@@ -734,58 +734,110 @@ export const ProductsPage = () => {
 
         {/* Fila 2: Chips de Categorías (solo en pestaña productos) */}
         {activeTab === 'productos' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', padding: '4px 0 8px 0', scrollbarWidth: 'none' }}>
-            <button
-              type="button"
-              onClick={() => setCategoryFilter('all')}
-              style={{
-                padding: '4px 12px',
-                borderRadius: '16px',
-                fontSize: '11.5px',
-                fontWeight: categoryFilter === 'all' ? 800 : 500,
-                border: categoryFilter === 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                background: categoryFilter === 'all' ? 'var(--accent-primary)' : 'var(--bg-primary)',
-                color: categoryFilter === 'all' ? '#fff' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.15s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                boxShadow: categoryFilter === 'all' ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none'
-              }}
-            >
-              Todas ({categoryCounts.all || 0})
-            </button>
-            {categories.map(c => {
-              const isSelected = categoryFilter === c.id.toString();
-              const count = categoryCounts[c.id] || 0;
-              return (
+          <div style={{ padding: '8px 0 10px 0', borderTop: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Layers size={13} style={{ color: 'var(--accent-primary)' }} />
+                Categorías ({categories.length})
+              </span>
+              {categoryFilter !== 'all' && (
                 <button
-                  key={c.id}
                   type="button"
-                  onClick={() => setCategoryFilter(c.id.toString())}
+                  onClick={() => setCategoryFilter('all')}
                   style={{
-                    padding: '4px 12px',
-                    borderRadius: '16px',
-                    fontSize: '11.5px',
-                    fontWeight: isSelected ? 800 : 500,
-                    border: isSelected ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                    background: isSelected ? 'var(--accent-primary)' : 'var(--bg-primary)',
-                    color: isSelected ? '#fff' : 'var(--text-secondary)',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent-primary)',
+                    fontSize: '11px',
+                    fontWeight: 700,
                     cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    transition: 'all 0.15s ease',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    boxShadow: isSelected ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none'
+                    gap: '3px',
+                    padding: '2px 6px',
+                    borderRadius: '4px'
                   }}
                 >
-                  {c.name} ({count})
+                  <RotateCcw size={11} />
+                  Ver todas
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              {/* Opción Todas */}
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('all')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11.5px',
+                  fontWeight: categoryFilter === 'all' ? 800 : 500,
+                  border: categoryFilter === 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                  background: categoryFilter === 'all' ? 'var(--accent-primary)' : 'var(--bg-primary)',
+                  color: categoryFilter === 'all' ? '#fff' : 'var(--text-primary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: categoryFilter === 'all' ? '0 2px 8px rgba(99, 102, 241, 0.35)' : 'none'
+                }}
+              >
+                <span>Todas</span>
+                <span style={{
+                  background: categoryFilter === 'all' ? 'rgba(255, 255, 255, 0.28)' : 'var(--bg-tertiary, rgba(0,0,0,0.06))',
+                  color: categoryFilter === 'all' ? '#fff' : 'var(--text-muted)',
+                  padding: '1px 6px',
+                  borderRadius: '10px',
+                  fontSize: '10px',
+                  fontWeight: 800
+                }}>
+                  {categoryCounts.all || 0}
+                </span>
+              </button>
+
+              {/* Lista de Categorías */}
+              {categories.map(c => {
+                const isSelected = categoryFilter === c.id.toString();
+                const count = categoryCounts[c.id] || 0;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCategoryFilter(c.id.toString())}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '11.5px',
+                      fontWeight: isSelected ? 800 : 500,
+                      border: isSelected ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      background: isSelected ? 'var(--accent-primary)' : 'var(--bg-primary)',
+                      color: isSelected ? '#fff' : 'var(--text-primary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: isSelected ? '0 2px 8px rgba(99, 102, 241, 0.35)' : 'none'
+                    }}
+                  >
+                    <span>{c.name}</span>
+                    <span style={{
+                      background: isSelected ? 'rgba(255, 255, 255, 0.28)' : 'var(--bg-tertiary, rgba(0,0,0,0.06))',
+                      color: isSelected ? '#fff' : 'var(--text-muted)',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      fontSize: '10px',
+                      fontWeight: 800
+                    }}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
