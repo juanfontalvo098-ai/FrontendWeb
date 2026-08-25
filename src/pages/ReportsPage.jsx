@@ -5,8 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
-import { Badge } from '../components/ui/Badge';
-import { api, formatCOP } from '../api/client';
+import { api, formatCOP, formatDateTime, formatDate, formatTime } from '../api/client';
 import { useUiStore } from '../store/uiStore';
 import { printShiftCloseTicket } from '../utils/printUtils';
 
@@ -248,7 +247,7 @@ export const ReportsPage = () => {
                     <td style={{ padding: '12px 8px', fontWeight: 700 }}>#{shiftNum}</td>
                     <td style={{ padding: '12px 8px' }}>{shift.shift_name}</td>
                     <td style={{ padding: '12px 8px', fontWeight: 600 }}>{shift.user_name}</td>
-                    <td style={{ padding: '12px 8px', color: 'var(--text-secondary)', fontSize: '12px' }}>{shift.closed_at}</td>
+                    <td style={{ padding: '12px 8px', color: 'var(--text-secondary)', fontSize: '12px' }}>{formatDateTime(shift.closed_at)}</td>
                     <td style={{ padding: '12px 8px', fontWeight: 700, color: 'var(--accent-primary)' }}>{formatCOP(shift.gross_revenue)}</td>
                     <td style={{ padding: '12px 8px' }}>{formatCOP(shift.net_revenue)}</td>
                     <td style={{ padding: '12px 8px', fontWeight: 700, color: shift.difference < 0 ? 'var(--accent-danger)' : 'var(--accent-success)' }}>
@@ -295,8 +294,8 @@ export const ReportsPage = () => {
               </div>
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                 <div>Cajero: <strong>{selectedShift.user_name}</strong></div>
-                <div>Apertura: {selectedShift.opened_at}</div>
-                <div>Cierre: {selectedShift.closed_at}</div>
+                <div>Apertura: <strong>{formatDateTime(selectedShift.opened_at)}</strong></div>
+                <div>Cierre: <strong>{formatDateTime(selectedShift.closed_at)}</strong></div>
                 <div>Facturas Emitidas: <strong>{selectedShift.total_tickets}</strong></div>
               </div>
             </div>
@@ -505,7 +504,7 @@ export const ReportsPage = () => {
                         snapshot.invoices.map((inv, idx) => (
                           <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
                             <td style={{ padding: '8px', fontWeight: 700 }}>{inv.invoice_number}</td>
-                            <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>{inv.created_at}</td>
+                            <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>{formatDateTime(inv.created_at)}</td>
                             <td style={{ padding: '8px' }}>{inv.table_number || `Mesa ${inv.table_id}`} | {inv.waiter_name}</td>
                             <td style={{ padding: '8px', textTransform: 'uppercase', fontWeight: 600 }}>{inv.payment_method}</td>
                             <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700, color: 'var(--accent-primary)' }}>{formatCOP(inv.total)}</td>
