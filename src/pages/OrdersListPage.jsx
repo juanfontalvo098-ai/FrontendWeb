@@ -2187,7 +2187,7 @@ export const OrdersListPage = () => {
         </span>
       );
     }
-    const pm = (order.invoice_payment_method || '').toLowerCase();
+    const pm = (order.invoice_payment_method || order.payment_method || '').toLowerCase();
     if (pm === 'credito') {
       return (
         <span style={{ color: '#8b5cf6', fontWeight: 700, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -2212,13 +2212,20 @@ export const OrdersListPage = () => {
     if (pm === 'transferencia' || pm === 'nequi' || pm === 'daviplata') {
       return (
         <span style={{ color: '#8b5cf6', fontWeight: 600, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'capitalize' }}>
-          <Sparkles size={12} /> {order.invoice_payment_method}
+          <Sparkles size={12} /> {order.invoice_payment_method || order.payment_method || 'Transferencia'}
+        </span>
+      );
+    }
+    if (pm.includes('mixto')) {
+      return (
+        <span style={{ color: '#ec4899', fontWeight: 600, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px', textTransform: 'capitalize' }}>
+          <Sparkles size={12} /> Mixto
         </span>
       );
     }
     return (
       <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '11.5px', textTransform: 'capitalize' }}>
-        {order.invoice_payment_method || 'Pagado'}
+        {order.invoice_payment_method || order.payment_method || 'Efectivo'}
       </span>
     );
   };
