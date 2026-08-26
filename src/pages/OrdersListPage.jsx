@@ -1591,6 +1591,9 @@ export const OrdersListPage = () => {
       const cashExpected = paymentMethod === 'mixto' ? cashAmount : (paymentMethod === 'efectivo' ? totalBilled : 0);
       const changeVal = tenderedVal > cashExpected ? (tenderedVal - cashExpected) : 0;
 
+      const paymentReceived = paymentDiff.received > 0 ? paymentDiff.received : billingCalculations.grandTotal;
+      const amountPaid = paymentMethod === 'credito' ? 0 : (recordRemainingAsCredit ? Math.min(paymentReceived, billingCalculations.totalSinPropina) : paymentReceived);
+
       const payload = {
         order_id: selectedOrder.id,
         customer_id: finalCustId,
@@ -1599,7 +1602,7 @@ export const OrdersListPage = () => {
         delivery_fee: billingCalculations.delFee,
         tip_percentage: tipMode === 'percentage' ? (parseFloat(tipPercentage) || 0) / 100 : 0,
         custom_tip_amount: (tipMode === 'custom' || billingCalculations.tipVal > 0) ? billingCalculations.tipVal : null,
-        amount_paid: paymentMethod === 'credito' ? 0 : Math.min(paymentDiff.received, billingCalculations.grandTotal),
+        amount_paid: amountPaid,
         cash_amount: cashAmount,
         transfer_amount: transferAmount,
         card_amount: cardAmount,
@@ -1633,10 +1636,30 @@ export const OrdersListPage = () => {
           console.warn('Error al cargar endpoint print:', printErr);
         }
       }
-      setGeneratedInvoice(invoicePrint || result);
+
+      const mergedInvoice = {
+        ...(selectedOrder || {}),
+        ...(result || {}),
+        ...(invoicePrint || {}),
+        items: (invoicePrint?.items && invoicePrint.items.length > 0)
+          ? invoicePrint.items
+          : ((result?.items && result.items.length > 0) ? result.items : (selectedOrder?.items || [])),
+        settings: invoicePrint?.settings || result?.settings || settings || {},
+        invoice_number: invoicePrint?.invoice_number || result?.invoice_number || result?.invoice?.invoice_number || 'POS-0001',
+        subtotal: invoicePrint?.subtotal !== undefined ? invoicePrint.subtotal : (result?.subtotal !== undefined ? result.subtotal : billingCalculations.itemsSubtotal),
+        total: invoicePrint?.total !== undefined ? invoicePrint.total : (result?.total !== undefined ? result.total : billingCalculations.grandTotal),
+        cashier_name: invoicePrint?.cashier_name || result?.cashier_name || user?.full_name || 'Caja',
+        waiter_name: invoicePrint?.waiter_name || result?.waiter_name || selectedOrder?.waiter_name || user?.full_name,
+        payment_method: invoicePrint?.payment_method || result?.payment_method || paymentMethod || 'efectivo',
+        customer_name: invoicePrint?.customer_name || result?.customer_name || selectedOrder?.customer_name || (finalCustId ? 'Cliente' : 'Consumidor Final'),
+        customer_document: invoicePrint?.customer_document || result?.customer_document || selectedOrder?.customer_document || (finalCustId ? '' : '222222222222'),
+        created_at: invoicePrint?.created_at || result?.created_at || new Date().toISOString()
+      };
+
+      setGeneratedInvoice(mergedInvoice);
       setOrderModalOpen(false);
       setShowInvoiceModal(true);
-      fetchData();
+      await fetchData();
     } catch (err) {
       console.error('Error al emitir factura:', err);
       addToast(err.message || 'Error al emitir factura', 'error');
@@ -1660,7 +1683,21 @@ export const OrdersListPage = () => {
         return;
       }
       const invPrint = await api.get(`/invoices/${invId}/print`);
-      setGeneratedInvoice(invPrint);
+      const mergedInvoice = {
+        ...(order || {}),
+        ...(invPrint || {}),
+        items: (invPrint?.items && invPrint.items.length > 0) ? invPrint.items : (order.items || []),
+        settings: invPrint?.settings || settings || {},
+        invoice_number: invPrint?.invoice_number || order.invoice_number || 'POS-0001',
+        subtotal: invPrint?.subtotal !== undefined ? invPrint.subtotal : order.items_subtotal,
+        total: invPrint?.total !== undefined ? invPrint.total : (order.final_total || order.invoice_total),
+        cashier_name: invPrint?.cashier_name || 'Caja',
+        waiter_name: invPrint?.waiter_name || order.waiter_name,
+        payment_method: invPrint?.payment_method || order.invoice_payment_method || 'efectivo',
+        customer_name: invPrint?.customer_name || order.customer_name || 'Consumidor Final',
+        customer_document: invPrint?.customer_document || order.customer_document || '222222222222'
+      };
+      setGeneratedInvoice(mergedInvoice);
       setShowInvoiceModal(true);
     } catch (err) {
       console.error('Error al cargar ticket de factura:', err);
@@ -5170,7 +5207,7 @@ export const OrdersListPage = () => {
         <Modal
           isOpen={showInvoiceModal}
           onClose={() => setShowInvoiceModal(false)}
-          title={`Ticket Factura POS #${generatedInvoice.invoice_number}`}
+          title={`Ticket Factura POS #${generatedInvoice.invoice_number || 'POS'}`}
         >
           <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: '12px' }}>
             <div style={{ display: 'flex', gap: '6px' }}>
@@ -5192,6 +5229,13 @@ export const OrdersListPage = () => {
           {/* Ticket térmico renderizado 100% idéntico a la impresión */}
           {(() => {
             const effSettings = { ...(generatedInvoice.settings || {}), ...(settings || {}) };
+            const computedSubtotal = generatedInvoice.subtotal !== undefined
+              ? parseFloat(generatedInvoice.subtotal)
+              : (generatedInvoice.items || []).reduce((acc, it) => acc + ((parseFloat(it.quantity) || 1) * (parseFloat(it.unit_price) || 0)), 0);
+            const computedTotal = generatedInvoice.total !== undefined
+              ? parseFloat(generatedInvoice.total)
+              : Math.max(0, computedSubtotal - (parseFloat(generatedInvoice.discount_amount) || 0) + (parseFloat(generatedInvoice.delivery_fee) || 0) + (parseFloat(generatedInvoice.tip_amount) || 0));
+
             return (
               <div
                 ref={printRef}
@@ -5337,7 +5381,7 @@ export const OrdersListPage = () => {
                 <div style={{ borderTop: '1px solid #000', margin: '5px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
                   <span>Subtotal:</span>
-                  <span style={{ fontWeight: 800 }}>{formatCOP(generatedInvoice.subtotal)}</span>
+                  <span style={{ fontWeight: 800 }}>{formatCOP(computedSubtotal)}</span>
                 </div>
                 {parseFloat(generatedInvoice.discount_amount || 0) > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
@@ -5367,8 +5411,8 @@ export const OrdersListPage = () => {
                 {/* Recuadro de Crédito vs Pago Total */}
                 {(() => {
                   const isCredit = generatedInvoice.payment_method === 'credito' || parseFloat(generatedInvoice.credit_balance || generatedInvoice.credit_amount || 0) > 0;
-                  const creditBalance = parseFloat(generatedInvoice.credit_balance !== undefined ? generatedInvoice.credit_balance : (generatedInvoice.credit_amount || (generatedInvoice.payment_method === 'credito' ? generatedInvoice.total : 0)));
-                  const paidInitial = Math.max(0, parseFloat(generatedInvoice.total || 0) - creditBalance);
+                  const creditBalance = parseFloat(generatedInvoice.credit_balance !== undefined ? generatedInvoice.credit_balance : (generatedInvoice.credit_amount || (generatedInvoice.payment_method === 'credito' ? computedTotal : 0)));
+                  const paidInitial = Math.max(0, computedTotal - creditBalance);
 
                   if (isCredit && creditBalance > 0) {
                     return (
@@ -5378,7 +5422,7 @@ export const OrdersListPage = () => {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px' }}>
                           <span>Total Factura:</span>
-                          <span style={{ fontWeight: 800 }}>{formatCOP(generatedInvoice.total)}</span>
+                          <span style={{ fontWeight: 800 }}>{formatCOP(computedTotal)}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px' }}>
                           <span>Abono Inicial Recibido:</span>
@@ -5403,7 +5447,7 @@ export const OrdersListPage = () => {
                       <div style={{ borderTop: '2px solid #000', margin: '5px 0' }} />
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '14px' : '16px', color: '#000' }}>
                         <span>TOTAL PAGADO:</span>
-                        <span>{formatCOP(generatedInvoice.total)}</span>
+                        <span>{formatCOP(computedTotal)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', marginTop: '3px', color: '#000' }}>
                         <span>Forma de Pago:</span>

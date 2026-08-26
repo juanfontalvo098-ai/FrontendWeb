@@ -376,8 +376,9 @@ export const BillingPage = () => {
 
       const invoice = await api.post('/invoices', payload);
       setGeneratedInvoice({
+        ...selectedOrder,
         ...invoice,
-        items: selectedOrder.items,
+        items: invoice.items && invoice.items.length > 0 ? invoice.items : selectedOrder.items,
         tax_details: taxDetails,
         customer_name: selectedCustomerObj?.name || invoice.customer_name || 'Consumidor Final',
         customer_doc_type: selectedCustomerObj?.document_type || invoice.customer_doc_type || 'CC',
@@ -388,7 +389,8 @@ export const BillingPage = () => {
         delivery_fee: currentDeliveryFee,
         discount_amount: appliedDiscountAmount,
         discount_type: appliedDiscountLabel,
-        waiter_name: selectedOrder.waiter_name || 'Mesero',
+        waiter_name: selectedOrder.waiter_name || invoice.waiter_name || 'Mesero',
+        cashier_name: invoice.cashier_name || 'Caja',
         table_number: selectedOrder.order_type === 'delivery'
           ? `Domicilio (${selectedCustomerObj?.name || 'Cliente'})`
           : (selectedOrder.table_number || `Mesa ${selectedOrder.table_id}`)
@@ -1452,81 +1454,94 @@ export const BillingPage = () => {
                   </table>
 
                   <div style={{ borderTop: '1px solid #000', margin: '5px 0' }}></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
-                    <span>Subtotal:</span>
-                    <span style={{ fontWeight: 800 }}>{formatCOP(generatedInvoice.subtotal)}</span>
-                  </div>
-                  {parseFloat(generatedInvoice.discount_amount || 0) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
-                      <span>Descuento:</span>
-                      <span style={{ fontWeight: 800 }}>-{formatCOP(generatedInvoice.discount_amount)}</span>
-                    </div>
-                  )}
-                  {parseFloat(generatedInvoice.delivery_fee || 0) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
-                      <span>Tarifa Domicilio:</span>
-                      <span style={{ fontWeight: 800 }}>+{formatCOP(generatedInvoice.delivery_fee)}</span>
-                    </div>
-                  )}
-                  {parseFloat(generatedInvoice.tip_amount || 0) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
-                      <span>Propina Voluntaria:</span>
-                      <span style={{ fontWeight: 800 }}>+{formatCOP(generatedInvoice.tip_amount)}</span>
-                    </div>
-                  )}
-                  {parseFloat(generatedInvoice.tax_total || 0) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12px', margin: '2.5px 0', color: '#000' }}>
-                      <span>Impuestos Incluidos:</span>
-                      <span style={{ fontWeight: 700 }}>{formatCOP(generatedInvoice.tax_total)}</span>
-                    </div>
-                  )}
-
-                  <div style={{ borderTop: '2px solid #000', margin: '5px 0' }}></div>
-
                   {(() => {
-                    const isCredit = generatedInvoice.payment_method === 'credito' || parseFloat(generatedInvoice.credit_balance || generatedInvoice.credit_amount || 0) > 0;
-                    const creditBalance = parseFloat(generatedInvoice.credit_balance !== undefined ? generatedInvoice.credit_balance : (generatedInvoice.credit_amount || (generatedInvoice.payment_method === 'credito' ? generatedInvoice.total : 0)));
-                    const paidInitial = Math.max(0, parseFloat(generatedInvoice.total || 0) - creditBalance);
-
-                    if (isCredit && creditBalance > 0) {
-                      return (
-                        <div style={{ border: '1.5px solid #000', padding: '6px 8px', margin: '4px 0', background: '#fafafa' }}>
-                          <div style={{ textAlign: 'center', fontWeight: 800, fontSize: paperWidth === '58mm' ? '12px' : '13px', color: '#000' }}>
-                            *** CONDICIÓN DE PAGO: CRÉDITO ***
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px', marginTop: '4px', color: '#000' }}>
-                            <span>Total Factura:</span>
-                            <span style={{ fontWeight: 800 }}>{formatCOP(generatedInvoice.total)}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px', color: '#000' }}>
-                            <span>Abono Inicial Recibido:</span>
-                            <span style={{ fontWeight: 800 }}>{formatCOP(paidInitial)}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '13px' : '14.5px', color: '#000', marginTop: '3px', borderTop: '1px dashed #000', paddingTop: '3px' }}>
-                            <span>VALOR ADEUDADO:</span>
-                            <span>{formatCOP(creditBalance)}</span>
-                          </div>
-                          {generatedInvoice.credit_due_date && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '10.5px' : '11.5px', marginTop: '2px', color: '#000' }}>
-                              <span>Fecha Límite Pago:</span>
-                              <span>{generatedInvoice.credit_due_date}</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
+                    const computedSubtotal = generatedInvoice.subtotal !== undefined
+                      ? parseFloat(generatedInvoice.subtotal)
+                      : (generatedInvoice.items || []).reduce((acc, it) => acc + ((parseFloat(it.quantity) || 1) * (parseFloat(it.unit_price) || 0)), 0);
+                    const computedTotal = generatedInvoice.total !== undefined
+                      ? parseFloat(generatedInvoice.total)
+                      : Math.max(0, computedSubtotal - (parseFloat(generatedInvoice.discount_amount) || 0) + (parseFloat(generatedInvoice.delivery_fee) || 0) + (parseFloat(generatedInvoice.tip_amount) || 0));
 
                     return (
                       <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '14px' : '16px', color: '#000' }}>
-                          <span>TOTAL PAGADO:</span>
-                          <span>{formatCOP(generatedInvoice.total)}</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
+                          <span>Subtotal:</span>
+                          <span style={{ fontWeight: 800 }}>{formatCOP(computedSubtotal)}</span>
                         </div>
+                        {parseFloat(generatedInvoice.discount_amount || 0) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
+                            <span>Descuento:</span>
+                            <span style={{ fontWeight: 800 }}>-{formatCOP(generatedInvoice.discount_amount)}</span>
+                          </div>
+                        )}
+                        {parseFloat(generatedInvoice.delivery_fee || 0) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
+                            <span>Tarifa Domicilio:</span>
+                            <span style={{ fontWeight: 800 }}>+{formatCOP(generatedInvoice.delivery_fee)}</span>
+                          </div>
+                        )}
+                        {parseFloat(generatedInvoice.tip_amount || 0) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', margin: '2.5px 0', color: '#000' }}>
+                            <span>Propina Voluntaria:</span>
+                            <span style={{ fontWeight: 800 }}>+{formatCOP(generatedInvoice.tip_amount)}</span>
+                          </div>
+                        )}
+                        {parseFloat(generatedInvoice.tax_total || 0) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12px', margin: '2.5px 0', color: '#000' }}>
+                            <span>Impuestos Incluidos:</span>
+                            <span style={{ fontWeight: 700 }}>{formatCOP(generatedInvoice.tax_total)}</span>
+                          </div>
+                        )}
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', marginTop: '3px', color: '#000' }}>
-                          <span>Forma de Pago:</span>
-                          <span style={{ textTransform: 'capitalize', fontWeight: 800 }}>{generatedInvoice.payment_method || 'Efectivo'}</span>
-                        </div>
+                        <div style={{ borderTop: '2px solid #000', margin: '5px 0' }}></div>
+
+                        {(() => {
+                          const isCredit = generatedInvoice.payment_method === 'credito' || parseFloat(generatedInvoice.credit_balance || generatedInvoice.credit_amount || 0) > 0;
+                          const creditBalance = parseFloat(generatedInvoice.credit_balance !== undefined ? generatedInvoice.credit_balance : (generatedInvoice.credit_amount || (generatedInvoice.payment_method === 'credito' ? computedTotal : 0)));
+                          const paidInitial = Math.max(0, computedTotal - creditBalance);
+
+                          if (isCredit && creditBalance > 0) {
+                            return (
+                              <div style={{ border: '1.5px solid #000', padding: '6px 8px', margin: '4px 0', background: '#fafafa' }}>
+                                <div style={{ textAlign: 'center', fontWeight: 800, fontSize: paperWidth === '58mm' ? '12px' : '13px', color: '#000' }}>
+                                  *** CONDICIÓN DE PAGO: CRÉDITO ***
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px', marginTop: '4px', color: '#000' }}>
+                                  <span>Total Factura:</span>
+                                  <span style={{ fontWeight: 800 }}>{formatCOP(computedTotal)}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '11.5px' : '12.5px', color: '#000' }}>
+                                  <span>Abono Inicial Recibido:</span>
+                                  <span style={{ fontWeight: 800 }}>{formatCOP(paidInitial)}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '13px' : '14.5px', color: '#000', marginTop: '3px', borderTop: '1px dashed #000', paddingTop: '3px' }}>
+                                  <span>VALOR ADEUDADO:</span>
+                                  <span>{formatCOP(creditBalance)}</span>
+                                </div>
+                                {generatedInvoice.credit_due_date && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '10.5px' : '11.5px', marginTop: '2px', color: '#000' }}>
+                                    <span>Fecha Límite Pago:</span>
+                                    <span>{generatedInvoice.credit_due_date}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 900, fontSize: paperWidth === '58mm' ? '14px' : '16px', color: '#000' }}>
+                                <span>TOTAL PAGADO:</span>
+                                <span>{formatCOP(computedTotal)}</span>
+                              </div>
+
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: paperWidth === '58mm' ? '12px' : '13px', marginTop: '3px', color: '#000' }}>
+                                <span>Forma de Pago:</span>
+                                <span style={{ textTransform: 'capitalize', fontWeight: 800 }}>{generatedInvoice.payment_method || 'Efectivo'}</span>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </>
                     );
                   })()}
