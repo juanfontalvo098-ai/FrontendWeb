@@ -69,7 +69,7 @@ export const OrderPage = () => {
       setSettings(settingsData);
       if (tableData) setTableDetails(tableData);
       
-      const activeOrder = ordersData.find(o => ['abierta', 'enviado_cocina', 'en_preparacion', 'lista', 'pendiente_pago'].includes(o.status));
+      const activeOrder = ordersData.find(o => ['abierta', 'enviado_cocina', 'en_preparacion', 'lista', 'pendiente_pago'].includes(o.status) && !o.invoice_id && !o.invoice_number && o.status !== 'cerrada');
       if (activeOrder) {
         const fullOrder = await api.get(`/orders/${activeOrder.id}`);
         setCurrentOrder(fullOrder);

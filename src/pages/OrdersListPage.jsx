@@ -751,13 +751,14 @@ export const OrdersListPage = () => {
       // 2. Filtro por Estado
       if (statusFilter !== 'all') {
         const creditBal = parseFloat(o.credit_balance || 0);
+        const isClosed = o.status === 'cerrada' || !!o.invoice_id || !!o.invoice_number;
         if (statusFilter === 'pending') {
-          if (o.status === 'cerrada' && creditBal === 0) return false;
+          if (isClosed && creditBal === 0) return false;
           if (o.status === 'cancelada') return false;
         } else if (statusFilter === 'pendiente_pago') {
           if (o.status !== 'pendiente_pago' && creditBal === 0) return false;
         } else if (statusFilter === 'cerrada') {
-          if (o.status !== 'cerrada' || creditBal > 0) return false;
+          if (!isClosed || creditBal > 0) return false;
         } else if (statusFilter === 'cancelada') {
           if (o.status !== 'cancelada') return false;
         }
@@ -875,7 +876,7 @@ export const OrdersListPage = () => {
 
     filteredOrders.forEach(o => {
       const creditBal = parseFloat(o.credit_balance || 0);
-      const isPaid = o.status === 'cerrada' && creditBal === 0;
+      const isPaid = (o.status === 'cerrada' || !!o.invoice_id || !!o.invoice_number) && creditBal === 0;
       const isCancelled = o.status === 'cancelada';
       if (isCancelled) return;
 
@@ -1656,6 +1657,22 @@ export const OrdersListPage = () => {
         created_at: invoicePrint?.created_at || result?.created_at || new Date().toISOString()
       };
 
+      setOrders(prevOrders => prevOrders.map(o => {
+        if (o.id === selectedOrder.id) {
+          return {
+            ...o,
+            status: 'cerrada',
+            invoice_id: mergedInvoice.id || invId,
+            invoice_number: mergedInvoice.invoice_number,
+            invoice_total: mergedInvoice.total,
+            invoice_payment_method: mergedInvoice.payment_method,
+            invoice_created_at: mergedInvoice.created_at,
+            credit_balance: '0.00'
+          };
+        }
+        return o;
+      }));
+
       setGeneratedInvoice(mergedInvoice);
       setOrderModalOpen(false);
       setShowInvoiceModal(true);
@@ -2127,7 +2144,7 @@ export const OrdersListPage = () => {
         </span>
       );
     }
-    if (order.status === 'cerrada') {
+    if (order.status === 'cerrada' || order.invoice_id || order.invoice_number) {
       return (
         <span style={{ color: 'var(--accent-success)', fontWeight: 700, fontSize: '11.5px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           <CheckCircle2 size={13} /> Pagada / Cerrada
@@ -2163,7 +2180,7 @@ export const OrdersListPage = () => {
   };
 
   const getOrderPaymentBadge = (order) => {
-    if (!order.invoice_number && order.status !== 'cerrada') {
+    if (!order.invoice_number && !order.invoice_id && order.status !== 'cerrada') {
       return (
         <span style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
           ⏳ Sin Facturar
@@ -2226,7 +2243,7 @@ export const OrdersListPage = () => {
         </div>
       );
     }
-    if (order.status === 'cerrada') {
+    if (order.status === 'cerrada' || order.invoice_id || order.invoice_number) {
       return (
         <span style={{ color: 'var(--accent-success)', fontSize: '11.5px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
           <CheckCircle2 size={12} /> $0 (Al día)
@@ -2867,7 +2884,7 @@ export const OrdersListPage = () => {
               ) : (
                 filteredOrders.map((o) => {
                   const creditBal = parseFloat(o.credit_balance || 0);
-                  const isPaid = o.status === 'cerrada' && creditBal === 0;
+                  const isPaid = (o.status === 'cerrada' || !!o.invoice_id || !!o.invoice_number) && creditBal === 0;
                   const isPendingCredit = (o.status === 'pendiente_pago' || creditBal > 0) && o.status !== 'cancelada';
                   const isCancelled = o.status === 'cancelada';
                   const isOpen = !isPaid && !isCancelled && !isPendingCredit;
