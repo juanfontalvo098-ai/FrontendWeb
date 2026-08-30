@@ -85,6 +85,8 @@ export const CashPage = () => {
         (parseFloat(summary.creditSales) || 0)
       ) || 0);
 
+      const thirdPartyRev = parseFloat(summary.thirdPartyRevenue ?? summary.third_party_revenue ?? zData.third_party_revenue ?? 0);
+
       const shiftData = {
         id: cashId,
         shift_name: 'Turno Principal',
@@ -95,6 +97,7 @@ export const CashPage = () => {
         declared_amount: declaredCash,
         difference: diff,
         gross_revenue: grossRev,
+        third_party_revenue: thirdPartyRev,
         snapshot: {
           initialFloat: openingBase,
           cashSales: parseFloat(summary.cashSales || 0),
@@ -106,6 +109,7 @@ export const CashPage = () => {
           expectedCash: expectedCash,
           totalTips: parseFloat(summary.totalTips || 0),
           cashRefunds: parseFloat(summary.cashRefunds || 0),
+          thirdPartyRevenue: thirdPartyRev,
           audit: audit
         }
       };

@@ -696,6 +696,8 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
     : (snapshot.declaredTransfers !== undefined && snapshot.declaredTransfers !== null ? parseFloat(snapshot.declaredTransfers) : null);
   const difference = parseFloat(shift.difference ?? snapshot.difference ?? (declaredCash - expectedCash));
   const grossRevenue = parseFloat(shift.gross_revenue ?? snapshot.grossRevenue ?? (cashSales + cardSales + transferSales + creditSales));
+  const thirdPartyRevenue = parseFloat(shift.third_party_revenue ?? snapshot.thirdPartyRevenue ?? snapshot.third_party_revenue ?? 0);
+  const ownGrossRevenue = Math.max(0, grossRevenue - thirdPartyRevenue);
 
   const width = 38;
   const line = '-'.repeat(width);
@@ -733,11 +735,16 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
   if (creditSales > 0) {
     text += `Ventas Credito:`.padEnd(20) + `${formatCOP(creditSales)}`.padStart(18) + '\n';
   }
+  if (thirdPartyRevenue > 0) {
+    text += line + '\n';
+    text += `VENTAS PROPIAS:`.padEnd(20) + `${formatCOP(ownGrossRevenue)}`.padStart(18) + '\n';
+    text += `Ventas Terceros:`.padEnd(20) + `${formatCOP(thirdPartyRevenue)}`.padStart(18) + '\n';
+  }
   if (totalTips > 0) {
     text += `Propinas Recaudadas:`.padEnd(20) + `${formatCOP(totalTips)}`.padStart(18) + '\n';
   }
   text += doubleLine + '\n';
-  text += `VENTAS BRUTAS:`.padEnd(20) + `${formatCOP(grossRevenue)}`.padStart(18) + '\n';
+  text += (thirdPartyRevenue > 0 ? `TOTAL RECAUDADO:` : `VENTAS BRUTAS:`).padEnd(20) + `${formatCOP(grossRevenue)}`.padStart(18) + '\n';
   text += doubleLine + '\n';
   return text;
 };
@@ -1295,6 +1302,8 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
     : (snapshot.declaredTransfers !== undefined && snapshot.declaredTransfers !== null ? parseFloat(snapshot.declaredTransfers) : null);
   const difference = parseFloat(shift.difference ?? snapshot.difference ?? (declaredCash - expectedCash));
   const grossRevenue = parseFloat(shift.gross_revenue ?? snapshot.grossRevenue ?? (cashSales + cardSales + transferSales + creditSales));
+  const thirdPartyRevenue = parseFloat(shift.third_party_revenue ?? snapshot.thirdPartyRevenue ?? snapshot.third_party_revenue ?? 0);
+  const ownGrossRevenue = Math.max(0, grossRevenue - thirdPartyRevenue);
   const canceledOrdersCount = parseInt(audit.canceledOrdersCount || snapshot.audit?.canceledOrdersCount || 0);
   const canceledAmount = parseFloat(shift.total_voids ?? audit.canceledAmount ?? snapshot.audit?.canceledAmount ?? 0);
 
@@ -1341,9 +1350,20 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
           ${declaredTransfers !== null ? `<div class="flex-between"><span>Transf. Declaradas:</span><span>${formatCOP(declaredTransfers)}</span></div>` : ''}
           <div class="flex-between"><span>Ventas Tarjeta:</span><span>${formatCOP(cardSales)}</span></div>
           ${creditSales > 0 ? `<div class="flex-between"><span>Ventas a Crédito (CxC):</span><span>${formatCOP(creditSales)}</span></div>` : ''}
+          ${thirdPartyRevenue > 0 ? `
+          <div class="dashed-line"></div>
+          <div class="flex-between bold" style="font-size: 13px;">
+            <span>VENTAS PROPIAS (NEGOCIO):</span>
+            <span>${formatCOP(ownGrossRevenue)}</span>
+          </div>
+          <div class="flex-between" style="color: #444; font-weight: 700;">
+            <span>🤝 Ventas Terceros/Socios:</span>
+            <span>${formatCOP(thirdPartyRevenue)}</span>
+          </div>
+          ` : ''}
           <div class="double-line"></div>
           <div class="flex-between bold" style="font-size: 14px;">
-            <span>VENTAS BRUTAS:</span>
+            <span>${thirdPartyRevenue > 0 ? 'TOTAL RECAUDADO (BRUTO):' : 'VENTAS BRUTAS:'}</span>
             <span>${formatCOP(grossRevenue)}</span>
           </div>
           <div class="solid-line"></div>

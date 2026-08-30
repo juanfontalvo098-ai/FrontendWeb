@@ -866,8 +866,14 @@ export const OrdersListPage = () => {
 
   // KPIs Resumen
   const kpis = useMemo(() => {
-    let totalPaid = 0;
-    let totalPending = 0;
+    let totalPaidOwn = 0;
+    let totalPaidThirdParty = 0;
+    let totalPaidGross = 0;
+
+    let totalPendingOwn = 0;
+    let totalPendingThirdParty = 0;
+    let totalPendingGross = 0;
+
     let totalCreditBalance = 0;
     let totalTips = 0;
     let countPaid = 0;
@@ -880,7 +886,18 @@ export const OrdersListPage = () => {
       const isCancelled = o.status === 'cancelada';
       if (isCancelled) return;
 
-      const orderTotal = o.final_total || o.computed_total || 0;
+      const orderTotal = parseFloat(o.final_total ?? o.computed_total ?? 0);
+      let orderThirdParty = parseFloat(o.third_party_total || 0);
+
+      if (!orderThirdParty && Array.isArray(o.items)) {
+        o.items.forEach(it => {
+          if (it.is_third_party || it.product_is_third_party) {
+            orderThirdParty += (parseFloat(it.quantity) || 1) * (parseFloat(it.unit_price) || 0);
+          }
+        });
+      }
+
+      const orderOwn = Math.max(0, orderTotal - orderThirdParty);
       const tip = parseFloat(o.invoice_tip_amount || 0);
 
       if (creditBal > 0) {
@@ -889,16 +906,33 @@ export const OrdersListPage = () => {
       }
 
       if (isPaid) {
-        totalPaid += orderTotal;
+        totalPaidGross += orderTotal;
+        totalPaidOwn += orderOwn;
+        totalPaidThirdParty += orderThirdParty;
         totalTips += tip;
         countPaid++;
       } else {
-        totalPending += orderTotal;
+        totalPendingGross += orderTotal;
+        totalPendingOwn += orderOwn;
+        totalPendingThirdParty += orderThirdParty;
         countPending++;
       }
     });
 
-    return { totalPaid, totalPending, totalCreditBalance, totalTips, countPaid, countPending, countCredit, totalCount: filteredOrders.length };
+    return {
+      totalPaidOwn,
+      totalPaidThirdParty,
+      totalPaidGross,
+      totalPendingOwn,
+      totalPendingThirdParty,
+      totalPendingGross,
+      totalCreditBalance,
+      totalTips,
+      countPaid,
+      countPending,
+      countCredit,
+      totalCount: filteredOrders.length
+    };
   }, [filteredOrders]);
 
   // Producto(s) Destacado(s) en Estadísticas Superiores de Órdenes
@@ -2335,8 +2369,14 @@ export const OrdersListPage = () => {
           </div>
           <div>
             <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Abiertas por Facturar</div>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--accent-warning)' }}>{formatCOP(kpis.totalPending)}</div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{kpis.countPending} órdenes sin cerrar</div>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--accent-warning)' }}>{formatCOP(kpis.totalPendingOwn)}</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+              {kpis.totalPendingThirdParty > 0 ? (
+                <span style={{ color: '#d97706', fontWeight: 700 }}>🤝 +{formatCOP(kpis.totalPendingThirdParty)} terceros</span>
+              ) : (
+                <span>{kpis.countPending} órdenes sin cerrar</span>
+              )}
+            </div>
           </div>
         </Card>
 
@@ -2356,9 +2396,15 @@ export const OrdersListPage = () => {
             <CheckCircle2 size={22} />
           </div>
           <div>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Facturado & Cobrado</div>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: '#10b981' }}>{formatCOP(kpis.totalPaid)}</div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{kpis.countPaid} facturas emitidas</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Facturado & Cobrado (Propio)</div>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#10b981' }}>{formatCOP(kpis.totalPaidOwn)}</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+              {kpis.totalPaidThirdParty > 0 ? (
+                <span style={{ color: '#d97706', fontWeight: 700 }}>🤝 +{formatCOP(kpis.totalPaidThirdParty)} terceros · {formatCOP(kpis.totalPaidGross)} bruto</span>
+              ) : (
+                <span>{kpis.countPaid} facturas emitidas</span>
+              )}
+            </div>
           </div>
         </Card>
 
@@ -3006,9 +3052,16 @@ export const OrdersListPage = () => {
 
                       {/* Monto Total */}
                       <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 800, color: isPaid ? 'var(--accent-success)' : isCancelled ? 'var(--text-muted)' : 'var(--text-primary)' }}>
-                          {formatCOP(orderTotal)}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 800, color: isPaid ? 'var(--accent-success)' : isCancelled ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                            {formatCOP(orderTotal)}
+                          </span>
+                          {parseFloat(o.third_party_total || 0) > 0 && (
+                            <span style={{ fontSize: '9.5px', color: '#d97706', fontWeight: 700 }}>
+                              🤝 Propio: {formatCOP(Math.max(0, orderTotal - parseFloat(o.third_party_total)))}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Fecha / Hora */}
