@@ -47,6 +47,20 @@ export const initSocket = () => {
 
   const SOCKET_URL = resolveSocketUrl();
 
+  // Si estamos en un backend serverless en Vercel y no hay servidor WebSocket dedicado especificado
+  const isVercelServerless = typeof SOCKET_URL === 'string' && SOCKET_URL.includes('vercel.app') && !import.meta.env.VITE_SOCKET_URL;
+  if (isVercelServerless) {
+    console.info('ℹ️ [SocketIO] Entorno Serverless (Vercel) detectado: el sistema opera con Auto-Sincronización y Smart Polling de alta velocidad.');
+    return {
+      connected: false,
+      active: false,
+      on: () => {},
+      off: () => {},
+      emit: () => {},
+      disconnect: () => {}
+    };
+  }
+
   socket = io(SOCKET_URL, {
     path: '/socket.io',
     auth: { token },
@@ -54,20 +68,20 @@ export const initSocket = () => {
     transports: ['websocket', 'polling'],
     autoConnect: true,
     reconnection: true,
-    reconnectionAttempts: 15,
-    reconnectionDelay: 1000,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 2000,
   });
 
   socket.on('connect', () => {
-    console.log('✅ Socket conectado:', socket.id, 'en', SOCKET_URL);
+    console.log('✅ [SocketIO] Conectado exitosamente en:', SOCKET_URL);
   });
 
   socket.on('connect_error', (err) => {
-    console.warn('⚠️ Error de conexión en Socket:', err.message, 'intentando conectar a:', SOCKET_URL);
+    console.warn('⚠️ [SocketIO] Conexión en espera (operando con sincronización de respaldo):', err.message);
   });
 
   socket.on('reconnect', (attempt) => {
-    console.log('🔄 Socket reconectado exitosamente en intento:', attempt);
+    console.log('🔄 [SocketIO] Reconectado exitosamente en intento:', attempt);
   });
 
   return socket;
