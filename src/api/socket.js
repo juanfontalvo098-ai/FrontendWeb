@@ -3,6 +3,25 @@ import { io } from 'socket.io-client';
 
 let socket = null;
 
+export const resolveSocketUrl = () => {
+  if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
+  if (import.meta.env.VITE_API_URL) {
+    let url = import.meta.env.VITE_API_URL.replace(/\/+api\/?$/, '');
+    // Si el cliente navega desde un teléfono/tablet en la red local (IP en lugar de localhost)
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+      const currentHost = window.location.hostname;
+      if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+        url = url.replace(/localhost|127\.0\.0\.1/g, currentHost);
+      }
+    }
+    return url;
+  }
+  if (typeof window !== 'undefined' && window.location) {
+    return window.location.origin;
+  }
+  return undefined;
+};
+
 export const initSocket = () => {
   const token = localStorage.getItem('token');
   if (!token) {
@@ -26,29 +45,29 @@ export const initSocket = () => {
     socket = null;
   }
 
-  const resolveSocketUrl = () => {
-    if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
-    if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL.replace(/\/+api\/?$/, '');
-    return undefined;
-  };
-
   const SOCKET_URL = resolveSocketUrl();
 
   socket = io(SOCKET_URL, {
     path: '/socket.io',
     auth: { token },
+    query: { token },
+    transports: ['websocket', 'polling'],
     autoConnect: true,
     reconnection: true,
-    reconnectionAttempts: 5,
+    reconnectionAttempts: 15,
     reconnectionDelay: 1000,
   });
 
   socket.on('connect', () => {
-    console.log('Socket conectado:', socket.id);
+    console.log('✅ Socket conectado:', socket.id, 'en', SOCKET_URL);
   });
 
   socket.on('connect_error', (err) => {
-    console.warn('Error de conexión en Socket:', err.message);
+    console.warn('⚠️ Error de conexión en Socket:', err.message, 'intentando conectar a:', SOCKET_URL);
+  });
+
+  socket.on('reconnect', (attempt) => {
+    console.log('🔄 Socket reconectado exitosamente en intento:', attempt);
   });
 
   return socket;

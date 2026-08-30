@@ -5,18 +5,26 @@ import { useAuthStore } from '../store/authStore';
 
 export const useSocket = () => {
   const token = useAuthStore(state => state.token);
-  const [isConnected, setIsConnected] = useState(false);
-  const socket = getSocket();
+  const [socketInstance, setSocketInstance] = useState(() => getSocket());
+  const [isConnected, setIsConnected] = useState(() => !!socketInstance?.connected);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setSocketInstance(null);
+      setIsConnected(false);
+      return;
+    }
 
     const currentSocket = initSocket();
+    setSocketInstance(currentSocket);
     if (!currentSocket) return;
 
     setIsConnected(currentSocket.connected);
 
-    const onConnect = () => setIsConnected(true);
+    const onConnect = () => {
+      setIsConnected(true);
+      setSocketInstance(currentSocket);
+    };
     const onDisconnect = () => setIsConnected(false);
 
     currentSocket.on('connect', onConnect);
@@ -29,11 +37,11 @@ export const useSocket = () => {
   }, [token]);
 
   const emit = (event, data) => {
-    if (socket && socket.connected) {
-      socket.emit(event, data);
+    if (socketInstance && socketInstance.connected) {
+      socketInstance.emit(event, data);
     }
   };
 
-  return { socket, isConnected, emit };
+  return { socket: socketInstance, isConnected, emit };
 };
 

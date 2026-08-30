@@ -1,6 +1,6 @@
 // src/components/common/AutoPrintManager.jsx
 import React, { useEffect, useRef } from 'react';
-import { getSocket } from '../../api/socket';
+import { useSocket } from '../../hooks/useSocket';
 import { api } from '../../api/client';
 import { useUiStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -20,6 +20,7 @@ import {
  */
 export const AutoPrintManager = () => {
   const user = useAuthStore((state) => state.user);
+  const { socket, isConnected } = useSocket();
   const addToast = useUiStore((state) => state.addToast);
   const settingsRef = useRef(null);
   const isPrintingRef = useRef(false);
@@ -36,11 +37,8 @@ export const AutoPrintManager = () => {
   };
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !socket || typeof socket.on !== 'function') return;
     loadSettings();
-
-    const socket = getSocket();
-    if (!socket) return;
 
     // 1. Escuchar nuevas comandas de cocina enviadas remotamente por meseros
     const handleKitchenTicket = async (ticketData) => {
@@ -182,7 +180,7 @@ export const AutoPrintManager = () => {
       socket.off('kitchen:new-ticket', handleKitchenTicket);
       socket.off('invoice:created', handleInvoiceCreated);
     };
-  }, [user]);
+  }, [user, socket]);
 
   return null;
 };

@@ -8,13 +8,14 @@ import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { api } from '../api/client';
-import { getSocket } from '../api/socket';
+import { useSocket } from '../hooks/useSocket';
 import { useUiStore } from '../store/uiStore';
 import { useAuth } from '../hooks/useAuth';
 
 export const TablesPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { socket } = useSocket();
   const addToast = useUiStore((state) => state.addToast);
 
   const [tables, setTables] = useState([]);
@@ -77,8 +78,7 @@ export const TablesPage = () => {
       }
     }, 10000);
 
-    const socket = getSocket();
-    if (socket) {
+    if (socket && typeof socket.on === 'function') {
       const handleStatusChange = () => fetchTables();
       socket.on('table:status-changed', handleStatusChange);
       socket.on('order:updated', handleStatusChange);
@@ -91,7 +91,7 @@ export const TablesPage = () => {
     }
 
     return () => clearInterval(pollInterval);
-  }, []);
+  }, [socket]);
 
   // Abrir mesa directamente (sin crear orden automática hasta que se guarde o envíe a cocina)
   const handleTableClick = (table) => {

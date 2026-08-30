@@ -5,7 +5,7 @@ import { Clock, CheckCircle, ArrowLeft, Utensils, Printer } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { api } from '../api/client';
-import { getSocket } from '../api/socket';
+import { useSocket } from '../hooks/useSocket';
 import { useUiStore } from '../store/uiStore';
 import { printKitchenTicket } from '../utils/printUtils';
 
@@ -40,6 +40,7 @@ const playBellSound = () => {
 export const KitchenPage = () => {
   const navigate = useNavigate();
   const addToast = useUiStore((state) => state.addToast);
+  const { socket } = useSocket();
 
   const [orders, setOrders] = useState([]);
   const [now, setNow] = useState(new Date());
@@ -94,8 +95,7 @@ export const KitchenPage = () => {
       }
     }, 5000);
 
-    const socket = getSocket();
-    if (socket) {
+    if (socket && typeof socket.on === 'function') {
       const handleNewTicket = () => {
         addToast('¡Nueva comanda enviada a cocina!', 'info');
         playBellSound();
@@ -128,7 +128,7 @@ export const KitchenPage = () => {
       clearInterval(timer);
       clearInterval(pollInterval);
     };
-  }, [fetchOrders, addToast]);
+  }, [fetchOrders, addToast, socket]);
 
   // Formatear el tiempo transcurrido en vivo (Minutos y Segundos)
   const getElapsedFormatted = (createdAtStr) => {

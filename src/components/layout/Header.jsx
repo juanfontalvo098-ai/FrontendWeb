@@ -4,7 +4,7 @@ import { Menu, Bell, Check, Trash2, Store, MapPin, ChevronDown, Sun, Moon } from
 import { useUiStore } from '../../store/uiStore';
 import { Badge } from '../ui/Badge';
 import { api } from '../../api/client';
-import { getSocket } from '../../api/socket';
+import { useSocket } from '../../hooks/useSocket';
 import { useAuth } from '../../hooks/useAuth';
 
 export const Header = ({ title = '' }) => {
@@ -72,11 +72,12 @@ export const Header = ({ title = '' }) => {
     } catch (e) {}
   };
 
+  const { socket } = useSocket();
+
   useEffect(() => {
     fetchSettingsAndStatus();
 
-    const socket = getSocket();
-    if (socket) {
+    if (socket && typeof socket.on === 'function') {
       const handleTicket = (data) => {
         addNotification({
           title: 'Comanda en Cocina',
@@ -130,7 +131,7 @@ export const Header = ({ title = '' }) => {
         socket.off('cash:closed', handleCashClosed);
       };
     }
-  }, [activeBranchId]);
+  }, [activeBranchId, socket]);
 
   // Cerrar emergentes al hacer clic afuera
   useEffect(() => {

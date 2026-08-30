@@ -1,10 +1,18 @@
-const resolveApiBase = () => {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  return '/api';
+export const resolveApiBase = () => {
+  let base = import.meta.env.VITE_API_URL || '/api';
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const currentHost = window.location.hostname;
+    if (currentHost !== 'localhost' && currentHost !== '127.0.0.1') {
+      base = base.replace(/localhost|127\.0\.0\.1/g, currentHost);
+    }
+  }
+  return base;
 };
 
-const API_BASE = resolveApiBase();
-const BASE_URL = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE.replace(/\/$/, '')}/api`;
+const getBaseUrl = () => {
+  const base = resolveApiBase();
+  return base.endsWith('/api') ? base : `${base.replace(/\/$/, '')}/api`;
+};
 
 const getHeaders = () => {
   const token = localStorage.getItem('token');
@@ -46,14 +54,14 @@ const handleResponse = async (response) => {
 };
 
 export const api = {
-  get: (endpoint) => fetch(`${BASE_URL}${endpoint}`, { headers: getHeaders(), mode: 'cors' }).then(handleResponse),
-  post: (endpoint, data) => fetch(`${BASE_URL}${endpoint}`, { method: 'POST', headers: getHeaders(), mode: 'cors', body: JSON.stringify(data) }).then(handleResponse),
-  put: (endpoint, data) => fetch(`${BASE_URL}${endpoint}`, { method: 'PUT', headers: getHeaders(), mode: 'cors', body: JSON.stringify(data) }).then(handleResponse),
-  delete: (endpoint) => fetch(`${BASE_URL}${endpoint}`, { method: 'DELETE', headers: getHeaders(), mode: 'cors' }).then(handleResponse),
+  get: (endpoint) => fetch(`${getBaseUrl()}${endpoint}`, { headers: getHeaders(), mode: 'cors' }).then(handleResponse),
+  post: (endpoint, data) => fetch(`${getBaseUrl()}${endpoint}`, { method: 'POST', headers: getHeaders(), mode: 'cors', body: JSON.stringify(data) }).then(handleResponse),
+  put: (endpoint, data) => fetch(`${getBaseUrl()}${endpoint}`, { method: 'PUT', headers: getHeaders(), mode: 'cors', body: JSON.stringify(data) }).then(handleResponse),
+  delete: (endpoint) => fetch(`${getBaseUrl()}${endpoint}`, { method: 'DELETE', headers: getHeaders(), mode: 'cors' }).then(handleResponse),
   getBlob: async (endpoint) => {
     const token = localStorage.getItem('token');
     const activeBranchId = localStorage.getItem('activeBranchId');
-    const res = await fetch(`${BASE_URL}${endpoint}`, {
+    const res = await fetch(`${getBaseUrl()}${endpoint}`, {
       headers: {
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...(activeBranchId ? { 'X-Branch-Id': activeBranchId } : {})

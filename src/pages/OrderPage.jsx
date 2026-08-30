@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Plus, Minus, Trash2, Send, Receipt, Printer, FileText, Edit3, Image as ImageIcon, ShoppingCart, Grid, XCircle, Save, ArrowLeft, Sparkles } from 'lucide-react';
 import { api, formatCOP } from '../api/client';
-import { getSocket } from '../api/socket';
+import { useSocket } from '../hooks/useSocket';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
@@ -16,6 +16,7 @@ export const OrderPage = () => {
   const { id: tableId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { socket } = useSocket();
   const addToast = useUiStore((state) => state.addToast);
 
   const [mobileTab, setMobileTab] = useState('menu');
@@ -106,8 +107,7 @@ export const OrderPage = () => {
   useEffect(() => {
     fetchData();
 
-    const socket = getSocket();
-    if (socket) {
+    if (socket && typeof socket.on === 'function') {
       const handleUpdate = (data) => {
         if (currentOrder && data.order_id === currentOrder.id) {
           fetchData();
@@ -116,7 +116,7 @@ export const OrderPage = () => {
       socket.on('order:updated', handleUpdate);
       return () => socket.off('order:updated', handleUpdate);
     }
-  }, [tableId]);
+  }, [tableId, socket]);
 
   const rawTableNum = tableDetails?.table_number || currentOrder?.table_number;
   const displayTableNumber = rawTableNum
