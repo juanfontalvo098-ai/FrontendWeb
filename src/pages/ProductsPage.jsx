@@ -3,7 +3,7 @@ import {
   Plus, Edit2, Trash2, Upload, Image as ImageIcon,
   Layers, Package, Search, DollarSign, Barcode, Tag,
   FileJson, Download, CheckCircle2, AlertCircle, RefreshCw, FileText, Sparkles, Star,
-  SlidersHorizontal, ChevronDown, X, XCircle, RotateCcw, Filter, Check
+  SlidersHorizontal, ChevronDown, X, XCircle, RotateCcw, Filter, Check, Handshake
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -28,6 +28,7 @@ export const ProductsPage = () => {
   const [availabilityFilter, setAvailabilityFilter] = useState('all'); // 'all' | 'available' | 'out_of_stock'
   const [inventoryFilter, setInventoryFilter] = useState('all'); // 'all' | 'tracked' | 'low_stock' | 'untracked'
   const [taxFilter, setTaxFilter] = useState('all'); // 'all' | 'exempt' | 'impoconsumo' | 'iva'
+  const [originFilter, setOriginFilter] = useState('all'); // 'all' | 'own' | 'third_party'
   const [minPriceFilter, setMinPriceFilter] = useState('');
   const [maxPriceFilter, setMaxPriceFilter] = useState('');
   const [sortBy, setSortBy] = useState('name_asc'); // 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_asc' | 'stock_desc' | 'newest'
@@ -58,6 +59,7 @@ export const ProductsPage = () => {
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showInOrderStats, setShowInOrderStats] = useState(false);
+  const [isThirdParty, setIsThirdParty] = useState(false);
 
   // Form states para categoría
   const [catName, setCatName] = useState('');
@@ -116,6 +118,7 @@ export const ProductsPage = () => {
     setDescription('');
     setImageUrl('');
     setShowInOrderStats(false);
+    setIsThirdParty(false);
     if (categories.length > 0) setCategoryId(categories[0].id.toString());
     setIsProductModalOpen(true);
   };
@@ -135,6 +138,7 @@ export const ProductsPage = () => {
     setDescription(prod.description || '');
     setImageUrl(prod.image_url || '');
     setShowInOrderStats(Boolean(prod.show_in_order_stats));
+    setIsThirdParty(Boolean(prod.is_third_party));
     setCategoryId(prod.category_id ? prod.category_id.toString() : (categories[0]?.id?.toString() || ''));
     setIsProductModalOpen(true);
   };
@@ -199,7 +203,8 @@ export const ProductsPage = () => {
         category_id: parseInt(categoryId, 10),
         description: description || undefined,
         image_url: imageUrl || undefined,
-        show_in_order_stats: Boolean(showInOrderStats)
+        show_in_order_stats: Boolean(showInOrderStats),
+        is_third_party: Boolean(isThirdParty)
       };
 
       if (editingProduct) {
@@ -533,7 +538,11 @@ export const ProductsPage = () => {
         if (taxFilter === 'iva' && Math.abs(rate - 0.19) > 0.005) return false;
       }
 
-      // 6. Rango de precio
+      // 6. Origen (Propios vs Terceros)
+      if (originFilter === 'own' && Boolean(p.is_third_party)) return false;
+      if (originFilter === 'third_party' && !Boolean(p.is_third_party)) return false;
+
+      // 7. Rango de precio
       const price = parseFloat(p.price || 0);
       if (minPriceFilter && price < parseFloat(minPriceFilter)) return false;
       if (maxPriceFilter && price > parseFloat(maxPriceFilter)) return false;
@@ -561,7 +570,7 @@ export const ProductsPage = () => {
     });
 
     return result;
-  }, [products, searchTerm, categoryFilter, availabilityFilter, inventoryFilter, taxFilter, minPriceFilter, maxPriceFilter, sortBy]);
+  }, [products, searchTerm, categoryFilter, availabilityFilter, inventoryFilter, taxFilter, originFilter, minPriceFilter, maxPriceFilter, sortBy]);
 
   const filteredCategories = categories.filter(c =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -899,6 +908,33 @@ export const ProductsPage = () => {
                   {inv.label}
                 </button>
               ))}
+              <div style={{ height: '14px', width: '1px', background: 'var(--border-color)', margin: '0 2px' }} />
+
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>Origen:</span>
+              {[
+                { id: 'all', label: 'Todos' },
+                { id: 'own', label: 'Propios' },
+                { id: 'third_party', label: '🤝 Terceros / Socios' },
+              ].map(orig => (
+                <button
+                  key={orig.id}
+                  type="button"
+                  onClick={() => setOriginFilter(orig.id)}
+                  style={{
+                    padding: '3px 9px',
+                    borderRadius: '14px',
+                    fontSize: '11px',
+                    fontWeight: originFilter === orig.id ? 700 : 500,
+                    border: originFilter === orig.id ? '1px solid #d97706' : '1px solid var(--border-color)',
+                    background: originFilter === orig.id ? 'rgba(217, 119, 6, 0.15)' : 'var(--bg-primary)',
+                    color: originFilter === orig.id ? '#d97706' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {orig.label}
+                </button>
+              ))}
             </div>
 
             <Badge variant="info" style={{ fontSize: '11px', padding: '3px 8px', fontWeight: 700 }}>
@@ -1149,7 +1185,23 @@ export const ProductsPage = () => {
                           <Badge variant={prod.tax_rate > 0 ? 'warning' : 'info'}>{getTaxLabel(prod.tax_rate)}</Badge>
                         </td>
                         <td style={{ padding: '8px 10px' }}>
-                          <Badge variant={prod.is_available ? 'success' : 'danger'}>{prod.is_available ? 'Disponible' : 'Agotado'}</Badge>
+                          <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <Badge variant={prod.is_available ? 'success' : 'danger'}>{prod.is_available ? 'Disponible' : 'Agotado'}</Badge>
+                            {prod.is_third_party && (
+                              <span style={{
+                                padding: '2px 7px',
+                                borderRadius: '10px',
+                                fontSize: '10px',
+                                fontWeight: 800,
+                                background: 'rgba(217, 119, 6, 0.15)',
+                                color: '#d97706',
+                                border: '1px solid rgba(217, 119, 6, 0.3)',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                🤝 Tercero
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td style={{ padding: '8px 10px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
@@ -1453,6 +1505,36 @@ export const ProductsPage = () => {
                 checked={showInOrderStats}
                 onChange={(e) => setShowInOrderStats(e.target.checked)}
                 style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#f59e0b' }}
+              />
+            </div>
+
+            {/* Switch Producto de Tercero / Negocio Socio */}
+            <div style={{
+              padding: '10px 12px',
+              background: isThirdParty ? 'rgba(217, 119, 6, 0.12)' : 'var(--bg-secondary)',
+              border: isThirdParty ? '1px solid #d97706' : '1px solid var(--border-color)',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Handshake size={20} color={isThirdParty ? '#d97706' : 'var(--text-muted)'} />
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: isThirdParty ? '#d97706' : 'var(--text-primary)' }}>
+                    Producto de Tercero / Socio (Excluir de Facturado y Ganancia)
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Se registra la venta y cobro en comanda/ticket, pero <strong>NO</strong> suma en el facturado bruto/neto ni en la ganancia propia del negocio.
+                  </div>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={isThirdParty}
+                onChange={(e) => setIsThirdParty(e.target.checked)}
+                style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#d97706' }}
               />
             </div>
 

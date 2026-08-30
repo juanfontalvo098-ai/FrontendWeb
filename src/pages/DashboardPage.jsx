@@ -472,6 +472,22 @@ export const DashboardPage = () => {
             <span>Neto: <strong>{formatCOP(kpis.net_sales)}</strong></span>
             <span>Imp: <strong>{formatCOP(kpis.tax_total)}</strong></span>
           </div>
+          {parseFloat(kpis.third_party_sales || 0) > 0 && (
+            <div style={{
+              marginTop: '8px',
+              padding: '4px 6px',
+              borderRadius: '4px',
+              background: 'rgba(217, 119, 6, 0.12)',
+              border: '1px solid rgba(217, 119, 6, 0.25)',
+              fontSize: '10.5px',
+              color: '#d97706',
+              display: 'flex',
+              justifyContent: 'space-between'
+            }}>
+              <span>🤝 Terceros (No ganancia):</span>
+              <strong>{formatCOP(kpis.third_party_sales)}</strong>
+            </div>
+          )}
         </Card>
 
         {/* KPI 2: Órdenes / Tickets */}

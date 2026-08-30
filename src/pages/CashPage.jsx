@@ -550,6 +550,12 @@ export const CashPage = () => {
                           <span>Devoluciones Pagadas:</span>
                           <strong style={{ color: 'var(--accent-danger)' }}>{formatCurrency(summaryData.cashRefunds)}</strong>
                         </div>
+                        {parseFloat(summaryData.thirdPartyRevenue || 0) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border-color)', paddingTop: '4px', marginTop: '4px', color: '#d97706' }}>
+                            <span style={{ fontWeight: 700 }}>🤝 Ventas de Terceros/Socios:</span>
+                            <strong style={{ fontSize: '15px' }}>{formatCurrency(summaryData.thirdPartyRevenue)}</strong>
+                          </div>
+                        )}
                       </div>
                     </div>
 

@@ -801,6 +801,20 @@ export const BillingPage = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <div>
                         <span style={{ fontWeight: 600 }}>{item.quantity}x {item.name}</span>
+                        {item.is_third_party && (
+                          <span style={{
+                            fontSize: '9.5px',
+                            fontWeight: 800,
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            background: 'rgba(217, 119, 6, 0.15)',
+                            color: '#d97706',
+                            border: '1px solid rgba(217, 119, 6, 0.3)',
+                            marginLeft: '6px'
+                          }}>
+                            🤝 Tercero
+                          </span>
+                        )}
                         <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '6px' }}>
                           ({item.tax_rate > 0 ? `${(item.tax_rate * 100).toFixed(0)}% imp` : 'Exento'})
                         </span>
@@ -1295,6 +1309,26 @@ export const BillingPage = () => {
                 <span>TOTAL FACTURADO:</span>
                 <span>{formatCOP(selectedInvoiceDetail.total)}</span>
               </div>
+              {parseFloat(selectedInvoiceDetail.third_party_total || 0) > 0 && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '6px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(217, 119, 6, 0.12)',
+                  border: '1px solid rgba(217, 119, 6, 0.3)',
+                  fontSize: '11px',
+                  color: '#d97706'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                    <span>🤝 Incluye productos de terceros:</span>
+                    <span>{formatCOP(selectedInvoiceDetail.third_party_total)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', marginTop: '2px', fontSize: '10.5px' }}>
+                    <span>Venta propia del negocio:</span>
+                    <span>{formatCOP(parseFloat(selectedInvoiceDetail.total || 0) - parseFloat(selectedInvoiceDetail.third_party_total || 0))}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
