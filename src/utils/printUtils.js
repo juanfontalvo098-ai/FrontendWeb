@@ -78,7 +78,7 @@ export const checkPrintBridgeHealth = async (bridgeUrl = DEFAULT_BRIDGE_URL) => 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-      const res = await fetch(`${baseUrl}/health`, { 
+      const res = await fetch(`${baseUrl}/health`, {
         signal: controller.signal,
         headers: { 'Accept': 'application/json' }
       });
@@ -103,7 +103,7 @@ export const getPrintBridgePrinters = async (bridgeUrl = DEFAULT_BRIDGE_URL) => 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-      const res = await fetch(`${baseUrl}/printers`, { 
+      const res = await fetch(`${baseUrl}/printers`, {
         signal: controller.signal,
         headers: { 'Accept': 'application/json' }
       });
@@ -165,11 +165,11 @@ export const openCashDrawer = async (printerName = null, bridgeUrl = DEFAULT_BRI
  *    SIEMPRE abre el cuadro de diálogo de impresión de Windows (iframe limpio).
  */
 export const printThermalDocument = async (htmlContent, printerName = null, options = {}) => {
-  const { 
-    title = 'Impresión POS', 
-    paperWidth = '80mm', 
-    cut = true, 
-    plainText = null, 
+  const {
+    title = 'Impresión POS',
+    paperWidth = '80mm',
+    cut = true,
+    plainText = null,
     bridgeUrl = DEFAULT_BRIDGE_URL,
     enableSilentPrinting = null,
     settings = null
@@ -202,7 +202,7 @@ export const printThermalDocument = async (htmlContent, printerName = null, opti
 const printWithIframe = (htmlContent, title = 'Impresión POS') => {
   const prevIframe = document.getElementById('pos-print-iframe');
   if (prevIframe) {
-    try { prevIframe.remove(); } catch (e) {}
+    try { prevIframe.remove(); } catch (e) { }
   }
 
   const iframe = document.createElement('iframe');
@@ -229,7 +229,7 @@ const printWithIframe = (htmlContent, title = 'Impresión POS') => {
       iframe.contentWindow.print();
     } catch (e) {
       console.warn('Fallback a window.print():', e);
-      try { window.print(); } catch (e2) {}
+      try { window.print(); } catch (e2) { }
     }
     setTimeout(() => {
       if (document.body.contains(iframe)) {
@@ -691,8 +691,8 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
   const cashOutflows = parseFloat(shift.total_withdrawals ?? snapshot.cashOutflows ?? snapshot.manualExpenses ?? 0);
   const expectedCash = parseFloat(shift.expected_amount ?? snapshot.expectedCash ?? snapshot.expected_amount ?? ((initialFloat + cashSales + cashInflows) - cashOutflows));
   const declaredCash = parseFloat(shift.closing_amount ?? shift.declared_amount ?? snapshot.declaredCash ?? 0);
-  const declaredTransfers = shift.declared_transfers !== undefined && shift.declared_transfers !== null 
-    ? parseFloat(shift.declared_transfers) 
+  const declaredTransfers = shift.declared_transfers !== undefined && shift.declared_transfers !== null
+    ? parseFloat(shift.declared_transfers)
     : (snapshot.declaredTransfers !== undefined && snapshot.declaredTransfers !== null ? parseFloat(snapshot.declaredTransfers) : null);
   const difference = parseFloat(shift.difference ?? snapshot.difference ?? (declaredCash - expectedCash));
   const grossRevenue = parseFloat(shift.gross_revenue ?? snapshot.grossRevenue ?? (cashSales + cardSales + transferSales + creditSales));
@@ -814,20 +814,20 @@ export const printKitchenTicket = async (orderData = {}, itemsList = [], arg3 = 
             </thead>
             <tbody>
               ${itemsList.map(item => {
-                const qty = item.quantity || item.qty || 1;
-                const name = item.product?.name || item.name || 'Producto';
-                const itemNote = item.notes || item.note || '';
-                const rawMods = item.modifiers || item.modifiers_json;
-                let parsedMods = [];
-                if (rawMods) {
-                  try {
-                    parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
-                  } catch (e) {
-                    parsedMods = Array.isArray(rawMods) ? rawMods : [];
-                  }
-                }
+    const qty = item.quantity || item.qty || 1;
+    const name = item.product?.name || item.name || 'Producto';
+    const itemNote = item.notes || item.note || '';
+    const rawMods = item.modifiers || item.modifiers_json;
+    let parsedMods = [];
+    if (rawMods) {
+      try {
+        parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+      } catch (e) {
+        parsedMods = Array.isArray(rawMods) ? rawMods : [];
+      }
+    }
 
-                return `
+    return `
                   <tr style="border-bottom: 1px solid #000000;">
                     <td style="font-size: ${paperWidth === '58mm' ? '14px' : '16px'}; font-weight: 900; padding: 4px 0; color: #000000;">${qty}x</td>
                     <td style="padding: 4px 0;">
@@ -845,7 +845,7 @@ export const printKitchenTicket = async (orderData = {}, itemsList = [], arg3 = 
                     </td>
                   </tr>
                 `;
-              }).join('')}
+  }).join('')}
             </tbody>
           </table>
 
@@ -864,11 +864,11 @@ export const printKitchenTicket = async (orderData = {}, itemsList = [], arg3 = 
     </html>
   `;
 
-  return printThermalDocument(html, settings?.printer_kitchen_name || null, { 
-    title: `Comanda Cocina #${orderId}`, 
-    paperWidth, 
-    cut: true, 
-    plainText, 
+  return printThermalDocument(html, settings?.printer_kitchen_name || null, {
+    title: `Comanda Cocina #${orderId}`,
+    paperWidth,
+    cut: true,
+    plainText,
     bridgeUrl,
     settings
   });
@@ -969,19 +969,19 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
             </thead>
             <tbody>
               ${itemsList.map(it => {
-                const qty = it.quantity || it.qty || 1;
-                const name = it.product?.name || it.name || 'Producto';
-                const price = parseFloat(it.unit_price || it.price || it.product?.price || 0);
-                const rawMods = it.modifiers || it.modifiers_json;
-                let parsedMods = [];
-                if (rawMods) {
-                  try {
-                    parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
-                  } catch (e) {
-                    parsedMods = Array.isArray(rawMods) ? rawMods : [];
-                  }
-                }
-                return `
+    const qty = it.quantity || it.qty || 1;
+    const name = it.product?.name || it.name || 'Producto';
+    const price = parseFloat(it.unit_price || it.price || it.product?.price || 0);
+    const rawMods = it.modifiers || it.modifiers_json;
+    let parsedMods = [];
+    if (rawMods) {
+      try {
+        parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+      } catch (e) {
+        parsedMods = Array.isArray(rawMods) ? rawMods : [];
+      }
+    }
+    return `
                   <tr style="border-bottom: 1px solid #000000;">
                     <td style="font-weight: 900; font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; padding: 2.5px 0;">${qty}x</td>
                     <td style="padding: 2.5px 0;">
@@ -990,17 +990,17 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
                       ${Array.isArray(parsedMods) && parsedMods.length > 0 ? `
                         <div style="font-size: ${paperWidth === '58mm' ? '10.5px' : '11.5px'}; color: #000000; margin-top: 2px; padding-left: 4px; border-left: 2px solid #333;">
                           ${parsedMods.map(m => {
-                            const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
-                            const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
-                            return `<div>• ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}${extraStr}</div>`;
-                          }).join('')}
+      const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+      const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
+      return `<div>• ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}${extraStr}</div>`;
+    }).join('')}
                         </div>
                       ` : ''}
                     </td>
                     <td style="text-align: right; font-weight: 900; font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; padding: 2.5px 0;">${formatCOP(price * qty)}</td>
                   </tr>
                 `;
-              }).join('')}
+  }).join('')}
             </tbody>
           </table>
 
@@ -1038,11 +1038,11 @@ export const printPreFactura = async (orderData, itemsList, settings = {}, paper
     </html>
   `;
 
-  return printThermalDocument(html, mergedSettings?.printer_receipt_name || null, { 
-    title: `Pre-Factura #${orderData.id || ''}`, 
-    paperWidth, 
-    cut: true, 
-    plainText, 
+  return printThermalDocument(html, mergedSettings?.printer_receipt_name || null, {
+    title: `Pre-Factura #${orderData.id || ''}`,
+    paperWidth,
+    cut: true,
+    plainText,
     bridgeUrl,
     settings: mergedSettings
   });
@@ -1141,19 +1141,19 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
             </thead>
             <tbody>
               ${items.map(it => {
-                const qty = it.quantity || 1;
-                const unitPrice = parseFloat(it.unit_price || 0);
-                const lineTotal = qty * unitPrice;
-                const rawMods = it.modifiers || it.modifiers_json;
-                let parsedMods = [];
-                if (rawMods) {
-                  try {
-                    parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
-                  } catch (e) {
-                    parsedMods = Array.isArray(rawMods) ? rawMods : [];
-                  }
-                }
-                return `
+    const qty = it.quantity || 1;
+    const unitPrice = parseFloat(it.unit_price || 0);
+    const lineTotal = qty * unitPrice;
+    const rawMods = it.modifiers || it.modifiers_json;
+    let parsedMods = [];
+    if (rawMods) {
+      try {
+        parsedMods = typeof rawMods === 'string' ? JSON.parse(rawMods) : rawMods;
+      } catch (e) {
+        parsedMods = Array.isArray(rawMods) ? rawMods : [];
+      }
+    }
+    return `
                   <tr style="border-bottom: 1px solid #000000;">
                     <td style="font-weight: 900; font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; padding: 2.5px 0;">${qty}x</td>
                     <td style="padding: 2.5px 0;">
@@ -1162,17 +1162,17 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
                       ${Array.isArray(parsedMods) && parsedMods.length > 0 ? `
                         <div style="font-size: ${paperWidth === '58mm' ? '10.5px' : '11.5px'}; color: #000000; margin-top: 2px; padding-left: 4px; border-left: 2px solid #333;">
                           ${parsedMods.map(m => {
-                            const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
-                            const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
-                            return `<div>• ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}${extraStr}</div>`;
-                          }).join('')}
+      const extra = parseFloat(m.price_modifier || 0) * (m.quantity || 1);
+      const extraStr = extra > 0 ? ` (+${formatCOP(extra)})` : '';
+      return `<div>• ${m.name}${m.quantity > 1 ? ` (x${m.quantity})` : ''}${extraStr}</div>`;
+    }).join('')}
                         </div>
                       ` : ''}
                     </td>
                     <td style="text-align: right; font-weight: 900; font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000; padding: 2.5px 0;">${formatCOP(lineTotal)}</td>
                   </tr>
                 `;
-              }).join('')}
+  }).join('')}
             </tbody>
           </table>
 
@@ -1185,12 +1185,12 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
 
           <div class="double-line"></div>
           ${(() => {
-            const isCredit = invoice.payment_method === 'credito' || parseFloat(invoice.credit_balance || invoice.credit_amount || 0) > 0;
-            const creditBalance = parseFloat(invoice.credit_balance !== undefined ? invoice.credit_balance : (invoice.credit_amount || (invoice.payment_method === 'credito' ? total : 0)));
-            const paidInitial = Math.max(0, total - creditBalance);
+      const isCredit = invoice.payment_method === 'credito' || parseFloat(invoice.credit_balance || invoice.credit_amount || 0) > 0;
+      const creditBalance = parseFloat(invoice.credit_balance !== undefined ? invoice.credit_balance : (invoice.credit_amount || (invoice.payment_method === 'credito' ? total : 0)));
+      const paidInitial = Math.max(0, total - creditBalance);
 
-            if (isCredit && creditBalance > 0) {
-              return `
+      if (isCredit && creditBalance > 0) {
+        return `
                 <div style="border: 1.5px solid #000000; padding: 6px 8px; margin: 4px 0; background: #fafafa;">
                   <div class="center bold" style="font-size: ${paperWidth === '58mm' ? '12px' : '13px'}; color: #000000;">*** CONDICIÓN DE PAGO: CRÉDITO ***</div>
                   <div class="flex-between" style="font-size: ${paperWidth === '58mm' ? '11.5px' : '12.5px'}; margin-top: 4px;">
@@ -1213,16 +1213,16 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
                   ` : ''}
                 </div>
               `;
-            }
+      }
 
-            const isMixed = String(invoice.payment_method).includes('mixto') || (parseFloat(invoice.cash_amount || 0) > 0 && (parseFloat(invoice.transfer_amount || 0) > 0 || parseFloat(invoice.card_amount || 0) > 0));
-            const amountTendered = parseFloat(invoice.amount_tendered || 0);
-            const changeGiven = parseFloat(invoice.change_given || 0);
-            const cashAmount = parseFloat(invoice.cash_amount || 0);
-            const transferAmount = parseFloat(invoice.transfer_amount || 0);
-            const cardAmount = parseFloat(invoice.card_amount || 0);
+      const isMixed = String(invoice.payment_method).includes('mixto') || (parseFloat(invoice.cash_amount || 0) > 0 && (parseFloat(invoice.transfer_amount || 0) > 0 || parseFloat(invoice.card_amount || 0) > 0));
+      const amountTendered = parseFloat(invoice.amount_tendered || 0);
+      const changeGiven = parseFloat(invoice.change_given || 0);
+      const cashAmount = parseFloat(invoice.cash_amount || 0);
+      const transferAmount = parseFloat(invoice.transfer_amount || 0);
+      const cardAmount = parseFloat(invoice.card_amount || 0);
 
-            return `
+      return `
               <div class="flex-between bold" style="font-size: ${paperWidth === '58mm' ? '14px' : '16px'}; color: #000000;">
                 <span>TOTAL FACTURADO:</span>
                 <span>${formatCOP(total)}</span>
@@ -1253,7 +1253,7 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
                 </div>
               ` : ''}
             `;
-          })()}
+    })()}
 
           ${invoice.notes ? `
             <div class="solid-line"></div>
@@ -1268,11 +1268,11 @@ export const printInvoiceReceipt = async (invoice, settings = {}, paperWidth = '
     </html>
   `;
 
-  return printThermalDocument(html, mergedSettings?.printer_receipt_name || null, { 
-    title: `Factura POS #${invoice.invoice_number || ''}`, 
-    paperWidth, 
-    cut: true, 
-    plainText, 
+  return printThermalDocument(html, mergedSettings?.printer_receipt_name || null, {
+    title: `Factura POS #${invoice.invoice_number || ''}`,
+    paperWidth,
+    cut: true,
+    plainText,
     bridgeUrl,
     settings: mergedSettings
   });
@@ -1297,8 +1297,8 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
   const cashRefunds = parseFloat(snapshot.cashRefunds ?? 0);
   const expectedCash = parseFloat(shift.expected_amount ?? snapshot.expectedCash ?? snapshot.expected_amount ?? ((initialFloat + cashSales + cashInflows) - (cashOutflows + cashRefunds)));
   const declaredCash = parseFloat(shift.closing_amount ?? shift.declared_amount ?? snapshot.declaredCash ?? 0);
-  const declaredTransfers = shift.declared_transfers !== undefined && shift.declared_transfers !== null 
-    ? parseFloat(shift.declared_transfers) 
+  const declaredTransfers = shift.declared_transfers !== undefined && shift.declared_transfers !== null
+    ? parseFloat(shift.declared_transfers)
     : (snapshot.declaredTransfers !== undefined && snapshot.declaredTransfers !== null ? parseFloat(snapshot.declaredTransfers) : null);
   const difference = parseFloat(shift.difference ?? snapshot.difference ?? (declaredCash - expectedCash));
   const grossRevenue = parseFloat(shift.gross_revenue ?? snapshot.grossRevenue ?? (cashSales + cardSales + transferSales + creditSales));
@@ -1356,8 +1356,8 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
             <span>VENTAS PROPIAS (NEGOCIO):</span>
             <span>${formatCOP(ownGrossRevenue)}</span>
           </div>
-          <div class="flex-between" style="color: #444; font-weight: 700;">
-            <span>🤝 Ventas Terceros/Socios:</span>
+          <div class="flex-between" style="color: #1f1f1fff; font-weight: 700;">
+            <span>Ventas Terceros / Socios:</span>
             <span>${formatCOP(thirdPartyRevenue)}</span>
           </div>
           ` : ''}
@@ -1388,11 +1388,11 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
   const plainText = buildShiftClosePlainText(shift, settings);
   const bridgeUrl = settings?.silent_print_bridge_url || DEFAULT_BRIDGE_URL;
 
-  return printThermalDocument(html, settings?.printer_receipt_name || null, { 
-    title: `Cierre de Turno #${shiftNum}`, 
-    paperWidth, 
-    cut: true, 
-    plainText, 
+  return printThermalDocument(html, settings?.printer_receipt_name || null, {
+    title: `Cierre de Turno #${shiftNum}`,
+    paperWidth,
+    cut: true,
+    plainText,
     bridgeUrl,
     settings
   });

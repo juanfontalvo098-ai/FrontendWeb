@@ -477,6 +477,7 @@ export const OrdersListPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'mesa' | 'para_llevar' | 'delivery'
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'pendiente_pago' | 'cerrada' | 'cancelada'
+  const [thirdPartyFilter, setThirdPartyFilter] = useState('all'); // 'all' | 'with_third_party' | 'only_own'
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all'); // 'all' | 'efectivo' | 'tarjeta' | 'transferencia' | 'credito' | 'mixto'
   const [waiterFilter, setWaiterFilter] = useState('all');
   const [amountRangeFilter, setAmountRangeFilter] = useState('all'); // 'all' | 'under20k' | '20k_50k' | '50k_100k' | 'over100k'
@@ -764,7 +765,14 @@ export const OrdersListPage = () => {
         }
       }
 
-      // 3. Filtro por Método de Pago
+      // 3. Filtro por Productos de Terceros / Origen
+      if (thirdPartyFilter !== 'all') {
+        const hasThirdParty = parseFloat(o.third_party_total || 0) > 0 || (Array.isArray(o.items) && o.items.some(it => it.is_third_party || it.product_is_third_party));
+        if (thirdPartyFilter === 'with_third_party' && !hasThirdParty) return false;
+        if (thirdPartyFilter === 'only_own' && hasThirdParty) return false;
+      }
+
+      // 4. Filtro por Método de Pago
       if (paymentMethodFilter !== 'all') {
         const pMethod = (o.payment_method || o.invoice_payment_method || '').toLowerCase();
         if (paymentMethodFilter === 'credito') {
@@ -862,7 +870,7 @@ export const OrdersListPage = () => {
     });
 
     return result;
-  }, [orders, typeFilter, statusFilter, paymentMethodFilter, waiterFilter, amountRangeFilter, shiftFilter, dateFilter, customStartDate, customEndDate, searchQuery, sortBy]);
+  }, [orders, typeFilter, statusFilter, thirdPartyFilter, paymentMethodFilter, waiterFilter, amountRangeFilter, shiftFilter, dateFilter, customStartDate, customEndDate, searchQuery, sortBy]);
 
   // KPIs Resumen
   const kpis = useMemo(() => {
@@ -2372,7 +2380,7 @@ export const OrdersListPage = () => {
             <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--accent-warning)' }}>{formatCOP(kpis.totalPendingOwn)}</div>
             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
               {kpis.totalPendingThirdParty > 0 ? (
-                <span style={{ color: '#d97706', fontWeight: 700 }}>🤝 +{formatCOP(kpis.totalPendingThirdParty)} terceros</span>
+                <span style={{ color: '#d97706', fontWeight: 700 }}>+{formatCOP(kpis.totalPendingThirdParty)} terceros</span>
               ) : (
                 <span>{kpis.countPending} órdenes sin cerrar</span>
               )}
@@ -2400,7 +2408,7 @@ export const OrdersListPage = () => {
             <div style={{ fontSize: '18px', fontWeight: 800, color: '#10b981' }}>{formatCOP(kpis.totalPaidOwn)}</div>
             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
               {kpis.totalPaidThirdParty > 0 ? (
-                <span style={{ color: '#d97706', fontWeight: 700 }}>🤝 +{formatCOP(kpis.totalPaidThirdParty)} terceros · {formatCOP(kpis.totalPaidGross)} bruto</span>
+                <span style={{ color: '#d97706', fontWeight: 700 }}>+{formatCOP(kpis.totalPaidThirdParty)} terceros · {formatCOP(kpis.totalPaidGross)} bruto</span>
               ) : (
                 <span>{kpis.countPaid} facturas emitidas</span>
               )}
@@ -2448,13 +2456,13 @@ export const OrdersListPage = () => {
         ))}
       </div>
 
-      {/* Barra de Búsqueda y Filtros Avanzados de Órdenes */}
-      <Card style={{ padding: '16px', marginBottom: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
-        {/* Fila 1: Buscador Omnibox + Ordenamiento + Botón Filtros Avanzados */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: '280px' }}>
+      {/* Barra de Búsqueda y Filtros de Órdenes (Agrupados y Desplegables) */}
+      <Card style={{ padding: '14px 16px', marginBottom: '16px', border: '1px solid var(--border-color)', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Buscador Omnibox */}
+          <div style={{ position: 'relative', flex: 1, minWidth: '260px' }}>
             <Search
-              size={18}
+              size={17}
               style={{
                 position: 'absolute',
                 left: '12px',
@@ -2468,10 +2476,10 @@ export const OrdersListPage = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por # orden (#12), código factura (POS-...), cliente, cédula/NIT, mesero, mesa o producto..."
+              placeholder="Buscar # orden, factura, cliente, mesero, mesa..."
               style={{
                 width: '100%',
-                padding: '10px 36px 10px 38px',
+                padding: '9px 36px 9px 38px',
                 borderRadius: '8px',
                 border: searchQuery ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
                 background: 'var(--bg-primary)',
@@ -2506,9 +2514,80 @@ export const OrdersListPage = () => {
             )}
           </div>
 
-          {/* Selector de Ordenamiento */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Ordenar:</span>
+          {/* Desplegable 1: Tipo de Orden */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              style={{
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: typeFilter !== 'all' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                background: typeFilter !== 'all' ? 'rgba(99, 102, 241, 0.12)' : 'var(--bg-primary)',
+                color: typeFilter !== 'all' ? 'var(--accent-primary)' : 'var(--text-primary)',
+                fontSize: '12px',
+                fontWeight: typeFilter !== 'all' ? 700 : 500,
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="all">Tipo: Todos</option>
+              <option value="mesa">🍽️ Mesas / Salón</option>
+              <option value="para_llevar">🛍️ Para Llevar</option>
+              <option value="delivery">🛵 Domicilios</option>
+            </select>
+          </div>
+
+          {/* Desplegable 2: Estado de Orden */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: statusFilter !== 'all' ? '1.5px solid #10b981' : '1px solid var(--border-color)',
+                background: statusFilter !== 'all' ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-primary)',
+                color: statusFilter !== 'all' ? '#10b981' : 'var(--text-primary)',
+                fontSize: '12px',
+                fontWeight: statusFilter !== 'all' ? 700 : 500,
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="all">Estado: Todos</option>
+              <option value="pending">⏳ Abiertas / En Atención</option>
+              <option value="pendiente_pago">💳 Con Saldo / Crédito CxC</option>
+              <option value="cerrada">✅ Pagadas / Cerradas</option>
+              <option value="cancelada">❌ Canceladas</option>
+            </select>
+          </div>
+
+          {/* Desplegable 3: Origen / Productos de Terceros */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <select
+              value={thirdPartyFilter}
+              onChange={(e) => setThirdPartyFilter(e.target.value)}
+              style={{
+                padding: '9px 12px',
+                borderRadius: '8px',
+                border: thirdPartyFilter !== 'all' ? '1.5px solid #d97706' : '1px solid var(--border-color)',
+                background: thirdPartyFilter !== 'all' ? 'rgba(217, 119, 6, 0.12)' : 'var(--bg-primary)',
+                color: thirdPartyFilter !== 'all' ? '#d97706' : 'var(--text-primary)',
+                fontSize: '12px',
+                fontWeight: thirdPartyFilter !== 'all' ? 700 : 500,
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="all">Origen: Todos</option>
+              <option value="only_own">Propio: Solo propios</option>
+              <option value="with_third_party">Terceros: Con productos de socios</option>
+            </select>
+          </div>
+
+          {/* Desplegable 4: Ordenamiento */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -2562,75 +2641,9 @@ export const OrdersListPage = () => {
               }}
             />
           </Button>
-        </div>
-
-        {/* Fila 2: Chips Rápidos de Tipo y Estado */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', paddingTop: '4px' }}>
-          {/* Tipo de orden */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Filter size={12} /> Tipo:
-            </span>
-            {[
-              { id: 'all', label: 'Todas' },
-              { id: 'mesa', label: 'Mesas' },
-              { id: 'para_llevar', label: 'Para Llevar' },
-              { id: 'delivery', label: 'Domicilios' },
-            ].map(t => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTypeFilter(t.id)}
-                style={{
-                  padding: '4px 11px',
-                  borderRadius: '20px',
-                  fontSize: '11px',
-                  fontWeight: typeFilter === t.id ? 700 : 500,
-                  border: typeFilter === t.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                  background: typeFilter === t.id ? 'rgba(99, 102, 241, 0.14)' : 'var(--bg-primary)',
-                  color: typeFilter === t.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s'
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-
-            <div style={{ height: '16px', width: '1px', background: 'var(--border-color)', margin: '0 4px' }} />
-
-            {/* Estado */}
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>Estado:</span>
-            {[
-              { id: 'all', label: 'Todos' },
-              { id: 'pending', label: 'Abiertas / En Atención' },
-              { id: 'pendiente_pago', label: 'Con Saldo / Crédito CxC' },
-              { id: 'cerrada', label: 'Pagadas' },
-              { id: 'cancelada', label: 'Canceladas' },
-            ].map(s => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setStatusFilter(s.id)}
-                style={{
-                  padding: '4px 11px',
-                  borderRadius: '20px',
-                  fontSize: '11px',
-                  fontWeight: statusFilter === s.id ? 700 : 500,
-                  border: statusFilter === s.id ? '1px solid #10b981' : '1px solid var(--border-color)',
-                  background: statusFilter === s.id ? 'rgba(16, 185, 129, 0.14)' : 'var(--bg-primary)',
-                  color: statusFilter === s.id ? '#10b981' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s'
-                }}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
 
           {/* Conteo rápido de resultados */}
-          <Badge variant="info" style={{ fontSize: '11.5px', padding: '4px 10px', fontWeight: 700 }}>
+          <Badge variant="info" style={{ fontSize: '11.5px', padding: '6px 12px', fontWeight: 700, marginLeft: 'auto' }}>
             {filteredOrders.length} {filteredOrders.length === 1 ? 'orden' : 'órdenes'}
           </Badge>
         </div>
@@ -2813,7 +2826,7 @@ export const OrdersListPage = () => {
         )}
 
         {/* Fila 4: Barra de Pills de Filtros Activos y Limpieza */}
-        {(searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || paymentMethodFilter !== 'all' || waiterFilter !== 'all' || amountRangeFilter !== 'all' || shiftFilter !== 'all' || dateFilter !== '7days' || sortBy !== 'date_desc') && (
+        {(searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || thirdPartyFilter !== 'all' || paymentMethodFilter !== 'all' || waiterFilter !== 'all' || amountRangeFilter !== 'all' || shiftFilter !== 'all' || dateFilter !== '7days' || sortBy !== 'date_desc') && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Filtros Activos:</span>
@@ -2827,15 +2840,22 @@ export const OrdersListPage = () => {
 
               {typeFilter !== 'all' && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 700 }}>
-                  Tipo: {typeFilter}
+                  Tipo: {typeFilter === 'mesa' ? 'Mesas' : typeFilter === 'para_llevar' ? 'Para Llevar' : 'Domicilios'}
                   <X size={12} style={{ cursor: 'pointer' }} onClick={() => setTypeFilter('all')} />
                 </span>
               )}
 
               {statusFilter !== 'all' && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.12)', color: '#10b981', fontSize: '11px', fontWeight: 700 }}>
-                  Estado: {statusFilter}
+                  Estado: {statusFilter === 'pending' ? 'Abiertas' : statusFilter === 'pendiente_pago' ? 'Con Saldo CxC' : statusFilter === 'cerrada' ? 'Pagadas' : 'Canceladas'}
                   <X size={12} style={{ cursor: 'pointer' }} onClick={() => setStatusFilter('all')} />
+                </span>
+              )}
+
+              {thirdPartyFilter !== 'all' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(217, 119, 6, 0.12)', color: '#d97706', fontSize: '11px', fontWeight: 700 }}>
+                  Origen: {thirdPartyFilter === 'with_third_party' ? 'Con Terceros' : 'Solo Propios'}
+                  <X size={12} style={{ cursor: 'pointer' }} onClick={() => setThirdPartyFilter('all')} />
                 </span>
               )}
 
@@ -2882,6 +2902,7 @@ export const OrdersListPage = () => {
                 setSearchQuery('');
                 setTypeFilter('all');
                 setStatusFilter('all');
+                setThirdPartyFilter('all');
                 setPaymentMethodFilter('all');
                 setWaiterFilter('all');
                 setAmountRangeFilter('all');
@@ -3058,7 +3079,7 @@ export const OrdersListPage = () => {
                           </span>
                           {parseFloat(o.third_party_total || 0) > 0 && (
                             <span style={{ fontSize: '9.5px', color: '#d97706', fontWeight: 700 }}>
-                              🤝 Propio: {formatCOP(Math.max(0, orderTotal - parseFloat(o.third_party_total)))}
+                              Propio: {formatCOP(Math.max(0, orderTotal - parseFloat(o.third_party_total)))}
                             </span>
                           )}
                         </div>

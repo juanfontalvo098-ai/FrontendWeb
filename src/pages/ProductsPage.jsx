@@ -914,7 +914,7 @@ export const ProductsPage = () => {
               {[
                 { id: 'all', label: 'Todos' },
                 { id: 'own', label: 'Propios' },
-                { id: 'third_party', label: '🤝 Terceros / Socios' },
+                { id: 'third_party', label: 'Terceros / Socios' },
               ].map(orig => (
                 <button
                   key={orig.id}
@@ -1198,7 +1198,7 @@ export const ProductsPage = () => {
                                 border: '1px solid rgba(217, 119, 6, 0.3)',
                                 whiteSpace: 'nowrap'
                               }}>
-                                🤝 Tercero
+                                Tercero
                               </span>
                             )}
                           </div>

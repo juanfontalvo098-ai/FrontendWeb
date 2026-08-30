@@ -812,7 +812,7 @@ export const BillingPage = () => {
                             border: '1px solid rgba(217, 119, 6, 0.3)',
                             marginLeft: '6px'
                           }}>
-                            🤝 Tercero
+                            Tercero
                           </span>
                         )}
                         <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '6px' }}>
@@ -1320,7 +1320,7 @@ export const BillingPage = () => {
                   color: '#d97706'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                    <span>🤝 Incluye productos de terceros:</span>
+                    <span>Incluye productos de terceros:</span>
                     <span>{formatCOP(selectedInvoiceDetail.third_party_total)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', marginTop: '2px', fontSize: '10.5px' }}>

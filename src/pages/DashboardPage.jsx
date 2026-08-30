@@ -484,7 +484,7 @@ export const DashboardPage = () => {
               display: 'flex',
               justifyContent: 'space-between'
             }}>
-              <span>🤝 Terceros (No ganancia):</span>
+              <span>Terceros (No ganancia):</span>
               <strong>{formatCOP(kpis.third_party_sales)}</strong>
             </div>
           )}
