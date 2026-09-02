@@ -591,10 +591,11 @@ export const OrdersListPage = () => {
   const [editingCartItemIndex, setEditingCartItemIndex] = useState(null);
   const [editingCartInitialModifiers, setEditingCartInitialModifiers] = useState([]);
 
-  // Modal Cancelar Orden
+  // Modal Cancelar / Anular Orden y Factura
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancellingOrder, setCancellingOrder] = useState(false);
+  const [restoreStockOnCancel, setRestoreStockOnCancel] = useState(true);
 
   // Visualización / Reimpresión de Factura
   const [generatedInvoice, setGeneratedInvoice] = useState(null);
@@ -1368,18 +1369,28 @@ export const OrdersListPage = () => {
     }
   };
 
-  // Cancelar Orden
+  // Cancelar / Anular Orden y Factura Cerrada
   const handleConfirmCancelOrder = async () => {
     if (!selectedOrder) return;
     setCancellingOrder(true);
     try {
-      await api.post(`/orders/${selectedOrder.id}/cancel`, { reason: cancelReason || 'Cancelada por el usuario' });
-      addToast(`Orden #${selectedOrder.id} cancelada`, 'success');
+      if (selectedOrder.invoice_id) {
+        await api.delete(`/invoices/${selectedOrder.invoice_id}`, {
+          data: { reason: cancelReason || 'Anulada por el usuario', restore_stock: restoreStockOnCancel }
+        });
+        addToast(`Factura #${selectedOrder.invoice_number || selectedOrder.id} y orden anuladas exitosamente`, 'success');
+      } else {
+        await api.post(`/orders/${selectedOrder.id}/cancel`, {
+          reason: cancelReason || 'Cancelada por el usuario',
+          restore_stock: restoreStockOnCancel
+        });
+        addToast(`Orden #${selectedOrder.id} cancelada`, 'success');
+      }
       setCancelModalOpen(false);
       setOrderModalOpen(false);
       fetchData();
     } catch (err) {
-      addToast(err.message || 'Error al cancelar la orden', 'error');
+      addToast(err.message || 'Error al anular la orden / factura', 'error');
     } finally {
       setCancellingOrder(false);
     }
@@ -3122,25 +3133,59 @@ export const OrdersListPage = () => {
                               </Button>
                             </>
                           ) : isPendingCredit ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              icon={<FileText size={12} />}
-                              onClick={() => handleOpenOrderDetail(o, 'billing')}
-                              style={{ fontSize: '11px', padding: '4px 8px', color: '#f59e0b', borderColor: '#f59e0b' }}
-                            >
-                              Abonar / Factura
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                icon={<FileText size={12} />}
+                                onClick={() => handleOpenOrderDetail(o, 'billing')}
+                                style={{ fontSize: '11px', padding: '4px 8px', color: '#f59e0b', borderColor: '#f59e0b' }}
+                              >
+                                Abonar / Factura
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                icon={<Ban size={12} color="var(--accent-danger)" />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedOrder(o);
+                                  setCancelReason('');
+                                  setCancelModalOpen(true);
+                                }}
+                                style={{ fontSize: '11px', padding: '4px 8px', color: 'var(--accent-danger)' }}
+                                title="Anular Factura / Cancelar Venta"
+                              >
+                                Anular
+                              </Button>
+                            </>
                           ) : isPaid ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              icon={<FileText size={12} />}
-                              onClick={() => handleOpenOrderDetail(o, 'billing')}
-                              style={{ fontSize: '11px', padding: '4px 8px' }}
-                            >
-                              Ver Factura
-                            </Button>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                icon={<FileText size={12} />}
+                                onClick={() => handleOpenOrderDetail(o, 'billing')}
+                                style={{ fontSize: '11px', padding: '4px 8px' }}
+                              >
+                                Ver Factura
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                icon={<Ban size={12} color="var(--accent-danger)" />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedOrder(o);
+                                  setCancelReason('');
+                                  setCancelModalOpen(true);
+                                }}
+                                style={{ fontSize: '11px', padding: '4px 8px', color: 'var(--accent-danger)' }}
+                                title="Anular Factura / Cancelar Venta"
+                              >
+                                Anular
+                              </Button>
+                            </>
                           ) : (
                             <Button
                               size="sm"
@@ -3238,15 +3283,18 @@ export const OrdersListPage = () => {
                 Imprimir Pre-Factura
               </Button>
 
-              {selectedOrder.status !== 'cerrada' && selectedOrder.status !== 'cancelada' && (
+              {selectedOrder.status !== 'cancelada' && (
                 <Button
                   size="sm"
                   variant="ghost"
                   icon={<Ban size={13} color="var(--accent-danger)" />}
-                  onClick={() => setCancelModalOpen(true)}
+                  onClick={() => {
+                    setCancelReason('');
+                    setCancelModalOpen(true);
+                  }}
                   style={{ fontSize: '11px', color: 'var(--accent-danger)', padding: '5px 8px' }}
                 >
-                  Anular
+                  {selectedOrder.status === 'cerrada' || selectedOrder.invoice_number ? 'Anular Factura' : 'Anular'}
                 </Button>
               )}
             </div>
@@ -4656,30 +4704,87 @@ export const OrdersListPage = () => {
       })()}
 
       {/* ========================================================= */}
-      {/* MODAL: CANCELAR / ANULAR ORDEN                            */}
+      {/* MODAL: CANCELAR / ANULAR ORDEN O FACTURA                  */}
       {/* ========================================================= */}
-      {cancelModalOpen && selectedOrder && (
+      {cancelModalOpen && selectedOrder && (() => {
+        const hasInvoice = !!(selectedOrder.invoice_number || selectedOrder.invoice_id);
+        const orderTotal = selectedOrder.final_total || selectedOrder.computed_total || selectedOrder.invoice_total || 0;
+
+        return (
         <Modal
           isOpen={cancelModalOpen}
           onClose={() => setCancelModalOpen(false)}
-          title={`Anular Orden #${selectedOrder.id}`}
+          title={hasInvoice ? `Anular Factura #${selectedOrder.invoice_number || selectedOrder.id}` : `Anular Orden #${selectedOrder.id}`}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--accent-danger)', padding: '10px 12px', borderRadius: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <AlertCircle size={16} />
-              <span>¿Estás seguro de cancelar esta orden? Los productos y comandas serán anulados y la mesa quedará liberada.</span>
+              <AlertCircle size={18} style={{ flexShrink: 0 }} />
+              <div>
+                <strong>¿Estás seguro de anular esta {hasInvoice ? 'factura de venta' : 'orden'}?</strong>
+                <div style={{ marginTop: '2px', fontSize: '11px', opacity: 0.9 }}>
+                  {hasInvoice 
+                    ? `Se anulará la Factura #${selectedOrder.invoice_number || selectedOrder.id} por valor de ${formatCOP(orderTotal)}, se cancelará la orden, se revertirán los movimientos en caja y se liberará la mesa vinculada.`
+                    : 'Los productos y comandas serán anulados y la mesa quedará liberada.'}
+                </div>
+              </div>
             </div>
 
+            {/* Selector rápido de motivos frecuentes */}
             <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px' }}>Motivo de Cancelación</label>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px' }}>
+                Motivo de la Anulación *
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '6px' }}>
+                {[
+                  'Error de digitación en venta',
+                  'Cliente canceló / devolución',
+                  'Cambio en forma de pago',
+                  'Prueba de sistema / entrenamiento',
+                  'Descuento o precio incorrecto'
+                ].map((preset, pIdx) => (
+                  <button
+                    key={pIdx}
+                    type="button"
+                    onClick={() => setCancelReason(preset)}
+                    style={{
+                      fontSize: '10px',
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      border: cancelReason === preset ? '1px solid var(--accent-danger)' : '1px solid var(--border-color)',
+                      background: cancelReason === preset ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-secondary)',
+                      color: cancelReason === preset ? 'var(--accent-danger)' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
               <input
                 type="text"
-                placeholder="Ej. El cliente se retiró, pedido duplicado..."
+                placeholder="Escribe el motivo detallado de la anulación..."
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
                 style={{ width: '100%', padding: '8px 10px', fontSize: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', color: 'var(--text-primary)' }}
               />
             </div>
+
+            {/* Checkbox para restaurar stock */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-primary)', cursor: 'pointer', background: 'var(--bg-secondary)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <input
+                type="checkbox"
+                checked={restoreStockOnCancel}
+                onChange={(e) => setRestoreStockOnCancel(e.target.checked)}
+                style={{ cursor: 'pointer', accentColor: 'var(--accent-primary)' }}
+              />
+              <div>
+                <strong>Restaurar stock de inventario e insumos</strong>
+                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                  Devolver al stock disponible los productos deducidos y registrar la entrada en Kardex.
+                </div>
+              </div>
+            </label>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
               <Button variant="ghost" onClick={() => setCancelModalOpen(false)}>No, volver</Button>
@@ -4689,12 +4794,13 @@ export const OrdersListPage = () => {
                 onClick={handleConfirmCancelOrder}
                 icon={<Ban size={14} />}
               >
-                Sí, Anular Orden
+                {hasInvoice ? 'Sí, Anular Factura y Venta' : 'Sí, Anular Orden'}
               </Button>
             </div>
           </div>
         </Modal>
-      )}
+        );
+      })()}
 
       {/* ========================================================= */}
       {/* MODAL: NUEVA ORDEN (PARA LLEVAR / DOMICILIO)              */}
