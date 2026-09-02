@@ -1,5 +1,5 @@
 // src/pages/OrderPage.jsx — Restored from Desktop Backup with Table Number & RBAC updates
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Search, Plus, Minus, Trash2, Send, Receipt, Printer, FileText, Edit3, Image as ImageIcon, ShoppingCart, Grid, XCircle, Save, ArrowLeft, Sparkles } from 'lucide-react';
 import { api, formatCOP } from '../api/client';
@@ -32,6 +32,9 @@ export const OrderPage = () => {
   const [sending, setSending] = useState(false);
   const [settings, setSettings] = useState(null);
 
+  // Ref para evitar stale closures en los listeners del socket
+  const currentOrderRef = useRef(null);
+
   // Modales
   const [editPriceModalOpen, setEditPriceModalOpen] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState(null);
@@ -54,7 +57,7 @@ export const OrderPage = () => {
     return false;
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [catsData, prodsData, ordersData, settingsData, tableData] = await Promise.all([
@@ -74,6 +77,7 @@ export const OrderPage = () => {
       if (activeOrder) {
         const fullOrder = await api.get(`/orders/${activeOrder.id}`);
         setCurrentOrder(fullOrder);
+        currentOrderRef.current = fullOrder;
         const mappedItems = (fullOrder.items || []).map(item => {
           let parsedMods = [];
           if (item.modifiers_json) {
@@ -94,6 +98,7 @@ export const OrderPage = () => {
       } else {
         // No crear orden en la base de datos hasta que el usuario decida 'Guardar Mesa' o 'Enviar a Cocina'
         setCurrentOrder(null);
+        currentOrderRef.current = null;
         setOrderItems([]);
       }
     } catch (err) {
@@ -102,21 +107,45 @@ export const OrderPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tableId]);
 
   useEffect(() => {
     fetchData();
 
+    // Auto-polling de respaldo para entornos sin WebSocket (Vercel serverless)
+    // Si el socket no está realmente conectado, usamos polling cada 10s
+    const isRealSocket = socket && typeof socket.on === 'function' && socket.connected;
+    const pollInterval = setInterval(() => {
+      if (!document.hidden) {
+        fetchData();
+      }
+    }, isRealSocket ? 30000 : 10000); // 30s con socket real, 10s sin socket (Vercel)
+
     if (socket && typeof socket.on === 'function') {
       const handleUpdate = (data) => {
-        if (currentOrder && data.order_id === currentOrder.id) {
+        // Usar ref en lugar de state para evitar stale closure
+        const orderRef = currentOrderRef.current;
+        if (orderRef && data.order_id == orderRef.id) {
           fetchData();
         }
       };
+      // También escuchar cambios de estado de mesa para forzar actualización
+      const handleTableChange = () => fetchData();
+
       socket.on('order:updated', handleUpdate);
-      return () => socket.off('order:updated', handleUpdate);
+      socket.on('order:created', handleUpdate);
+      socket.on('table:status-changed', handleTableChange);
+
+      return () => {
+        clearInterval(pollInterval);
+        socket.off('order:updated', handleUpdate);
+        socket.off('order:created', handleUpdate);
+        socket.off('table:status-changed', handleTableChange);
+      };
     }
-  }, [tableId, socket]);
+
+    return () => clearInterval(pollInterval);
+  }, [tableId, socket, fetchData]);
 
   const rawTableNum = tableDetails?.table_number || currentOrder?.table_number;
   const displayTableNumber = rawTableNum
@@ -328,6 +357,7 @@ export const OrderPage = () => {
         if (found) {
           activeOrder = found;
           setCurrentOrder(found);
+          currentOrderRef.current = found;
         }
       }
 
@@ -347,15 +377,29 @@ export const OrderPage = () => {
           order_type: 'mesa',
           items: payloadItems
         };
-        await api.post('/orders', payload);
+        const result = await api.post('/orders', payload);
+        if (!result || !result.id) {
+          throw new Error('El servidor no confirmó la creación de la orden');
+        }
         addToast('Mesa guardada exitosamente (Comanda creada)', 'success');
       } else {
-        await api.put(`/orders/${activeOrder.id}`, { items: payloadItems });
+        // Incluir table_id para que el backend asegure que la mesa quede marcada como ocupada
+        await api.put(`/orders/${activeOrder.id}`, { items: payloadItems, table_id: parseInt(tableId, 10) });
         addToast('Comanda de la mesa actualizada y guardada con éxito', 'success');
       }
 
+      // Verificación post-guardado: esperar brevemente y recargar datos reales
+      await new Promise(r => setTimeout(r, 300));
       await fetchData();
+
+      // Validar que la orden realmente se persistió
+      if (!currentOrderRef.current) {
+        console.warn('[OrderPage] Post-save: la orden no se refleja aún. Reintentando...');
+        await new Promise(r => setTimeout(r, 700));
+        await fetchData();
+      }
     } catch (err) {
+      console.error('[OrderPage] Error al guardar mesa:', err);
       addToast(err.message || 'Error al guardar mesa', 'danger');
     } finally {
       setSending(false);
@@ -379,6 +423,7 @@ export const OrderPage = () => {
         if (found) {
           activeId = found.id;
           setCurrentOrder(found);
+          currentOrderRef.current = found;
         }
       }
 
@@ -401,13 +446,28 @@ export const OrderPage = () => {
         };
         const newOrderRes = await api.post('/orders', payload);
         activeId = newOrderRes.id || newOrderRes.order?.id;
+        if (!activeId) {
+          throw new Error('El servidor no confirmó la creación de la orden');
+        }
       } else {
-        await api.put(`/orders/${activeId}`, { items: payloadItems, send_to_kitchen: true });
+        // Incluir table_id para que el backend asegure que la mesa quede marcada como ocupada
+        await api.put(`/orders/${activeId}`, { items: payloadItems, send_to_kitchen: true, table_id: parseInt(tableId, 10) });
       }
 
       addToast('Orden enviada a cocina con éxito', 'success');
+
+      // Verificación post-envío: esperar brevemente y recargar datos reales
+      await new Promise(r => setTimeout(r, 300));
       await fetchData();
+
+      // Validar que la orden realmente se persistió
+      if (!currentOrderRef.current) {
+        console.warn('[OrderPage] Post-kitchen: la orden no se refleja aún. Reintentando...');
+        await new Promise(r => setTimeout(r, 700));
+        await fetchData();
+      }
     } catch (err) {
+      console.error('[OrderPage] Error al enviar a cocina:', err);
       addToast(err.message || 'Error al enviar a cocina', 'danger');
     } finally {
       setSending(false);
