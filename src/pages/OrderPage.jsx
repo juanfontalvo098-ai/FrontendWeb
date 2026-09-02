@@ -32,8 +32,10 @@ export const OrderPage = () => {
   const [sending, setSending] = useState(false);
   const [settings, setSettings] = useState(null);
 
-  // Ref para evitar stale closures en los listeners del socket
+  // Ref para evitar stale closures en los listeners del socket y sincronización de fondo
   const currentOrderRef = useRef(null);
+  const orderItemsRef = useRef([]);
+  orderItemsRef.current = orderItems;
 
   // Modales
   const [editPriceModalOpen, setEditPriceModalOpen] = useState(false);
@@ -57,9 +59,11 @@ export const OrderPage = () => {
     return false;
   };
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) {
+        setLoading(true);
+      }
       const [catsData, prodsData, ordersData, settingsData, tableData] = await Promise.all([
         api.get('/categories'),
         api.get('/products'),
@@ -94,43 +98,61 @@ export const OrderPage = () => {
             modifiers: Array.isArray(parsedMods) ? parsedMods : []
           };
         });
-        setOrderItems(mappedItems);
+
+        // Si es carga inicial o no hay borradores locales pendientes, actualizar directo
+        const currentLocal = orderItemsRef.current || [];
+        const unsavedDrafts = currentLocal.filter(i => !i.dbId);
+
+        if (isInitial || unsavedDrafts.length === 0) {
+          setOrderItems(mappedItems);
+        } else {
+          // Conservar los ítems en borrador que el mesero está agregando en pantalla
+          setOrderItems([...mappedItems, ...unsavedDrafts]);
+        }
       } else {
-        // No crear orden en la base de datos hasta que el usuario decida 'Guardar Mesa' o 'Enviar a Cocina'
+        // No hay orden activa en base de datos
         setCurrentOrder(null);
         currentOrderRef.current = null;
-        setOrderItems([]);
+        
+        // ¡CRUCIAL!: Solo limpiar el carrito si es la carga inicial al entrar a la mesa.
+        // Si el usuario ya está agregando productos en pantalla, NUNCA borrarlos en background sync.
+        if (isInitial) {
+          setOrderItems([]);
+        }
       }
     } catch (err) {
       console.error('Error al cargar datos de la orden:', err);
-      addToast('Error al cargar información de la mesa', 'danger');
+      if (isInitial) {
+        addToast('Error al cargar información de la mesa', 'danger');
+      }
     } finally {
-      setLoading(false);
+      if (isInitial) {
+        setLoading(false);
+      }
     }
   }, [tableId]);
 
   useEffect(() => {
-    fetchData();
+    // Carga inicial explícita con spinner
+    fetchData(true);
 
-    // Auto-polling de respaldo para entornos sin WebSocket (Vercel serverless)
-    // Si el socket no está realmente conectado, usamos polling cada 10s
+    // Auto-polling silencioso de respaldo para entornos sin WebSocket (Vercel serverless)
     const isRealSocket = socket && typeof socket.on === 'function' && socket.connected;
     const pollInterval = setInterval(() => {
       if (!document.hidden) {
-        fetchData();
+        // Sincronización silenciosa en segundo plano SIN bloquear la pantalla ni borrar borradores
+        fetchData(false);
       }
-    }, isRealSocket ? 30000 : 10000); // 30s con socket real, 10s sin socket (Vercel)
+    }, isRealSocket ? 30000 : 15000);
 
     if (socket && typeof socket.on === 'function') {
       const handleUpdate = (data) => {
-        // Usar ref en lugar de state para evitar stale closure
         const orderRef = currentOrderRef.current;
         if (orderRef && data.order_id == orderRef.id) {
-          fetchData();
+          fetchData(false);
         }
       };
-      // También escuchar cambios de estado de mesa para forzar actualización
-      const handleTableChange = () => fetchData();
+      const handleTableChange = () => fetchData(false);
 
       socket.on('order:updated', handleUpdate);
       socket.on('order:created', handleUpdate);
@@ -142,10 +164,10 @@ export const OrderPage = () => {
         socket.off('order:created', handleUpdate);
         socket.off('table:status-changed', handleTableChange);
       };
+    } else {
+      return () => clearInterval(pollInterval);
     }
-
-    return () => clearInterval(pollInterval);
-  }, [tableId, socket, fetchData]);
+  }, [fetchData]);
 
   const rawTableNum = tableDetails?.table_number || currentOrder?.table_number;
   const displayTableNumber = rawTableNum
