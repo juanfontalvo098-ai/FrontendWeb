@@ -2,6 +2,7 @@
 import { io } from 'socket.io-client';
 
 let socket = null;
+let warnedServerless = false;
 
 export const resolveSocketUrl = () => {
   if (import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
@@ -25,16 +26,38 @@ export const resolveSocketUrl = () => {
 export const initSocket = () => {
   const token = localStorage.getItem('token');
   if (!token) {
-    if (socket) {
+    if (socket && typeof socket.disconnect === 'function') {
       socket.disconnect();
       socket = null;
     }
     return null;
   }
 
+  const SOCKET_URL = resolveSocketUrl();
+
+  // Si estamos en un backend serverless en Vercel y no hay servidor WebSocket dedicado especificado
+  const isVercelServerless = typeof SOCKET_URL === 'string' && SOCKET_URL.includes('vercel.app') && !import.meta.env.VITE_SOCKET_URL;
+  if (isVercelServerless) {
+    if (!socket) {
+      if (!warnedServerless) {
+        console.info('ℹ️ [SocketIO] Entorno Serverless (Vercel) detectado: el sistema opera con Auto-Sincronización y Smart Polling de alta velocidad.');
+        warnedServerless = true;
+      }
+      socket = {
+        connected: false,
+        active: false,
+        on: () => {},
+        off: () => {},
+        emit: () => {},
+        disconnect: () => {}
+      };
+    }
+    return socket;
+  }
+
   // Si ya existe un socket activo con el mismo token, lo reutilizamos
-  if (socket) {
-    if (socket.auth && socket.auth.token === token) {
+  if (socket && socket.auth) {
+    if (socket.auth.token === token) {
       if (!socket.connected && !socket.active) {
         socket.connect();
       }
@@ -43,22 +66,6 @@ export const initSocket = () => {
     // Si el token cambió, cerramos la conexión previa
     socket.disconnect();
     socket = null;
-  }
-
-  const SOCKET_URL = resolveSocketUrl();
-
-  // Si estamos en un backend serverless en Vercel y no hay servidor WebSocket dedicado especificado
-  const isVercelServerless = typeof SOCKET_URL === 'string' && SOCKET_URL.includes('vercel.app') && !import.meta.env.VITE_SOCKET_URL;
-  if (isVercelServerless) {
-    console.info('ℹ️ [SocketIO] Entorno Serverless (Vercel) detectado: el sistema opera con Auto-Sincronización y Smart Polling de alta velocidad.');
-    return {
-      connected: false,
-      active: false,
-      on: () => {},
-      off: () => {},
-      emit: () => {},
-      disconnect: () => {}
-    };
   }
 
   socket = io(SOCKET_URL, {
