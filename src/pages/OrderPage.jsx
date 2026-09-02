@@ -59,7 +59,7 @@ export const OrderPage = () => {
     return false;
   };
 
-  const fetchData = useCallback(async (isInitial = false) => {
+  const fetchData = useCallback(async (isInitial = false, forceReplace = false) => {
     try {
       if (isInitial) {
         setLoading(true);
@@ -99,11 +99,11 @@ export const OrderPage = () => {
           };
         });
 
-        // Si es carga inicial o no hay borradores locales pendientes, actualizar directo
+        // Si es carga inicial, o después de guardar/enviar (forceReplace), o no hay borradores locales pendientes:
         const currentLocal = orderItemsRef.current || [];
         const unsavedDrafts = currentLocal.filter(i => !i.dbId);
 
-        if (isInitial || unsavedDrafts.length === 0) {
+        if (isInitial || forceReplace || unsavedDrafts.length === 0) {
           setOrderItems(mappedItems);
         } else {
           // Conservar los ítems en borrador que el mesero está agregando en pantalla
@@ -114,9 +114,8 @@ export const OrderPage = () => {
         setCurrentOrder(null);
         currentOrderRef.current = null;
         
-        // ¡CRUCIAL!: Solo limpiar el carrito si es la carga inicial al entrar a la mesa.
-        // Si el usuario ya está agregando productos en pantalla, NUNCA borrarlos en background sync.
-        if (isInitial) {
+        // Solo limpiar el carrito si es la carga inicial o forzado explícito.
+        if (isInitial || forceReplace) {
           setOrderItems([]);
         }
       }
@@ -410,15 +409,15 @@ export const OrderPage = () => {
         addToast('Comanda de la mesa actualizada y guardada con éxito', 'success');
       }
 
-      // Verificación post-guardado: esperar brevemente y recargar datos reales
-      await new Promise(r => setTimeout(r, 300));
-      await fetchData();
+      // Verificación post-guardado: forzar reemplazo para recibir los items con sus IDs de base de datos
+      await new Promise(r => setTimeout(r, 200));
+      await fetchData(false, true);
 
       // Validar que la orden realmente se persistió
       if (!currentOrderRef.current) {
         console.warn('[OrderPage] Post-save: la orden no se refleja aún. Reintentando...');
-        await new Promise(r => setTimeout(r, 700));
-        await fetchData();
+        await new Promise(r => setTimeout(r, 600));
+        await fetchData(false, true);
       }
     } catch (err) {
       console.error('[OrderPage] Error al guardar mesa:', err);
@@ -478,15 +477,15 @@ export const OrderPage = () => {
 
       addToast('Orden enviada a cocina con éxito', 'success');
 
-      // Verificación post-envío: esperar brevemente y recargar datos reales
-      await new Promise(r => setTimeout(r, 300));
-      await fetchData();
+      // Verificación post-envío: forzar reemplazo para recibir los items enviados a cocina
+      await new Promise(r => setTimeout(r, 200));
+      await fetchData(false, true);
 
       // Validar que la orden realmente se persistió
       if (!currentOrderRef.current) {
         console.warn('[OrderPage] Post-kitchen: la orden no se refleja aún. Reintentando...');
-        await new Promise(r => setTimeout(r, 700));
-        await fetchData();
+        await new Promise(r => setTimeout(r, 600));
+        await fetchData(false, true);
       }
     } catch (err) {
       console.error('[OrderPage] Error al enviar a cocina:', err);
