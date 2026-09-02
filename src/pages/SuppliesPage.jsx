@@ -1303,10 +1303,10 @@ export const SuppliesPage = () => {
                       </span>
                     </td>
                     <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: m.movement_type.includes('salida') || m.movement_type === 'merma' ? 'var(--accent-danger)' : 'var(--accent-success)' }}>
-                      {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                      {parseFloat(m.quantity) > 0 ? `+${parseFloat(m.quantity).toFixed(1)}` : parseFloat(m.quantity).toFixed(1)}
                     </td>
                     <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 800 }}>
-                      {m.balance_after}
+                      {parseFloat(m.balance_after).toFixed(1)}
                     </td>
                     <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>
                       {m.notes || '---'}
