@@ -718,10 +718,13 @@ export const RecipesPage = () => {
     return cost;
   };
 
-  // Cálculo de costos variables de modificadores
+  // Cálculo de costos variables de modificadores (separando obligatorios de opcionales)
   const modifierCostsSummary = useMemo(() => {
-    let minModifierCost = 0;
-    let maxModifierCost = 0;
+    let reqModCostMin = 0;
+    let reqModCostMax = 0;
+    let reqModCostAvg = 0;
+    let optModCostMax = 0;
+    let hasRequiredModifiers = false;
     let totalOptionsWithSupply = 0;
 
     (productModifiers || []).forEach(g => {
@@ -731,21 +734,33 @@ export const RecipesPage = () => {
         const qty = parseFloat(opt.supply_quantity || 0);
         if (opt.supply_id && qty > 0) totalOptionsWithSupply++;
         return qty * costPerUnit;
-      });
+      }).filter(c => c > 0);
 
       if (optionCosts.length > 0) {
         const minCostInGroup = Math.min(...optionCosts);
         const maxCostInGroup = Math.max(...optionCosts);
+        const avgCostInGroup = optionCosts.reduce((a, b) => a + b, 0) / optionCosts.length;
+
         if (g.is_required) {
-          minModifierCost += minCostInGroup * (g.min_selectable || 1);
-          maxModifierCost += maxCostInGroup * (g.max_selectable || 1);
+          hasRequiredModifiers = true;
+          const minSel = g.min_selectable || 1;
+          reqModCostMin += minCostInGroup * minSel;
+          reqModCostMax += maxCostInGroup * minSel;
+          reqModCostAvg += avgCostInGroup * minSel;
         } else {
-          maxModifierCost += maxCostInGroup * (g.max_selectable || 1);
+          optModCostMax += maxCostInGroup * (g.max_selectable || 1);
         }
       }
     });
 
-    return { minModifierCost, maxModifierCost, totalOptionsWithSupply };
+    return {
+      reqModCostMin,
+      reqModCostMax,
+      reqModCostAvg,
+      optModCostMax,
+      hasRequiredModifiers,
+      totalOptionsWithSupply
+    };
   }, [productModifiers, supplies]);
 
   const selectedProductObj = products.find(p => p.id.toString() === productId.toString());
@@ -753,8 +768,16 @@ export const RecipesPage = () => {
   const formPrice = selectedProductObj ? parseFloat(selectedProductObj.price || 0) : 0;
   const parsedYield = parseFloat(yieldQuantity) || 1;
   const baseCostPerPortion = parsedYield > 0 ? formBaseCost / parsedYield : formBaseCost;
-  const formProfit = formPrice - baseCostPerPortion;
-  const formMargin = formPrice > 0 ? ((formProfit / formPrice) * 100).toFixed(1) : '0';
+
+  // Costo total efectivo considerando insumos base + modificadores/sabores obligatorios
+  const effectiveTotalCostAvg = baseCostPerPortion + modifierCostsSummary.reqModCostAvg;
+  const effectiveTotalCostMin = baseCostPerPortion + modifierCostsSummary.reqModCostMin;
+  const effectiveTotalCostMax = baseCostPerPortion + modifierCostsSummary.reqModCostMax;
+
+  const effectiveProfitAvg = formPrice - effectiveTotalCostAvg;
+  const effectiveMarginAvg = formPrice > 0 ? ((effectiveProfitAvg / formPrice) * 100).toFixed(1) : '0';
+  const effectiveMarginMin = formPrice > 0 ? (((formPrice - effectiveTotalCostMax) / formPrice) * 100).toFixed(1) : '0';
+  const effectiveMarginMax = formPrice > 0 ? (((formPrice - effectiveTotalCostMin) / formPrice) * 100).toFixed(1) : '0';
 
   // Filtrado de insumos en la barra rápida
   const quickFilteredSupplies = useMemo(() => {
@@ -912,18 +935,31 @@ export const RecipesPage = () => {
                   </div>
 
                   {/* Bloque Financiero */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', background: 'var(--bg-primary)', padding: '8px 10px', borderRadius: '6px', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '8px', background: 'var(--bg-primary)', padding: '8px 10px', borderRadius: '6px', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
                     <div>
-                      <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Costo Base</div>
-                      <div style={{ fontWeight: 800, color: 'var(--accent-warning)', fontSize: '12px' }}>{formatCOP(r.total_cost)}</div>
+                      <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                        {r.has_required_modifiers ? 'Costo Total Real' : 'Costo Insumos'}
+                      </div>
+                      <div style={{ fontWeight: 800, color: 'var(--accent-warning)', fontSize: '12px' }}>
+                        {formatCOP(r.total_cost)}
+                      </div>
+                      {r.has_required_modifiers && (
+                        <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '1px' }}>
+                          Base {formatCOP(r.base_cost)} + Sabor {formatCOP(r.required_modifiers_cost)}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Precio Venta</div>
                       <div style={{ fontWeight: 800, fontSize: '12px' }}>{formatCOP(r.price)}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Utilidad Base</div>
-                      <div style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '12px' }}>{formatCOP(r.price - r.total_cost)}</div>
+                      <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                        {r.has_required_modifiers ? 'Utilidad Real' : 'Utilidad Bruta'}
+                      </div>
+                      <div style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '12px' }}>
+                        {formatCOP(r.price - r.total_cost)}
+                      </div>
                     </div>
                   </div>
 
@@ -1517,18 +1553,41 @@ export const RecipesPage = () => {
           {/* ========================================================================= */}
           <div style={{ background: 'var(--bg-elevated)', padding: '12px 14px', borderRadius: '6px', marginBottom: '16px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Costo Insumos Base Fijos:</span>
-              <strong style={{ color: 'var(--accent-warning)', fontSize: '13px' }}>{formatCOP(formBaseCost)}</strong>
+              <span style={{ color: 'var(--text-muted)' }}>Costo Insumos Base (Fijos):</span>
+              <strong style={{ color: 'var(--accent-warning)', fontSize: '12.5px' }}>{formatCOP(baseCostPerPortion)}</strong>
             </div>
 
-            {modifierCostsSummary.maxModifierCost > 0 && (
+            {modifierCostsSummary.hasRequiredModifiers && (
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Costo Estimado de Modificadores/Sabores:</span>
-                <strong style={{ color: 'var(--accent-primary)', fontSize: '12px' }}>
-                  {modifierCostsSummary.minModifierCost === modifierCostsSummary.maxModifierCost
-                    ? `+${formatCOP(modifierCostsSummary.minModifierCost)}`
-                    : `+${formatCOP(modifierCostsSummary.minModifierCost)} a +${formatCOP(modifierCostsSummary.maxModifierCost)}`}
+                <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>Costo Sabores / Modificadores Obligatorios:</span>
+                  <Badge variant="warning" style={{ fontSize: '9px', padding: '0 4px' }}>Obligatorio</Badge>
+                </span>
+                <strong style={{ color: 'var(--accent-primary)', fontSize: '12.5px' }}>
+                  {modifierCostsSummary.reqModCostMin === modifierCostsSummary.reqModCostMax
+                    ? `+${formatCOP(modifierCostsSummary.reqModCostAvg)}`
+                    : `+${formatCOP(modifierCostsSummary.reqModCostMin)} a +${formatCOP(modifierCostsSummary.reqModCostMax)}`}
                 </strong>
+              </div>
+            )}
+
+            {modifierCostsSummary.hasRequiredModifiers && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', background: 'rgba(99, 102, 241, 0.06)', padding: '4px 8px', borderRadius: '4px' }}>
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Costo Total Real por Porción (Base + Sabores):</span>
+                <strong style={{ color: 'var(--accent-warning)', fontSize: '13px' }}>
+                  {modifierCostsSummary.reqModCostMin === modifierCostsSummary.reqModCostMax
+                    ? formatCOP(effectiveTotalCostAvg)
+                    : `${formatCOP(effectiveTotalCostMin)} - ${formatCOP(effectiveTotalCostMax)}`}
+                </strong>
+              </div>
+            )}
+
+            {modifierCostsSummary.optModCostMax > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Toppings / Opcionales Adicionales:</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontStyle: 'italic' }}>
+                  Hasta +{formatCOP(modifierCostsSummary.optModCostMax)} (cobrados aparte)
+                </span>
               </div>
             )}
 
@@ -1538,13 +1597,24 @@ export const RecipesPage = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '8px', marginTop: '6px', alignItems: 'center' }}>
-              <span style={{ fontWeight: 700 }}>Margen de Ganancia Base:</span>
+              <div>
+                <span style={{ fontWeight: 800, fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                  Margen de Ganancia Real {modifierCostsSummary.hasRequiredModifiers ? '(con Sabores Obligatorios)' : 'Base'}:
+                </span>
+                {modifierCostsSummary.hasRequiredModifiers && (
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                    Calculado con insumos base + porción de sabores requeridos
+                  </div>
+                )}
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Badge variant={parseFloat(formMargin) >= 60 ? 'success' : parseFloat(formMargin) >= 40 ? 'warning' : 'danger'}>
-                  {formMargin}%
+                <Badge variant={parseFloat(effectiveMarginAvg) >= 60 ? 'success' : parseFloat(effectiveMarginAvg) >= 40 ? 'warning' : 'danger'}>
+                  {modifierCostsSummary.hasRequiredModifiers && modifierCostsSummary.reqModCostMin !== modifierCostsSummary.reqModCostMax
+                    ? `${effectiveMarginMin}% - ${effectiveMarginMax}%`
+                    : `${effectiveMarginAvg}%`}
                 </Badge>
-                <strong style={{ color: formProfit >= 0 ? 'var(--accent-primary)' : 'var(--accent-danger)', fontSize: '14px' }}>
-                  ({formatCOP(formProfit)})
+                <strong style={{ color: effectiveProfitAvg >= 0 ? 'var(--accent-primary)' : 'var(--accent-danger)', fontSize: '14px' }}>
+                  ({formatCOP(effectiveProfitAvg)})
                 </strong>
               </div>
             </div>
