@@ -1309,7 +1309,7 @@ export const SuppliesPage = () => {
                       {parseFloat(m.balance_after).toFixed(1)}
                     </td>
                     <td style={{ padding: '6px 8px', color: 'var(--text-secondary)' }}>
-                      {m.notes || '---'}
+                      {(m.notes || '---').replace(/#undefined/gi, '#POS').replace(/\bundefined\b/gi, 'POS')}
                     </td>
                   </tr>
                 ))}
