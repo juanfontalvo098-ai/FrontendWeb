@@ -160,7 +160,7 @@ const SearchableSupplySelect = ({ value, onChange, supplies = [] }) => {
   );
 };
 
-export const ProductModifiersConfigModal = ({ isOpen, onClose, product, supplies = [] }) => {
+export const ProductModifiersConfigModal = ({ isOpen, onClose, product, supplies = [], onSaved }) => {
   const addToast = useUiStore((state) => state.addToast);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -345,6 +345,7 @@ export const ProductModifiersConfigModal = ({ isOpen, onClose, product, supplies
       setSaving(true);
       await api.post(`/modifiers/products/${product.id}`, { groups });
       addToast('Modificadores del producto guardados exitosamente', 'success');
+      if (typeof onSaved === 'function') onSaved();
       onClose();
     } catch (err) {
       console.error('Error al guardar modificadores:', err);

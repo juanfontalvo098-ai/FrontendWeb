@@ -2,15 +2,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   UtensilsCrossed, Plus, Search, Edit2, Trash2, Layers, DollarSign,
-  PieChart, AlertCircle, ChevronDown, CheckCircle, Package, Boxes,
+  PieChart, AlertCircle, ChevronDown, ChevronUp, CheckCircle, Package, Boxes,
   TrendingUp, Info, X, Check, ArrowRight, Sparkles, Scale, AlertTriangle,
-  Minus, Filter
+  Minus, Filter, ExternalLink, HelpCircle
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
+import { ProductModifiersConfigModal } from '../components/ProductModifiersConfigModal';
 import { api, formatCOP } from '../api/client';
 import { useUiStore } from '../store/uiStore';
 
@@ -121,7 +122,7 @@ const SearchableProductSelect = ({ products = [], selectedId, onSelect, disabled
               <input
                 type="text"
                 autoFocus
-                placeholder="Escribe para buscar plato (ej. Fresa, Hamburguesa, Helado)..."
+                placeholder="Escribe para buscar plato (ej. Helado, Cono, Hamburguesa)..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={{
@@ -205,7 +206,7 @@ const SearchableProductSelect = ({ products = [], selectedId, onSelect, disabled
 // =========================================================================
 // COMPONENTE: SELECTOR / BUSCADOR PREDICTIVO EN CADA FILA DE INSUMO
 // =========================================================================
-const SearchableSupplyCombobox = ({ supplies = [], selectedId, onSelect, placeholder = "Buscar insumo..." }) => {
+const SearchableSupplyCombobox = ({ supplies = [], selectedId, onSelect, placeholder = "Buscar insumo...", allowClear = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef(null);
@@ -244,7 +245,7 @@ const SearchableSupplyCombobox = ({ supplies = [], selectedId, onSelect, placeho
         }}
         style={{
           width: '100%',
-          padding: '7px 10px',
+          padding: '6px 8px',
           background: 'var(--bg-primary)',
           border: isOpen ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-color)',
           borderRadius: 'var(--radius-sm)',
@@ -253,28 +254,43 @@ const SearchableSupplyCombobox = ({ supplies = [], selectedId, onSelect, placeho
           justifyContent: 'space-between',
           alignItems: 'center',
           gap: '6px',
-          minHeight: '36px',
+          minHeight: '34px',
           transition: 'border-color 0.15s'
         }}
       >
         {selectedSupply ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-            <Boxes size={14} color="var(--accent-secondary)" style={{ flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', flex: 1 }}>
+            <Boxes size={13} color="var(--accent-secondary)" style={{ flexShrink: 0 }} />
             <div style={{ textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '11.5px' }}>
                 {selectedSupply.name}
               </span>
               <span style={{ fontSize: '10px', color: 'var(--accent-warning)', marginLeft: '6px', fontWeight: 600 }}>
-                ({formatCOP(selectedSupply.cost_price)} / {selectedSupply.unit_of_measure})
+                ({formatCOP(selectedSupply.cost_price)}/{selectedSupply.unit_of_measure})
               </span>
             </div>
           </div>
         ) : (
-          <span style={{ color: 'var(--text-muted)', fontSize: '11.5px' }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
             {placeholder}
           </span>
         )}
-        <ChevronDown size={14} color="var(--text-muted)" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {allowClear && selectedSupply && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect('');
+              }}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+              title="Quitar insumo"
+            >
+              <X size={12} />
+            </button>
+          )}
+          <ChevronDown size={13} color="var(--text-muted)" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }} />
+        </div>
       </div>
 
       {/* Popover desplegable flotante con buscador */}
@@ -321,6 +337,24 @@ const SearchableSupplyCombobox = ({ supplies = [], selectedId, onSelect, placeho
           </div>
 
           <div style={{ overflowY: 'auto', maxHeight: '200px', padding: '3px' }}>
+            {allowClear && (
+              <div
+                onClick={() => {
+                  onSelect('');
+                  setIsOpen(false);
+                }}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '11px',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  borderBottom: '1px solid var(--border-color)',
+                  fontStyle: 'italic'
+                }}
+              >
+                (Sin insumo vinculado)
+              </div>
+            )}
             {filteredSupplies.length === 0 ? (
               <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11px' }}>
                 No hay insumos para "<strong>{search}</strong>"
@@ -397,12 +431,20 @@ export const RecipesPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState(null);
 
-  // Form State
+  // Form State Base
   const [productId, setProductId] = useState('');
   const [yieldQuantity, setYieldQuantity] = useState('1');
   const [notes, setNotes] = useState('');
   const [ingredients, setIngredients] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // Modificadores / Sabores / Toppings vinculados al producto actual
+  const [productModifiers, setProductModifiers] = useState([]);
+  const [loadingModifiers, setLoadingModifiers] = useState(false);
+  const [isModifiersConfigOpen, setIsModifiersConfigOpen] = useState(false);
+
+  // Control de tarjetas expandidas en el listado
+  const [expandedModifierCards, setExpandedModifierCards] = useState(new Set());
 
   // Barra de Búsqueda Rápida de Insumos (Quick Add)
   const [quickSupplySearch, setQuickSupplySearch] = useState('');
@@ -435,6 +477,30 @@ export const RecipesPage = () => {
     fetchData();
   }, []);
 
+  // Cargar grupos de modificadores cuando cambia el producto seleccionado en el modal
+  const loadProductModifiers = async (prodId) => {
+    if (!prodId) {
+      setProductModifiers([]);
+      return;
+    }
+    try {
+      setLoadingModifiers(true);
+      const data = await api.get(`/modifiers/products/${prodId}`);
+      setProductModifiers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error al cargar modificadores:', err);
+      setProductModifiers([]);
+    } finally {
+      setLoadingModifiers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isModalOpen && productId) {
+      loadProductModifiers(productId);
+    }
+  }, [productId, isModalOpen]);
+
   // Cerrar popover de quick search al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -453,7 +519,8 @@ export const RecipesPage = () => {
   const handleOpenNew = () => {
     setEditingRecipe(null);
     const prodWithoutRecipe = products.find(p => !existingRecipeProductIds.has(p.id));
-    setProductId(prodWithoutRecipe?.id?.toString() || products[0]?.id?.toString() || '');
+    const targetProdId = prodWithoutRecipe?.id?.toString() || products[0]?.id?.toString() || '';
+    setProductId(targetProdId);
     setYieldQuantity('1');
     setNotes('');
     setQuickSupplySearch('');
@@ -489,7 +556,7 @@ export const RecipesPage = () => {
     setIsModalOpen(true);
   };
 
-  // Agregar insumo desde la barra rápida superior
+  // Agregar insumo base desde la barra rápida superior
   const handleQuickAddSupply = (supply) => {
     if (!supply) return;
     const existingIndex = ingredients.findIndex(i => i.supply_id.toString() === supply.id.toString());
@@ -556,6 +623,60 @@ export const RecipesPage = () => {
     setIngredients(newIngredients);
   };
 
+  // Modificar insumo o porción en una opción de modificador
+  const handleModifierOptionChange = (groupId, optionId, field, value) => {
+    setProductModifiers(prevGroups =>
+      prevGroups.map(g => {
+        if (g.id !== groupId) return g;
+        return {
+          ...g,
+          options: (g.options || []).map(opt => {
+            if (opt.id !== optionId) return opt;
+            const updated = { ...opt, [field]: value };
+            if (field === 'supply_id') {
+              const sup = supplies.find(s => s.id.toString() === (value || '').toString());
+              if (sup) {
+                updated.unit_of_measure = sup.unit_of_measure || 'unidad';
+                updated.supply_name = sup.name;
+                updated.supply_cost = sup.cost_price;
+              } else {
+                updated.supply_name = '';
+                updated.supply_cost = 0;
+              }
+            }
+            return updated;
+          })
+        };
+      })
+    );
+  };
+
+  // Atajo para asignar misma cantidad de insumo a todo un grupo de opciones (ej. 100g de helado a todos los sabores)
+  const handleApplySameQtyToGroup = (group) => {
+    const defaultVal = group.options?.find(o => o.supply_quantity > 0)?.supply_quantity || '100';
+    const inputVal = window.prompt(`Ingresa la porción/cantidad para todas las opciones de "${group.name}" (ej. 100):`, defaultVal);
+    if (inputVal === null) return;
+    const num = parseFloat(inputVal);
+    if (isNaN(num) || num < 0) {
+      addToast('Ingresa un número válido', 'warning');
+      return;
+    }
+    setProductModifiers(prevGroups =>
+      prevGroups.map(g => {
+        if (g.id !== group.id) return g;
+        return {
+          ...g,
+          options: (g.options || []).map(opt => ({
+            ...opt,
+            supply_quantity: num
+          }))
+        };
+      })
+    );
+    addToast(`Porción de ${num} aplicada a todas las opciones de "${group.name}"`, 'success');
+  };
+
+  // Cálculo de costos base
   const calculateFormCost = () => {
     let cost = 0;
     ingredients.forEach(ing => {
@@ -567,12 +688,42 @@ export const RecipesPage = () => {
     return cost;
   };
 
+  // Cálculo de costos variables de modificadores
+  const modifierCostsSummary = useMemo(() => {
+    let minModifierCost = 0;
+    let maxModifierCost = 0;
+    let totalOptionsWithSupply = 0;
+
+    (productModifiers || []).forEach(g => {
+      const optionCosts = (g.options || []).map(opt => {
+        const sup = supplies.find(s => s.id.toString() === (opt.supply_id || '').toString());
+        const costPerUnit = sup ? parseFloat(sup.cost_price || 0) : (parseFloat(opt.supply_cost || 0));
+        const qty = parseFloat(opt.supply_quantity || 0);
+        if (opt.supply_id && qty > 0) totalOptionsWithSupply++;
+        return qty * costPerUnit;
+      });
+
+      if (optionCosts.length > 0) {
+        const minCostInGroup = Math.min(...optionCosts);
+        const maxCostInGroup = Math.max(...optionCosts);
+        if (g.is_required) {
+          minModifierCost += minCostInGroup * (g.min_selectable || 1);
+          maxModifierCost += maxCostInGroup * (g.max_selectable || 1);
+        } else {
+          maxModifierCost += maxCostInGroup * (g.max_selectable || 1);
+        }
+      }
+    });
+
+    return { minModifierCost, maxModifierCost, totalOptionsWithSupply };
+  }, [productModifiers, supplies]);
+
   const selectedProductObj = products.find(p => p.id.toString() === productId.toString());
-  const formCost = calculateFormCost();
+  const formBaseCost = calculateFormCost();
   const formPrice = selectedProductObj ? parseFloat(selectedProductObj.price || 0) : 0;
   const parsedYield = parseFloat(yieldQuantity) || 1;
-  const costPerPortion = parsedYield > 0 ? formCost / parsedYield : formCost;
-  const formProfit = formPrice - costPerPortion;
+  const baseCostPerPortion = parsedYield > 0 ? formBaseCost / parsedYield : formBaseCost;
+  const formProfit = formPrice - baseCostPerPortion;
   const formMargin = formPrice > 0 ? ((formProfit / formPrice) * 100).toFixed(1) : '0';
 
   // Filtrado de insumos en la barra rápida
@@ -588,11 +739,12 @@ export const RecipesPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!productId || ingredients.length === 0) {
-      addToast('Selecciona el producto y agrega al menos un insumo requerido', 'warning');
+    if (!productId) {
+      addToast('Selecciona el producto terminado', 'warning');
       return;
     }
 
+    // Validar insumos base si los hay
     for (let i = 0; i < ingredients.length; i++) {
       if (!ingredients[i].supply_id) {
         addToast(`Selecciona un insumo válido en la fila #${i + 1}`, 'warning');
@@ -620,12 +772,16 @@ export const RecipesPage = () => {
 
       if (editingRecipe) {
         await api.put(`/inventory/recipes/${editingRecipe.id}`, payload);
-        addToast('Ficha técnica / Receta actualizada exitosamente', 'success');
       } else {
         await api.post('/inventory/recipes', payload);
-        addToast('Ficha técnica / Receta creada exitosamente', 'success');
       }
 
+      // Guardar también los insumos y porciones configuradas en los modificadores
+      if (productModifiers && productModifiers.length > 0) {
+        await api.post(`/modifiers/products/${productId}`, { groups: productModifiers });
+      }
+
+      addToast('Ficha técnica e insumos de modificadores guardados exitosamente', 'success');
       setIsModalOpen(false);
       fetchData();
     } catch (err) {
@@ -646,6 +802,15 @@ export const RecipesPage = () => {
     }
   };
 
+  const toggleExpandModifiers = (recipeId) => {
+    setExpandedModifierCards(prev => {
+      const next = new Set(prev);
+      if (next.has(recipeId)) next.delete(recipeId);
+      else next.add(recipeId);
+      return next;
+    });
+  };
+
   const filteredRecipes = recipes.filter(r =>
     r.product_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -659,7 +824,7 @@ export const RecipesPage = () => {
             <UtensilsCrossed size={24} color="var(--accent-secondary)" /> Fichas Técnicas & Recetas (BOM)
           </h1>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
-            Define los <strong>insumos y materias primas</strong> que componen cada plato o bebida para descontar stock y costear con precisión.
+            Define los <strong>insumos base fijos</strong> y los <strong>sabores/toppings variables</strong> de cada producto para costeo y descuento automático de inventario al vender.
           </p>
         </div>
         <Button onClick={handleOpenNew} icon={<Plus size={16} />}>
@@ -687,13 +852,21 @@ export const RecipesPage = () => {
         </Card>
       ) : filteredRecipes.length === 0 ? (
         <Card style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
-          No hay fichas técnicas registradas. Haz clic en "Nueva Ficha Técnica" para enlazar un plato con sus insumos.
+          No hay fichas técnicas registradas. Haz clic en "Nueva Ficha Técnica" para enlazar un plato con sus insumos y sabores.
         </Card>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '14px' }}>
           {filteredRecipes.map((r) => {
             const margin = parseFloat(r.profit_margin || 0).toFixed(1);
             const isHealthyMargin = parseFloat(margin) >= 60;
+            const hasModifierGroups = Array.isArray(r.modifier_groups) && r.modifier_groups.length > 0;
+            const totalModifierOptions = hasModifierGroups
+              ? r.modifier_groups.reduce((acc, g) => acc + (g.options?.length || 0), 0)
+              : 0;
+            const optionsWithSupply = hasModifierGroups
+              ? r.modifier_groups.reduce((acc, g) => acc + (g.options?.filter(o => o.supply_id)?.length || 0), 0)
+              : 0;
+            const isExpanded = expandedModifierCards.has(r.id);
 
             return (
               <Card key={r.id} style={{ padding: '14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -701,7 +874,7 @@ export const RecipesPage = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                     <div>
                       <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>{r.product_name}</h3>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Rendimiento: {r.yield_quantity} porción(es)</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Rendimiento base: {r.yield_quantity} porción(es)</div>
                     </div>
                     <Badge variant={isHealthyMargin ? 'success' : 'warning'} style={{ fontSize: '10px' }}>
                       Margen: {margin}%
@@ -711,7 +884,7 @@ export const RecipesPage = () => {
                   {/* Bloque Financiero */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', background: 'var(--bg-primary)', padding: '8px 10px', borderRadius: '6px', marginBottom: '12px', border: '1px solid var(--border-color)' }}>
                     <div>
-                      <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Costo Insumos</div>
+                      <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Costo Base</div>
                       <div style={{ fontWeight: 800, color: 'var(--accent-warning)', fontSize: '12px' }}>{formatCOP(r.total_cost)}</div>
                     </div>
                     <div>
@@ -719,32 +892,88 @@ export const RecipesPage = () => {
                       <div style={{ fontWeight: 800, fontSize: '12px' }}>{formatCOP(r.price)}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Utilidad Bruta</div>
+                      <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Utilidad Base</div>
                       <div style={{ fontWeight: 800, color: 'var(--accent-primary)', fontSize: '12px' }}>{formatCOP(r.price - r.total_cost)}</div>
                     </div>
                   </div>
 
-                  {/* Lista de Insumos Requeridos */}
+                  {/* Lista de Insumos Base Fijos */}
                   <div style={{ marginBottom: '12px' }}>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Boxes size={13} color="var(--accent-secondary)" /> Insumos & Materias Primas:
+                      <Boxes size={13} color="var(--accent-secondary)" /> Insumos Base (Fijos):
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '140px', overflowY: 'auto' }}>
-                      {r.ingredients?.map((ing, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-elevated)', padding: '4px 8px', borderRadius: '4px', fontSize: '11px' }}>
-                          <div>
-                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{ing.supply_name}</span>
-                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '6px' }}>
-                              ({ing.quantity} {ing.unit_of_measure})
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '120px', overflowY: 'auto' }}>
+                      {(!r.ingredients || r.ingredients.length === 0) ? (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px' }}>
+                          Sin insumos base fijos configurados
+                        </div>
+                      ) : (
+                        r.ingredients.map((ing, idx) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-elevated)', padding: '4px 8px', borderRadius: '4px', fontSize: '11px' }}>
+                            <div>
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{ing.supply_name}</span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '6px' }}>
+                                ({ing.quantity} {ing.unit_of_measure})
+                              </span>
+                            </div>
+                            <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>
+                              {formatCOP(parseFloat(ing.quantity || 0) * parseFloat(ing.unit_cost || 0))}
                             </span>
                           </div>
-                          <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>
-                            {formatCOP(parseFloat(ing.quantity || 0) * parseFloat(ing.unit_cost || 0))}
-                          </span>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </div>
+
+                  {/* Sección de Modificadores / Sabores / Toppings Dinámicos */}
+                  {hasModifierGroups && (
+                    <div style={{ marginBottom: '12px', borderTop: '1px dashed var(--border-color)', paddingTop: '8px' }}>
+                      <div
+                        onClick={() => toggleExpandModifiers(r.id)}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          padding: '4px 6px',
+                          borderRadius: '4px',
+                          background: 'rgba(99, 102, 241, 0.08)'
+                        }}
+                      >
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <Sparkles size={13} />
+                          <span>🍨 {totalModifierOptions} Sabores/Toppings ({optionsWithSupply} con insumo)</span>
+                        </div>
+                        {isExpanded ? <ChevronUp size={14} color="var(--accent-primary)" /> : <ChevronDown size={14} color="var(--accent-primary)" />}
+                      </div>
+
+                      {isExpanded && (
+                        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {r.modifier_groups.map(group => (
+                            <div key={group.id} style={{ background: 'var(--bg-primary)', padding: '6px 8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                              <div style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                                {group.name} {group.is_required ? <span style={{ color: 'var(--accent-warning)', fontSize: '9px' }}>(Obligatorio)</span> : ''}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                {(group.options || []).map(opt => (
+                                  <div key={opt.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px' }}>
+                                    <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>• {opt.name}</span>
+                                    {opt.supply_id ? (
+                                      <span style={{ color: 'var(--accent-success)', fontWeight: 700 }}>
+                                        📦 {opt.supply_name} ({opt.supply_quantity} {opt.unit_of_measure})
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin insumo</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {r.notes && (
                     <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: '10px' }}>
@@ -767,15 +996,15 @@ export const RecipesPage = () => {
         </div>
       )}
 
-      {/* Modal Crear / Editar Receta */}
+      {/* Modal Crear / Editar Receta Completa (Insumos Base + Sabores & Modificadores) */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingRecipe ? `Editar Ficha Técnica: ${editingRecipe.product_name}` : 'Crear Ficha Técnica / Receta'}
-        maxWidth="820px"
+        title={editingRecipe ? `Ficha Técnica: ${editingRecipe.product_name}` : 'Crear Ficha Técnica / Receta'}
+        maxWidth="860px"
       >
         <form onSubmit={handleSubmit}>
-          {/* Paso 1: Selección Predictiva de Producto Terminado */}
+          {/* Paso 1: Selección de Producto Terminado */}
           <div style={{ marginBottom: '14px' }}>
             <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
               1. Plato / Producto Terminado para la Venta (Menú POS)
@@ -791,7 +1020,7 @@ export const RecipesPage = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '12px', marginBottom: '16px' }}>
             <Input
-              label="Rendimiento (Porciones del plato)"
+              label="Rendimiento Base (Porciones del plato)"
               type="number"
               min="0.01"
               step="any"
@@ -809,14 +1038,21 @@ export const RecipesPage = () => {
             />
           </div>
 
-          {/* Paso 2: Buscador Rápido y Tabla de Insumos */}
+          {/* ========================================================================= */}
+          {/* SECCIÓN 1: INSUMOS BASE FIJOS (Siempre se descuentan) */}
+          {/* ========================================================================= */}
           <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Boxes size={15} color="var(--accent-secondary)" /> 2. Insumos & Materias Primas Requeridas
-              </label>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Boxes size={15} color="var(--accent-secondary)" /> 2. Insumos Base Fijos (Se descuentan en todas las ventas)
+                </label>
+                <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Ejemplo: Cono de galleta, Vaso de helado, Servilletas, Empaques.
+                </div>
+              </div>
               <Button type="button" size="sm" variant="secondary" onClick={handleAddBlankRow} icon={<Plus size={13} />}>
-                Agregar Insumo
+                Agregar Insumo Fijo
               </Button>
             </div>
 
@@ -826,7 +1062,7 @@ export const RecipesPage = () => {
                 <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-primary)' }} />
                 <input
                   type="text"
-                  placeholder="Buscar y agregar insumo rápidamente (ej. Fresa, Leche, Queso, Harina, Vaso)..."
+                  placeholder="Buscar y agregar insumo fijo rápidamente (ej. Cono, Vaso, Servilleta, Harina)..."
                   value={quickSupplySearch}
                   onFocus={() => setIsQuickSearchOpen(true)}
                   onChange={(e) => {
@@ -835,12 +1071,12 @@ export const RecipesPage = () => {
                   }}
                   style={{
                     width: '100%',
-                    padding: '9px 12px 9px 36px',
+                    padding: '8px 12px 8px 36px',
                     background: 'rgba(99, 102, 241, 0.05)',
                     border: '1.5px solid var(--accent-primary)',
                     borderRadius: 'var(--radius-md)',
                     color: 'var(--text-primary)',
-                    fontSize: '12px',
+                    fontSize: '11.5px',
                     fontWeight: 600,
                     outline: 'none'
                   }}
@@ -872,7 +1108,7 @@ export const RecipesPage = () => {
                     border: '1px solid var(--border-color)',
                     borderRadius: 'var(--radius-md)',
                     boxShadow: '0 14px 36px rgba(0,0,0,0.5)',
-                    maxHeight: '260px',
+                    maxHeight: '240px',
                     overflowY: 'auto',
                     padding: '4px'
                   }}
@@ -947,30 +1183,29 @@ export const RecipesPage = () => {
               )}
             </div>
 
-            {/* Cabecera de Columnas de la Tabla */}
+            {/* Cabecera de Columnas de la Tabla Base */}
             <div style={{ display: 'grid', gridTemplateColumns: '2.6fr 1.2fr 0.8fr 1.1fr 36px', gap: '8px', padding: '6px 8px', background: 'var(--bg-secondary)', borderRadius: '4px', fontSize: '10.5px', fontWeight: 800, color: 'var(--text-muted)', marginBottom: '6px' }}>
-              <div>INSUMO (MATERIA PRIMA)</div>
+              <div>INSUMO BASE</div>
               <div style={{ textAlign: 'center' }}>CANTIDAD</div>
               <div style={{ textAlign: 'center' }}>UNIDAD</div>
               <div style={{ textAlign: 'right' }}>COSTO ESTIMADO</div>
               <div style={{ textAlign: 'center' }}></div>
             </div>
 
-            {/* Lista de Insumos en la Receta */}
+            {/* Lista de Insumos Base */}
             {ingredients.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: '6px', color: 'var(--text-muted)', fontSize: '12px', border: '1px dashed var(--border-color)' }}>
-                <Boxes size={24} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
-                <div>Usa el buscador de arriba o haz clic en <strong>Agregar Insumo</strong> para añadir materias primas.</div>
+              <div style={{ padding: '16px', textAlign: 'center', background: 'var(--bg-secondary)', borderRadius: '6px', color: 'var(--text-muted)', fontSize: '11.5px', border: '1px dashed var(--border-color)', marginBottom: '12px' }}>
+                <Boxes size={20} style={{ margin: '0 auto 6px', opacity: 0.5 }} />
+                <div>Sin insumos fijos. Si este producto solo descuenta según el sabor elegido (ej. helado), puedes configurar sus insumos en la sección de abajo.</div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '2px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '2px', marginBottom: '12px' }}>
                 {ingredients.map((ing, index) => {
                   const selectedSup = supplies.find(s => s.id.toString() === ing.supply_id.toString());
                   const rowCost = (parseFloat(ing.quantity) || 0) * (parseFloat(selectedSup?.cost_price) || 0);
 
                   return (
                     <div key={index} style={{ display: 'grid', gridTemplateColumns: '2.6fr 1.2fr 0.8fr 1.1fr 36px', gap: '8px', alignItems: 'center', background: 'var(--bg-elevated)', padding: '4px 6px', borderRadius: '4px' }}>
-                      {/* Insumo con Combobox Predictivo */}
                       <SearchableSupplyCombobox
                         supplies={supplies}
                         selectedId={ing.supply_id}
@@ -978,7 +1213,6 @@ export const RecipesPage = () => {
                         placeholder="Seleccionar insumo..."
                       />
 
-                      {/* Cantidad con Stepper +/- */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                         <button
                           type="button"
@@ -1019,7 +1253,6 @@ export const RecipesPage = () => {
                         </button>
                       </div>
 
-                      {/* Unidad Fija (Automática del Insumo) */}
                       <div style={{
                         padding: '6px 4px',
                         background: 'var(--bg-secondary)',
@@ -1034,16 +1267,14 @@ export const RecipesPage = () => {
                         {selectedSup?.unit_of_measure || ing.unit_of_measure || 'und'}
                       </div>
 
-                      {/* Subtotal Costo */}
                       <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--accent-warning)', textAlign: 'right' }}>
                         {formatCOP(rowCost)}
                       </div>
 
-                      {/* Eliminar */}
                       <button
                         type="button"
                         onClick={() => handleRemoveIngredientRow(index)}
-                        title="Eliminar insumo de la receta"
+                        title="Eliminar insumo base"
                         style={{
                           width: '30px',
                           height: '30px',
@@ -1054,11 +1285,8 @@ export const RecipesPage = () => {
                           border: 'none',
                           color: 'var(--accent-danger)',
                           cursor: 'pointer',
-                          borderRadius: '4px',
-                          transition: 'background 0.15s'
+                          borderRadius: '4px'
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -1069,24 +1297,218 @@ export const RecipesPage = () => {
             )}
           </div>
 
-          {/* Resumen de Costeo y Rentabilidad en Tiempo Real */}
-          <div style={{ background: 'var(--bg-elevated)', padding: '12px 14px', borderRadius: '6px', marginBottom: '16px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Costo Total Insumos {parsedYield > 1 ? `(Batch de ${parsedYield} porciones)` : '(Porción)'}:</span>
-              <strong style={{ color: 'var(--accent-warning)', fontSize: '13px' }}>{formatCOP(formCost)}</strong>
+          {/* ========================================================================= */}
+          {/* SECCIÓN 2: INSUMOS DINÁMICOS POR MODIFICADORES / SABORES / TOPPINGS */}
+          {/* ========================================================================= */}
+          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Sparkles size={15} color="var(--accent-primary)" /> 3. Insumos Variables por Modificadores (Sabores, Toppings, Salsas)
+                </label>
+                <div style={{ fontSize: '10.5px', color: 'var(--accent-primary)', marginTop: '2px', fontWeight: 600 }}>
+                  ⚡ Se descuenta automáticamente del stock solo la opción/sabor que el cliente elija en cada venta.
+                </div>
+              </div>
+
+              {selectedProductObj && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  icon={<Layers size={13} />}
+                  onClick={() => setIsModifiersConfigOpen(true)}
+                >
+                  {productModifiers.length > 0 ? 'Gestionar Grupos & Sabores' : '+ Crear Grupos de Sabores'}
+                </Button>
+              )}
             </div>
-            {parsedYield > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Costo Unitario por Porción:</span>
-                <strong style={{ color: 'var(--accent-warning)', fontSize: '12.5px' }}>{formatCOP(costPerPortion)}</strong>
+
+            {loadingModifiers ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11.5px' }}>
+                Cargando sabores y modificadores vinculados...
+              </div>
+            ) : productModifiers.length === 0 ? (
+              <div style={{ padding: '18px', textAlign: 'center', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '6px', border: '1px dashed var(--accent-primary)', color: 'var(--text-secondary)', fontSize: '11.5px' }}>
+                <Sparkles size={20} color="var(--accent-primary)" style={{ margin: '0 auto 6px' }} />
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  Este producto no tiene grupos de modificadores o sabores vinculados aún.
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                  Si vendes este producto con opciones a elegir (ej. sabores de helado, salsas o toppings), vincula los grupos para definir cuánto insumo descuenta cada sabor.
+                </div>
+                {selectedProductObj && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsModifiersConfigOpen(true)}
+                    icon={<Plus size={13} />}
+                  >
+                    Vincular Sabores o Toppings
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {productModifiers.map((group) => (
+                  <div
+                    key={group.id}
+                    style={{
+                      background: 'var(--bg-secondary)',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      padding: '10px 12px'
+                    }}
+                  >
+                    {/* Encabezado del Grupo */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '12px', color: 'var(--text-primary)' }}>
+                          🍨 {group.name}
+                        </span>
+                        {group.is_required && (
+                          <Badge variant="warning" style={{ fontSize: '9.5px', padding: '1px 6px' }}>
+                            Obligatorio ({group.min_selectable || 1})
+                          </Badge>
+                        )}
+                        <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                          (Máx. {group.max_selectable || 1})
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleApplySameQtyToGroup(group)}
+                        style={{
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '4px',
+                          padding: '3px 8px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: 'var(--accent-primary)',
+                          cursor: 'pointer'
+                        }}
+                        title="Aplica la misma porción de insumo a todas las opciones de este grupo (ej. 100g para todos los sabores)"
+                      >
+                        ⚡ Aplicar misma porción a todos
+                      </button>
+                    </div>
+
+                    {/* Tabla de Opciones del Grupo */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 2.4fr 1.1fr 1fr', gap: '6px', padding: '4px 6px', background: 'var(--bg-primary)', borderRadius: '4px', fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      <div>OPCIÓN / SABOR</div>
+                      <div>INSUMO DE INVENTARIO VINCULADO</div>
+                      <div style={{ textAlign: 'center' }}>PORCIÓN</div>
+                      <div style={{ textAlign: 'right' }}>COSTO PORCIÓN</div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {(group.options || []).map((opt) => {
+                        const sup = supplies.find(s => s.id.toString() === (opt.supply_id || '').toString());
+                        const optCost = (parseFloat(opt.supply_quantity) || 0) * (sup ? parseFloat(sup.cost_price || 0) : parseFloat(opt.supply_cost || 0));
+
+                        return (
+                          <div
+                            key={opt.id}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1.8fr 2.4fr 1.1fr 1fr',
+                              gap: '6px',
+                              alignItems: 'center',
+                              background: 'var(--bg-elevated)',
+                              padding: '4px 6px',
+                              borderRadius: '4px'
+                            }}
+                          >
+                            {/* Nombre de la Opción y Precio Adicional */}
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '11.5px', color: 'var(--text-primary)' }}>
+                                {opt.name}
+                              </div>
+                              {parseFloat(opt.price_modifier || 0) > 0 && (
+                                <div style={{ fontSize: '9.5px', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                                  +{formatCOP(opt.price_modifier)} al cliente
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Selector de Insumo */}
+                            <SearchableSupplyCombobox
+                              supplies={supplies}
+                              selectedId={opt.supply_id}
+                              onSelect={(id) => handleModifierOptionChange(group.id, opt.id, 'supply_id', id)}
+                              placeholder="Vincular insumo..."
+                              allowClear={true}
+                            />
+
+                            {/* Porción / Cantidad a descontar */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                value={opt.supply_quantity || ''}
+                                onChange={(e) => handleModifierOptionChange(group.id, opt.id, 'supply_quantity', e.target.value)}
+                                placeholder="0"
+                                style={{
+                                  width: '100%',
+                                  padding: '5px 4px',
+                                  background: 'var(--bg-primary)',
+                                  border: '1px solid var(--border-color)',
+                                  borderRadius: '3px',
+                                  color: 'var(--text-primary)',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  textAlign: 'center'
+                                }}
+                              />
+                              <span style={{ fontSize: '9.5px', color: 'var(--text-muted)', fontWeight: 700, minWidth: '24px' }}>
+                                {sup?.unit_of_measure || opt.unit_of_measure || 'und'}
+                              </span>
+                            </div>
+
+                            {/* Costo de la Porción */}
+                            <div style={{ fontSize: '11.5px', fontWeight: 800, color: optCost > 0 ? 'var(--accent-warning)' : 'var(--text-muted)', textAlign: 'right' }}>
+                              {optCost > 0 ? formatCOP(optCost) : '$0'}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
+          </div>
+
+          {/* ========================================================================= */}
+          {/* RESUMEN FINANCIERO Y DE COSTEO INTELIGENTE */}
+          {/* ========================================================================= */}
+          <div style={{ background: 'var(--bg-elevated)', padding: '12px 14px', borderRadius: '6px', marginBottom: '16px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Costo Insumos Base Fijos:</span>
+              <strong style={{ color: 'var(--accent-warning)', fontSize: '13px' }}>{formatCOP(formBaseCost)}</strong>
+            </div>
+
+            {modifierCostsSummary.maxModifierCost > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Costo Estimado de Modificadores/Sabores:</span>
+                <strong style={{ color: 'var(--accent-primary)', fontSize: '12px' }}>
+                  {modifierCostsSummary.minModifierCost === modifierCostsSummary.maxModifierCost
+                    ? `+${formatCOP(modifierCostsSummary.minModifierCost)}`
+                    : `+${formatCOP(modifierCostsSummary.minModifierCost)} a +${formatCOP(modifierCostsSummary.maxModifierCost)}`}
+                </strong>
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
               <span style={{ color: 'var(--text-muted)' }}>Precio de Venta al Público:</span>
               <strong style={{ fontSize: '13px' }}>{formatCOP(formPrice)}</strong>
             </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '8px', marginTop: '6px', alignItems: 'center' }}>
-              <span style={{ fontWeight: 700 }}>Margen de Ganancia Bruto:</span>
+              <span style={{ fontWeight: 700 }}>Margen de Ganancia Base:</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Badge variant={parseFloat(formMargin) >= 60 ? 'success' : parseFloat(formMargin) >= 40 ? 'warning' : 'danger'}>
                   {formMargin}%
@@ -1100,11 +1522,26 @@ export const RecipesPage = () => {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
             <Button variant="ghost" type="button" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-            <Button type="submit" loading={submitting}>Guardar Ficha Técnica</Button>
+            <Button type="submit" loading={submitting}>Guardar Ficha Técnica & Sabores</Button>
           </div>
         </form>
       </Modal>
+
+      {/* Modal para Crear / Configurar Modificadores desde la Ficha Técnica */}
+      {selectedProductObj && (
+        <ProductModifiersConfigModal
+          isOpen={isModifiersConfigOpen}
+          onClose={() => setIsModifiersConfigOpen(false)}
+          product={selectedProductObj}
+          supplies={supplies}
+          onSaved={() => {
+            loadProductModifiers(selectedProductObj.id);
+            fetchData();
+          }}
+        />
+      )}
     </div>
   );
 };
+
 export default RecipesPage;
