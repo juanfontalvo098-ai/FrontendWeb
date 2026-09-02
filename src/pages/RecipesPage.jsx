@@ -459,7 +459,25 @@ export const RecipesPage = () => {
         api.get('/products'),
         api.get('/supplies')
       ]);
-      setRecipes(recipesData || []);
+
+      const sanitizedRecipes = (recipesData || []).map(r => ({
+        ...r,
+        ingredients: (r.ingredients || []).map(ing => ({
+          ...ing,
+          quantity: parseFloat(parseFloat(ing.quantity || 0).toFixed(1))
+        })),
+        modifier_groups: (r.modifier_groups || []).map(g => ({
+          ...g,
+          options: (g.options || []).map(opt => ({
+            ...opt,
+            supply_quantity: opt.supply_quantity !== undefined && opt.supply_quantity !== null
+              ? parseFloat(parseFloat(opt.supply_quantity).toFixed(1))
+              : 0
+          }))
+        }))
+      }));
+
+      setRecipes(sanitizedRecipes);
       setProducts(productsData || []);
       setSupplies(suppliesData || []);
       if (productsData.length > 0 && !productId) {
@@ -486,7 +504,19 @@ export const RecipesPage = () => {
     try {
       setLoadingModifiers(true);
       const data = await api.get(`/modifiers/products/${prodId}`);
-      setProductModifiers(Array.isArray(data) ? data : []);
+      const sanitized = (Array.isArray(data) ? data : []).map(g => ({
+        ...g,
+        options: (g.options || []).map(opt => ({
+          ...opt,
+          price_modifier: opt.price_modifier !== undefined && opt.price_modifier !== null
+            ? parseFloat(parseFloat(opt.price_modifier).toFixed(0))
+            : 0,
+          supply_quantity: opt.supply_quantity !== undefined && opt.supply_quantity !== null
+            ? parseFloat(parseFloat(opt.supply_quantity).toFixed(1))
+            : 0
+        }))
+      }));
+      setProductModifiers(sanitized);
     } catch (err) {
       console.error('Error al cargar modificadores:', err);
       setProductModifiers([]);
@@ -960,7 +990,7 @@ export const RecipesPage = () => {
                                     <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>• {opt.name}</span>
                                     {opt.supply_id ? (
                                       <span style={{ color: 'var(--accent-success)', fontWeight: 700 }}>
-                                        📦 {opt.supply_name} ({opt.supply_quantity} {opt.unit_of_measure})
+                                        📦 {opt.supply_name} ({parseFloat(opt.supply_quantity || 0).toFixed(1)} {opt.unit_of_measure})
                                       </span>
                                     ) : (
                                       <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin insumo</span>
@@ -1446,11 +1476,11 @@ export const RecipesPage = () => {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                               <input
                                 type="number"
-                                step="any"
+                                step="0.1"
                                 min="0"
-                                value={opt.supply_quantity || ''}
+                                value={opt.supply_quantity === '' ? '' : (opt.supply_quantity !== undefined && opt.supply_quantity !== null ? opt.supply_quantity : '')}
                                 onChange={(e) => handleModifierOptionChange(group.id, opt.id, 'supply_quantity', e.target.value)}
-                                placeholder="0"
+                                placeholder="0.0"
                                 style={{
                                   width: '100%',
                                   padding: '5px 4px',

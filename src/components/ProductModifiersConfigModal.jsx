@@ -181,7 +181,19 @@ export const ProductModifiersConfigModal = ({ isOpen, onClose, product, supplies
     try {
       setLoading(true);
       const data = await api.get(`/modifiers/products/${product.id}`);
-      setGroups(Array.isArray(data) ? data : []);
+      const sanitized = (Array.isArray(data) ? data : []).map(g => ({
+        ...g,
+        options: (g.options || []).map(opt => ({
+          ...opt,
+          price_modifier: opt.price_modifier !== undefined && opt.price_modifier !== null
+            ? parseFloat(parseFloat(opt.price_modifier).toFixed(0))
+            : 0,
+          supply_quantity: opt.supply_quantity !== undefined && opt.supply_quantity !== null
+            ? parseFloat(parseFloat(opt.supply_quantity).toFixed(1))
+            : 0
+        }))
+      }));
+      setGroups(sanitized);
     } catch (err) {
       console.error('Error al cargar modificadores:', err);
       addToast('Error al cargar modificadores del producto', 'danger');
@@ -194,7 +206,19 @@ export const ProductModifiersConfigModal = ({ isOpen, onClose, product, supplies
     try {
       setLoadingTemplates(true);
       const data = await api.get('/modifiers/templates');
-      setTemplates(Array.isArray(data) ? data : []);
+      const sanitized = (Array.isArray(data) ? data : []).map(g => ({
+        ...g,
+        options: (g.options || []).map(opt => ({
+          ...opt,
+          price_modifier: opt.price_modifier !== undefined && opt.price_modifier !== null
+            ? parseFloat(parseFloat(opt.price_modifier).toFixed(0))
+            : 0,
+          supply_quantity: opt.supply_quantity !== undefined && opt.supply_quantity !== null
+            ? parseFloat(parseFloat(opt.supply_quantity).toFixed(1))
+            : 0
+        }))
+      }));
+      setTemplates(sanitized);
       setIsImportModalOpen(true);
     } catch (err) {
       console.error('Error al cargar plantillas:', err);
@@ -603,11 +627,11 @@ export const ProductModifiersConfigModal = ({ isOpen, onClose, product, supplies
                         <input
                           type="number"
                           min="0"
-                          step="0.001"
+                          step="0.1"
                           disabled={!opt.supply_id}
-                          value={opt.supply_quantity}
+                          value={opt.supply_quantity === '' ? '' : (opt.supply_quantity !== undefined && opt.supply_quantity !== null ? opt.supply_quantity : '')}
                           onChange={(e) => handleUpdateOptionField(gIdx, oIdx, 'supply_quantity', e.target.value)}
-                          placeholder="0.08"
+                          placeholder="0.0"
                           style={{
                             width: '100%',
                             background: opt.supply_id ? 'var(--bg-input)' : 'transparent',
