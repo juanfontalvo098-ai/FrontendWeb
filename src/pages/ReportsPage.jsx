@@ -360,33 +360,99 @@ export const ReportsPage = () => {
             </div>
 
             {/* TAB 1: Resumen Financiero */}
-            {activeModalTab === 'resumen' && (
-              <div>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: 'var(--accent-primary)', fontWeight: 700 }}>1. Control de Efectivo y Arqueo</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px', background: 'var(--bg-elevated)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
-                  <div>Base Inicial: <strong>{formatCOP(selectedShift.opening_amount)}</strong></div>
-                  <div>Esperado en Caja: <strong>{formatCOP(selectedShift.expected_amount)}</strong></div>
-                  <div>Declarado Físico: <strong>{formatCOP(selectedShift.closing_amount)}</strong></div>
-                  <div>Diferencia Arqueo: <strong style={{ color: selectedShift.difference < 0 ? 'var(--accent-danger)' : 'var(--accent-success)' }}>{formatCOP(selectedShift.difference)}</strong></div>
-                </div>
+            {activeModalTab === 'resumen' && (() => {
+              const snap = selectedShift.snapshot || {};
+              let thirdPartyVal = parseFloat(selectedShift.third_party_revenue ?? snap.thirdPartyRevenue ?? snap.third_party_revenue ?? 0);
+              if (Array.isArray(snap.itemizedSales)) {
+                let snapThird = 0;
+                snap.itemizedSales.forEach(it => {
+                  if (it.is_third_party || String(it.product_name || '').toUpperCase().includes('HOUSE')) {
+                    snapThird += parseFloat(it.total_sales || 0);
+                  }
+                });
+                if (snapThird > 0) thirdPartyVal = Math.max(thirdPartyVal, snapThird);
+              }
+              const grossVal = parseFloat(selectedShift.gross_revenue ?? snap.grossRevenue ?? 0);
+              const netVal = parseFloat(selectedShift.net_revenue ?? snap.netRevenue ?? 0);
+              const tipsVal = parseFloat(selectedShift.total_tips ?? snap.totalTips ?? 0);
+              const deliveryVal = parseFloat(selectedShift.total_delivery_fees ?? selectedShift.delivery_fee ?? snap.totalDeliveryFees ?? snap.delivery_fee ?? 0);
+              const ownNetVal = netVal > 0 ? Math.max(0, netVal - thirdPartyVal) : Math.max(0, grossVal - tipsVal - thirdPartyVal - deliveryVal);
+              const ownOperatingVal = ownNetVal + deliveryVal + parseFloat(selectedShift.tax_total ?? snap.taxTotal ?? 0);
+              const ownGrossVal = Math.max(0, grossVal - thirdPartyVal);
 
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: 'var(--accent-primary)', fontWeight: 700 }}>2. Medios de Pago Recaudados</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px', background: 'var(--bg-elevated)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Efectivo:</span><strong>{formatCOP(selectedShift.cash_sales)}</strong></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Tarjeta Crédito/Débito:</span><strong>{formatCOP(selectedShift.card_sales)}</strong></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Transferencias Bancarias:</span><strong>{formatCOP(selectedShift.transfer_sales)}</strong></div>
-                </div>
+              return (
+                <div>
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: 'var(--accent-primary)', fontWeight: 700 }}>1. Control de Efectivo y Arqueo</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px', background: 'var(--bg-elevated)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                    <div>Base Inicial: <strong>{formatCOP(selectedShift.opening_amount)}</strong></div>
+                    <div>Esperado en Caja: <strong>{formatCOP(selectedShift.expected_amount)}</strong></div>
+                    <div>Declarado Físico: <strong>{formatCOP(selectedShift.closing_amount)}</strong></div>
+                    <div>Diferencia Arqueo: <strong style={{ color: selectedShift.difference < 0 ? 'var(--accent-danger)' : 'var(--accent-success)' }}>{formatCOP(selectedShift.difference)}</strong></div>
+                  </div>
 
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: 'var(--accent-primary)', fontWeight: 700 }}>3. Resumen Fiscal, Servicio y Anulaciones</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'var(--bg-elevated)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
-                  <div>Ventas Netas (Sin Imp): <strong>{formatCOP(selectedShift.net_revenue)}</strong></div>
-                  <div>Impuestos (IVA/Impoconsumo): <strong>{formatCOP(selectedShift.tax_total)}</strong></div>
-                  <div>Propinas Recaudadas: <strong>{formatCOP(selectedShift.total_tips)}</strong></div>
-                  <div>Egresos / Retiros Caja: <strong>{formatCOP(selectedShift.total_withdrawals)}</strong></div>
-                  <div>Anulaciones / Cancelaciones: <strong style={{ color: 'var(--accent-danger)' }}>{formatCOP(selectedShift.total_voids)}</strong></div>
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: 'var(--accent-primary)', fontWeight: 700 }}>2. Medios de Pago Recaudados (Ingresos Efectivos a Caja y Bancos)</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px', background: 'var(--bg-elevated)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Efectivo en Caja:</span><strong>{formatCOP(selectedShift.cash_sales)}</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Tarjeta Crédito/Débito:</span><strong>{formatCOP(selectedShift.card_sales)}</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Transferencias Bancarias / Nequi:</span><strong>{formatCOP(selectedShift.transfer_sales)}</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '6px', fontWeight: 800, color: 'var(--accent-primary)' }}>
+                      <span>Total Recaudado en Medios de Pago (Bruto):</span>
+                      <strong style={{ fontSize: '14px' }}>{formatCOP(grossVal)}</strong>
+                    </div>
+                  </div>
+
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: 'var(--accent-primary)', fontWeight: 700 }}>3. Discriminación Comercial de Ventas, Terceros y Propinas</h4>
+                  <div style={{ background: 'var(--bg-elevated)', padding: '12px', borderRadius: '6px', marginBottom: '12px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>Ventas Netas de Productos Propios (Negocio):</span>
+                      <strong style={{ color: 'var(--accent-primary)', fontSize: '14px' }}>{formatCOP(ownNetVal)}</strong>
+                    </div>
+                    {thirdPartyVal > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#d97706' }}>
+                        <span>Ventas de Terceros / Socios (Consignación):</span>
+                        <strong>{formatCOP(thirdPartyVal)}</strong>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border-color)', paddingTop: '4px' }}>
+                      <span>Subtotal Neto Total de Productos (Propios + Terceros):</span>
+                      <strong>{formatCOP(netVal)}</strong>
+                    </div>
+                    {deliveryVal > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Servicios de Entrega / Domicilios:</span>
+                        <strong>+{formatCOP(deliveryVal)}</strong>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border-color)', paddingTop: '4px', fontWeight: 700, color: '#10b981' }}>
+                      <span>Facturado Propio Operativo (Sin Propina):</span>
+                      <span>{formatCOP(ownOperatingVal)}</span>
+                    </div>
+                    {tipsVal > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8b5cf6' }}>
+                        <span>Propinas Recaudadas (del Personal):</span>
+                        <strong>+{formatCOP(tipsVal)}</strong>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-color)', paddingTop: '6px', fontWeight: 800 }}>
+                      <span>Total Facturado & Cobrado Bruto:</span>
+                      <strong style={{ fontSize: '15px' }}>{formatCOP(grossVal)}</strong>
+                    </div>
+                    {tipsVal > 0 && (
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'right' }}>
+                        * Facturado propio con propina del personal: <strong>{formatCOP(ownGrossVal)}</strong>
+                      </div>
+                    )}
+                  </div>
+
+                  <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', color: 'var(--accent-primary)', fontWeight: 700 }}>4. Impuestos, Egresos y Anulaciones</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'var(--bg-elevated)', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                    <div>Impuestos (IVA/Impoconsumo): <strong>{formatCOP(selectedShift.tax_total)}</strong></div>
+                    <div>Egresos / Retiros Caja: <strong>{formatCOP(selectedShift.total_withdrawals)}</strong></div>
+                    <div style={{ gridColumn: 'span 2' }}>Anulaciones / Cancelaciones: <strong style={{ color: 'var(--accent-danger)' }}>{formatCOP(selectedShift.total_voids)}</strong></div>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* TAB 2: Productos Vendidos en el Turno */}
             {activeModalTab === 'productos' && (
@@ -407,15 +473,25 @@ export const ReportsPage = () => {
                       {(snapshot.itemizedSales || []).length === 0 ? (
                         <tr><td colSpan="5" style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>Sin productos registrados en este turno</td></tr>
                       ) : (
-                        snapshot.itemizedSales.map((p, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                            <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>{p.category_name}</td>
-                            <td style={{ padding: '8px', fontWeight: 600 }}>{p.product_name}</td>
-                            <td style={{ padding: '8px', textAlign: 'center', fontWeight: 700, color: 'var(--accent-primary)' }}>{p.quantity} unds</td>
-                            <td style={{ padding: '8px', textAlign: 'right' }}>{formatCOP(p.unit_price)}</td>
-                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>{formatCOP(p.total_sales)}</td>
-                          </tr>
-                        ))
+                        snapshot.itemizedSales.map((p, idx) => {
+                          const isThird = Boolean(p.is_third_party || String(p.product_name || '').toUpperCase().includes('HOUSE'));
+                          return (
+                            <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>{p.category_name}</td>
+                              <td style={{ padding: '8px', fontWeight: 600 }}>
+                                {p.product_name}
+                                {isThird && (
+                                  <span style={{ fontSize: '10px', background: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: 700 }}>
+                                    TERCERO
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'center', fontWeight: 700, color: 'var(--accent-primary)' }}>{p.quantity} unds</td>
+                              <td style={{ padding: '8px', textAlign: 'right' }}>{formatCOP(p.unit_price)}</td>
+                              <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>{formatCOP(p.total_sales)}</td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>

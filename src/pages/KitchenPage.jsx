@@ -1,5 +1,5 @@
 // src/pages/KitchenPage.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock, CheckCircle, ArrowLeft, Utensils, Printer } from 'lucide-react';
 import { Card } from '../components/ui/Card';
@@ -42,24 +42,24 @@ export const KitchenPage = () => {
   const addToast = useUiStore((state) => state.addToast);
   const { socket } = useSocket();
 
-  const [orders, setOrders] = useState([]);
+  const [tickets, setTickets] = useState([]);
   const [now, setNow] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  const lastOrderIdsRef = React.useRef(new Set());
-  const isFirstLoadRef = React.useRef(true);
+  const lastTicketIdsRef = useRef(new Set());
+  const isFirstLoadRef = useRef(true);
 
-  const fetchOrders = useCallback(async (silent = false) => {
+  const fetchTickets = useCallback(async (silent = false) => {
     try {
-      // Obtener órdenes en cocina
-      const allOrders = await api.get('/orders');
-      const kitchenOrders = allOrders.filter(o => ['enviado_cocina', 'en_preparacion'].includes(o.status));
-      
+      // Obtener tickets activos de comanda (filtrados por ronda/comanda individual)
+      const activeTickets = await api.get('/orders/kitchen-tickets');
+      const list = Array.isArray(activeTickets) ? activeTickets : [];
+
       // Detectar si hay nuevas comandas para sonar el timbre
       if (!isFirstLoadRef.current && !silent) {
-        const currentIds = new Set(kitchenOrders.map(o => o.id));
+        const currentIds = new Set(list.map(t => t.id));
         let hasNew = false;
-        for (const o of kitchenOrders) {
-          if (!lastOrderIdsRef.current.has(o.id)) {
+        for (const t of list) {
+          if (!lastTicketIdsRef.current.has(t.id)) {
             hasNew = true;
             break;
           }
@@ -68,13 +68,13 @@ export const KitchenPage = () => {
           playBellSound();
           addToast('¡Nueva comanda recibida en cocina!', 'info', 5000);
         }
-        lastOrderIdsRef.current = currentIds;
+        lastTicketIdsRef.current = currentIds;
       } else {
-        lastOrderIdsRef.current = new Set(kitchenOrders.map(o => o.id));
+        lastTicketIdsRef.current = new Set(list.map(t => t.id));
         isFirstLoadRef.current = false;
       }
 
-      setOrders(kitchenOrders);
+      setTickets(list);
     } catch (err) {
       console.error('Error al cargar comandas de cocina:', err);
     } finally {
@@ -83,35 +83,36 @@ export const KitchenPage = () => {
   }, [addToast]);
 
   useEffect(() => {
-    fetchOrders(true);
+    fetchTickets(true);
 
     // Actualizar estado 'now' cada 1 segundo exacto para el cronómetro activo en vivo
     const timer = setInterval(() => setNow(new Date()), 1000);
 
-    // Auto-polling cada 5 segundos para actualización autónoma en cocina (compatible con Serverless)
+    // Auto-polling cada 4 segundos para actualización autónoma en cocina (compatible con Serverless)
     const pollInterval = setInterval(() => {
       if (!document.hidden) {
-        fetchOrders(false);
+        fetchTickets(false);
       }
-    }, 5000);
+    }, 4000);
 
     if (socket && typeof socket.on === 'function') {
       const handleNewTicket = () => {
         addToast('¡Nueva comanda enviada a cocina!', 'info');
         playBellSound();
-        fetchOrders(false);
+        fetchTickets(false);
       };
-      const handleUpdate = () => fetchOrders(true);
+      const handleUpdate = () => fetchTickets(true);
 
       const handleTicketReady = (data) => {
-        const table = data.table_number || `Orden #${data.orderId}`;
+        const table = data.table_number || `Comanda #${data.ticketId || data.orderId}`;
         const summary = data.summary || '';
         addToast(`🔔 ¡Comanda Lista! — ${table}${summary ? ': ' + summary : ''}`, 'success', 8000);
         playBellSound();
-        fetchOrders(false);
+        fetchTickets(false);
       };
 
       socket.on('kitchen:new-ticket', handleNewTicket);
+      socket.on('kitchen:update-status', handleUpdate);
       socket.on('order:updated', handleUpdate);
       socket.on('kitchen:ticket-ready', handleTicketReady);
 
@@ -119,6 +120,7 @@ export const KitchenPage = () => {
         clearInterval(timer);
         clearInterval(pollInterval);
         socket.off('kitchen:new-ticket', handleNewTicket);
+        socket.off('kitchen:update-status', handleUpdate);
         socket.off('order:updated', handleUpdate);
         socket.off('kitchen:ticket-ready', handleTicketReady);
       };
@@ -128,7 +130,7 @@ export const KitchenPage = () => {
       clearInterval(timer);
       clearInterval(pollInterval);
     };
-  }, [fetchOrders, addToast, socket]);
+  }, [fetchTickets, addToast, socket]);
 
   // Formatear el tiempo transcurrido en vivo (Minutos y Segundos)
   const getElapsedFormatted = (createdAtStr) => {
@@ -160,17 +162,35 @@ export const KitchenPage = () => {
     return 'var(--accent-danger)';
   };
 
-  const handleUpdateStatus = async (orderId, newStatus) => {
+  const handleUpdateTicketStatus = async (ticketId, newStatus) => {
     try {
-      await api.put(`/orders/${orderId}/status`, { status: newStatus });
-      // El backend se encarga de emitir kitchen:ticket-ready con datos enriquecidos
-      if (newStatus !== 'lista') {
+      await api.put(`/orders/kitchen-tickets/${ticketId}/status`, { status: newStatus });
+      if (newStatus === 'en_preparacion') {
         addToast('Comanda en preparación', 'success');
+      } else if (newStatus === 'lista') {
+        addToast('¡Comanda lista!', 'success');
       }
-      await fetchOrders();
+      await fetchTickets(true);
     } catch (err) {
-      addToast('Error al actualizar comanda', 'danger');
+      addToast(err.message || 'Error al actualizar comanda', 'danger');
     }
+  };
+
+  const handlePrintTicket = (ticket) => {
+    const tableClean = ticket.table_number || (ticket.order_type === 'delivery' ? 'Domicilio' : 'Para Llevar');
+    const orderObj = {
+      id: ticket.order_id,
+      ticket_id: ticket.id,
+      table_number: tableClean,
+      order_type: ticket.order_type || 'mesa',
+      waiter_name: ticket.waiter_name || 'Personal',
+      customer_name: ticket.customer_name || '',
+      delivery_address: ticket.delivery_address || '',
+      delivery_phone: ticket.delivery_phone || '',
+      notes: ticket.order_notes || ticket.notes || '',
+      created_at: ticket.created_at
+    };
+    printKitchenTicket(orderObj, ticket.items || [], orderObj.notes, orderObj.waiter_name, {}, '80mm');
   };
 
   if (loading) {
@@ -194,57 +214,65 @@ export const KitchenPage = () => {
         </div>
       </header>
 
-      {orders.length === 0 ? (
+      {tickets.length === 0 ? (
         <Card glass style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--text-muted)' }}>
           <h2>No hay comandas pendientes en cocina</h2>
-          <p>Las órdenes enviadas por los meseros aparecerán aquí automáticamente en tiempo real con su cronómetro de preparación.</p>
+          <p>Las órdenes y nuevas rondas enviadas por los meseros aparecerán aquí automáticamente en tiempo real con su cronómetro de preparación.</p>
         </Card>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 'var(--space-6)' }}>
-          {orders.map(order => {
-            const color = getTimeColor(order.created_at);
-            const formattedTime = getElapsedFormatted(order.created_at);
-            
+          {tickets.map(ticket => {
+            const color = getTimeColor(ticket.created_at);
+            const formattedTime = getElapsedFormatted(ticket.created_at);
+            const tableDisplay = ticket.table_number || (ticket.order_table_number ? `Mesa ${ticket.order_table_number}` : `Orden #${ticket.order_id}`);
+
             return (
-              <Card key={order.id} style={{ borderTop: `6px solid ${color}`, display: 'flex', flexDirection: 'column' }}>
+              <Card key={ticket.id} style={{ borderTop: `6px solid ${color}`, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-4)' }}>
                   <div>
-                    {order.order_type === 'delivery' ? (
-                      <div>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#06b6d4', color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 900, marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                      <span style={{
+                        background: 'var(--bg-secondary)',
+                        color: 'var(--accent-primary)',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 900,
+                        border: '1px solid var(--border-color)'
+                      }}>
+                        Comanda #{ticket.id}
+                      </span>
+                      {ticket.order_type === 'delivery' ? (
+                        <span style={{ background: '#06b6d4', color: '#000', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 900 }}>
                           DOMICILIO
-                        </div>
-                        <h2 style={{ margin: 0, fontSize: 'var(--font-xl)', fontWeight: 900, color: 'var(--text-primary)' }}>
-                          Orden #{order.id} {order.customer_name ? `— ${order.customer_name}` : ''}
-                        </h2>
-                      </div>
-                    ) : order.order_type === 'para_llevar' ? (
-                      <div>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#8b5cf6', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 900, marginBottom: '4px' }}>
+                        </span>
+                      ) : ticket.order_type === 'para_llevar' ? (
+                        <span style={{ background: '#8b5cf6', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 900 }}>
                           PARA LLEVAR
-                        </div>
-                        <h2 style={{ margin: 0, fontSize: 'var(--font-xl)', fontWeight: 900, color: 'var(--text-primary)' }}>
-                          Orden #{order.id} {order.customer_name ? `— ${order.customer_name}` : ''}
-                        </h2>
-                      </div>
-                    ) : (
-                      <h2 style={{ margin: 0, fontSize: 'var(--font-xl)', fontWeight: 900 }}>
-                        Mesa {order.table_number || order.table_id || `#${order.id}`}
-                      </h2>
-                    )}
-                    <span style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>Atendido por: {order.waiter_name || 'Personal'}</span>
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <h2 style={{ margin: 0, fontSize: 'var(--font-xl)', fontWeight: 900, color: 'var(--text-primary)' }}>
+                      {tableDisplay}
+                    </h2>
+                    <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Atendido por: <strong style={{ color: 'var(--text-primary)' }}>{ticket.waiter_name || 'Personal'}</strong>
+                      {ticket.order_id && ` • Orden #${ticket.order_id}`}
+                      {ticket.customer_name && ` (${ticket.customer_name})`}
+                    </div>
                   </div>
-                  
+
                   {/* Cronómetro en Tiempo Real Segundo a Segundo */}
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '6px', 
-                    background: 'var(--bg-secondary)', 
-                    padding: '6px 12px', 
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'var(--bg-secondary)',
+                    padding: '6px 12px',
                     borderRadius: '8px',
-                    color: color, 
-                    fontWeight: 900, 
+                    color: color,
+                    fontWeight: 900,
                     fontSize: '15px',
                     border: `1px solid ${color}`
                   }}>
@@ -252,10 +280,10 @@ export const KitchenPage = () => {
                     <span>{formattedTime}</span>
                   </div>
                 </div>
-                
+
                 <div style={{ flex: 1 }}>
                   <ul style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', padding: 0, listStyle: 'none' }}>
-                    {(order.items || []).map((item, idx) => {
+                    {(ticket.items || []).map((item, idx) => {
                       const rawMods = item.modifiers || item.modifiers_json;
                       let parsedMods = [];
                       if (rawMods) {
@@ -267,8 +295,10 @@ export const KitchenPage = () => {
                       }
                       return (
                         <li key={idx} style={{ padding: '10px', background: 'var(--bg-hover)', borderRadius: 'var(--radius-sm)', fontSize: 'var(--font-lg)' }}>
-                          <div style={{ display: 'flex', gap: '12px' }}>
-                            <span style={{ fontWeight: 800, minWidth: '28px', color: 'var(--accent-primary)' }}>{item.quantity}x</span>
+                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 800, minWidth: '28px', color: 'var(--accent-primary)', fontSize: '18px' }}>
+                              {item.quantity}x
+                            </span>
                             <span style={{ fontWeight: 700 }}>{item.name}</span>
                           </div>
                           {Array.isArray(parsedMods) && parsedMods.length > 0 && (
@@ -286,7 +316,7 @@ export const KitchenPage = () => {
                                     borderRadius: '4px'
                                   }}
                                 >
-                                  🍨 {m.name} {m.quantity > 1 ? `(x${m.quantity})` : ''}
+                                  🍨 {m.name || m} {m.quantity > 1 ? `(x${m.quantity})` : ''}
                                 </span>
                               ))}
                             </div>
@@ -300,6 +330,20 @@ export const KitchenPage = () => {
                       );
                     })}
                   </ul>
+
+                  {(ticket.order_notes || ticket.notes) && (
+                    <div style={{
+                      marginTop: 'var(--space-3)',
+                      padding: '8px 12px',
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      borderLeft: '3px solid var(--accent-warning)',
+                      borderRadius: '4px',
+                      fontSize: '13px',
+                      color: 'var(--text-primary)'
+                    }}>
+                      <strong style={{ color: 'var(--accent-warning)' }}>Nota general comanda:</strong> {ticket.order_notes || ticket.notes}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ marginTop: 'var(--space-4)', display: 'flex', gap: '8px' }}>
@@ -307,18 +351,27 @@ export const KitchenPage = () => {
                     variant="secondary"
                     size="sm"
                     icon={<Printer size={15} />}
-                    onClick={() => printKitchenTicket(order, order.items || [], {}, '80mm')}
+                    onClick={() => handlePrintTicket(ticket)}
                     style={{ flexShrink: 0 }}
                     title="Imprimir Comanda Térmica"
                   >
                     Imprimir
                   </Button>
-                  {order.status === 'enviado_cocina' ? (
-                    <Button variant="primary" style={{ width: '100%', padding: '10px', fontSize: '14px', fontWeight: 700 }} onClick={() => handleUpdateStatus(order.id, 'en_preparacion')}>
+                  {ticket.status === 'pendiente' ? (
+                    <Button
+                      variant="primary"
+                      style={{ width: '100%', padding: '10px', fontSize: '14px', fontWeight: 700 }}
+                      onClick={() => handleUpdateTicketStatus(ticket.id, 'en_preparacion')}
+                    >
                       Iniciar Preparación
                     </Button>
                   ) : (
-                    <Button variant="success" style={{ width: '100%', padding: '10px', fontSize: '14px', fontWeight: 700, background: 'var(--accent-primary)', color: 'white' }} onClick={() => handleUpdateStatus(order.id, 'lista')} icon={<CheckCircle size={18} />}>
+                    <Button
+                      variant="success"
+                      style={{ width: '100%', padding: '10px', fontSize: '14px', fontWeight: 700, background: 'var(--accent-primary)', color: 'white' }}
+                      onClick={() => handleUpdateTicketStatus(ticket.id, 'lista')}
+                      icon={<CheckCircle size={18} />}
+                    >
                       Marcar Como Listo
                     </Button>
                   )}

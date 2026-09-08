@@ -696,7 +696,24 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
     : (snapshot.declaredTransfers !== undefined && snapshot.declaredTransfers !== null ? parseFloat(snapshot.declaredTransfers) : null);
   const difference = parseFloat(shift.difference ?? snapshot.difference ?? (declaredCash - expectedCash));
   const grossRevenue = parseFloat(shift.gross_revenue ?? snapshot.grossRevenue ?? (cashSales + cardSales + transferSales + creditSales));
-  const thirdPartyRevenue = parseFloat(shift.third_party_revenue ?? snapshot.thirdPartyRevenue ?? snapshot.third_party_revenue ?? 0);
+  const netRevenue = parseFloat(shift.net_revenue ?? snapshot.netRevenue ?? 0);
+  const totalDeliveryFees = parseFloat(shift.total_delivery_fees ?? shift.delivery_fee ?? snapshot.totalDeliveryFees ?? snapshot.delivery_fee ?? snapshot.deliveryFees ?? 0);
+
+  let thirdPartyRevenue = parseFloat(shift.third_party_revenue ?? snapshot.thirdPartyRevenue ?? snapshot.third_party_revenue ?? 0);
+  if (Array.isArray(snapshot.itemizedSales)) {
+    let snapThird = 0;
+    snapshot.itemizedSales.forEach(it => {
+      if (it.is_third_party || String(it.product_name || '').toUpperCase().includes('HOUSE')) {
+        snapThird += parseFloat(it.total_sales || 0);
+      }
+    });
+    if (snapThird > 0) {
+      thirdPartyRevenue = Math.max(thirdPartyRevenue, snapThird);
+    }
+  }
+
+  const ownNetRevenue = netRevenue > 0 ? Math.max(0, netRevenue - thirdPartyRevenue) : Math.max(0, grossRevenue - totalTips - thirdPartyRevenue - totalDeliveryFees);
+  const ownOperatingRevenue = ownNetRevenue + totalDeliveryFees + parseFloat(shift.tax_total ?? snapshot.taxTotal ?? 0);
   const ownGrossRevenue = Math.max(0, grossRevenue - thirdPartyRevenue);
 
   const width = 38;
@@ -725,7 +742,7 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
   text += `EFECTIVO CONTADO:`.padEnd(20) + `${formatCOP(declaredCash)}`.padStart(18) + '\n';
   text += `DIFERENCIA TOTAL:`.padEnd(20) + `${formatCOP(difference)}`.padStart(18) + '\n';
   text += line + '\n';
-  text += '      -- DESGLOSE DE VENTAS --\n';
+  text += '      -- MEDIOS DE PAGO --\n';
   text += `Ventas Efectivo:`.padEnd(20) + `${formatCOP(cashSales)}`.padStart(18) + '\n';
   text += `Ventas Transferencia:`.padEnd(20) + `${formatCOP(transferSales)}`.padStart(18) + '\n';
   if (declaredTransfers !== null) {
@@ -735,16 +752,27 @@ export const buildShiftClosePlainText = (shift, settings = {}) => {
   if (creditSales > 0) {
     text += `Ventas Credito:`.padEnd(20) + `${formatCOP(creditSales)}`.padStart(18) + '\n';
   }
+  text += line + '\n';
+  text += `TOTAL RECAUDADO:`.padEnd(20) + `${formatCOP(grossRevenue)}`.padStart(18) + '\n';
+  text += line + '\n';
+  text += '   -- DISCRIMINACIÓN VENTAS --\n';
   if (thirdPartyRevenue > 0) {
-    text += line + '\n';
-    text += `VENTAS PROPIAS:`.padEnd(20) + `${formatCOP(ownGrossRevenue)}`.padStart(18) + '\n';
-    text += `Ventas Terceros:`.padEnd(20) + `${formatCOP(thirdPartyRevenue)}`.padStart(18) + '\n';
+    text += `(-) Ventas Terceros:`.padEnd(20) + `-${formatCOP(thirdPartyRevenue)}`.padStart(18) + '\n';
   }
   if (totalTips > 0) {
-    text += `Propinas Recaudadas:`.padEnd(20) + `${formatCOP(totalTips)}`.padStart(18) + '\n';
+    text += `(-) Propinas Personal:`.padEnd(20) + `-${formatCOP(totalTips)}`.padStart(18) + '\n';
+  }
+  text += line + '\n';
+  text += `VENTAS PROPIAS NETAS:`.padEnd(20) + `${formatCOP(ownNetRevenue)}`.padStart(18) + '\n';
+  if (totalDeliveryFees > 0) {
+    text += `(+) Domicilios:`.padEnd(20) + `+${formatCOP(totalDeliveryFees)}`.padStart(18) + '\n';
+  }
+  text += `FACTURADO PROPIO:`.padEnd(20) + `${formatCOP(ownOperatingRevenue)}`.padStart(18) + '\n';
+  if (totalTips > 0) {
+    text += `(Propio con Propina:`.padEnd(20) + `${formatCOP(ownGrossRevenue)})`.padStart(18) + '\n';
   }
   text += doubleLine + '\n';
-  text += (thirdPartyRevenue > 0 ? `TOTAL RECAUDADO:` : `VENTAS BRUTAS:`).padEnd(20) + `${formatCOP(grossRevenue)}`.padStart(18) + '\n';
+  text += `TOTAL FACTURADO:`.padEnd(20) + `${formatCOP(grossRevenue)}`.padStart(18) + '\n';
   text += doubleLine + '\n';
   return text;
 };
@@ -1302,7 +1330,24 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
     : (snapshot.declaredTransfers !== undefined && snapshot.declaredTransfers !== null ? parseFloat(snapshot.declaredTransfers) : null);
   const difference = parseFloat(shift.difference ?? snapshot.difference ?? (declaredCash - expectedCash));
   const grossRevenue = parseFloat(shift.gross_revenue ?? snapshot.grossRevenue ?? (cashSales + cardSales + transferSales + creditSales));
-  const thirdPartyRevenue = parseFloat(shift.third_party_revenue ?? snapshot.thirdPartyRevenue ?? snapshot.third_party_revenue ?? 0);
+  const netRevenue = parseFloat(shift.net_revenue ?? snapshot.netRevenue ?? 0);
+  const totalDeliveryFees = parseFloat(shift.total_delivery_fees ?? shift.delivery_fee ?? snapshot.totalDeliveryFees ?? snapshot.delivery_fee ?? snapshot.deliveryFees ?? 0);
+
+  let thirdPartyRevenue = parseFloat(shift.third_party_revenue ?? snapshot.thirdPartyRevenue ?? snapshot.third_party_revenue ?? 0);
+  if (Array.isArray(snapshot.itemizedSales)) {
+    let snapThird = 0;
+    snapshot.itemizedSales.forEach(it => {
+      if (it.is_third_party || String(it.product_name || '').toUpperCase().includes('HOUSE')) {
+        snapThird += parseFloat(it.total_sales || 0);
+      }
+    });
+    if (snapThird > 0) {
+      thirdPartyRevenue = Math.max(thirdPartyRevenue, snapThird);
+    }
+  }
+
+  const ownNetRevenue = netRevenue > 0 ? Math.max(0, netRevenue - thirdPartyRevenue) : Math.max(0, grossRevenue - totalTips - thirdPartyRevenue - totalDeliveryFees);
+  const ownOperatingRevenue = ownNetRevenue + totalDeliveryFees + parseFloat(shift.tax_total ?? snapshot.taxTotal ?? 0);
   const ownGrossRevenue = Math.max(0, grossRevenue - thirdPartyRevenue);
   const canceledOrdersCount = parseInt(audit.canceledOrdersCount || snapshot.audit?.canceledOrdersCount || 0);
   const canceledAmount = parseFloat(shift.total_voids ?? audit.canceledAmount ?? snapshot.audit?.canceledAmount ?? 0);
@@ -1344,26 +1389,52 @@ export const printShiftCloseTicket = (shift, settings = {}, paperWidth = '80mm')
           </div>
           <div class="solid-line"></div>
 
-          <div class="center bold">-- DESGLOSE DE VENTAS --</div>
+          <div class="center bold">-- MEDIOS DE PAGO (RECAUDO) --</div>
           <div class="flex-between"><span>Ventas Efectivo:</span><span>${formatCOP(cashSales)}</span></div>
           <div class="flex-between"><span>Ventas Transferencia/Nequi:</span><span>${formatCOP(transferSales)}</span></div>
           ${declaredTransfers !== null ? `<div class="flex-between"><span>Transf. Declaradas:</span><span>${formatCOP(declaredTransfers)}</span></div>` : ''}
           <div class="flex-between"><span>Ventas Tarjeta:</span><span>${formatCOP(cardSales)}</span></div>
           ${creditSales > 0 ? `<div class="flex-between"><span>Ventas a Crédito (CxC):</span><span>${formatCOP(creditSales)}</span></div>` : ''}
-          ${thirdPartyRevenue > 0 ? `
           <div class="dashed-line"></div>
           <div class="flex-between bold" style="font-size: 13px;">
-            <span>VENTAS PROPIAS (NEGOCIO):</span>
-            <span>${formatCOP(ownGrossRevenue)}</span>
+            <span>TOTAL RECAUDADO (MEDIOS):</span>
+            <span>${formatCOP(grossRevenue)}</span>
           </div>
-          <div class="flex-between" style="color: #1f1f1fff; font-weight: 700;">
-            <span>Ventas Terceros / Socios:</span>
-            <span>${formatCOP(thirdPartyRevenue)}</span>
+          <div class="solid-line"></div>
+
+          <div class="center bold">-- DISCRIMINACIÓN DE VENTAS --</div>
+          ${thirdPartyRevenue > 0 ? `
+          <div class="flex-between" style="font-weight: 700;">
+            <span>(-) Ventas Terceros/Socios:</span>
+            <span>- ${formatCOP(thirdPartyRevenue)}</span>
+          </div>` : ''}
+          ${totalTips > 0 ? `
+          <div class="flex-between" style="font-weight: 700;">
+            <span>(-) Propinas del Personal:</span>
+            <span>- ${formatCOP(totalTips)}</span>
+          </div>` : ''}
+          <div class="dashed-line"></div>
+          <div class="flex-between bold" style="font-size: 12px;">
+            <span>VENTAS PROPIAS NETAS:</span>
+            <span>${formatCOP(ownNetRevenue)}</span>
           </div>
-          ` : ''}
+          ${totalDeliveryFees > 0 ? `
+          <div class="flex-between">
+            <span>(+) Domicilios / Envíos:</span>
+            <span>+ ${formatCOP(totalDeliveryFees)}</span>
+          </div>` : ''}
+          <div class="flex-between bold" style="font-size: 13px; color: #111;">
+            <span>FACTURADO PROPIO OPERATIVO:</span>
+            <span>${formatCOP(ownOperatingRevenue)}</span>
+          </div>
+          ${totalTips > 0 ? `
+          <div class="flex-between" style="font-size: 10px; color: #555; margin-top: 2px;">
+            <span>(Propio con propinas personal:</span>
+            <span>${formatCOP(ownGrossRevenue)})</span>
+          </div>` : ''}
           <div class="double-line"></div>
           <div class="flex-between bold" style="font-size: 14px;">
-            <span>${thirdPartyRevenue > 0 ? 'TOTAL RECAUDADO (BRUTO):' : 'VENTAS BRUTAS:'}</span>
+            <span>TOTAL FACTURADO BRUTO:</span>
             <span>${formatCOP(grossRevenue)}</span>
           </div>
           <div class="solid-line"></div>

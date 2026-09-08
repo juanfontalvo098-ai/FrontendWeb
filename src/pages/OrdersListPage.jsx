@@ -876,10 +876,12 @@ export const OrdersListPage = () => {
   // KPIs Resumen
   const kpis = useMemo(() => {
     let totalPaidOwn = 0;
+    let totalPaidOwnWithoutTip = 0;
     let totalPaidThirdParty = 0;
     let totalPaidGross = 0;
 
     let totalPendingOwn = 0;
+    let totalPendingOwnWithoutTip = 0;
     let totalPendingThirdParty = 0;
     let totalPendingGross = 0;
 
@@ -908,6 +910,7 @@ export const OrdersListPage = () => {
 
       const orderOwn = Math.max(0, orderTotal - orderThirdParty);
       const tip = parseFloat(o.invoice_tip_amount || 0);
+      const orderOwnWithoutTip = Math.max(0, orderOwn - tip);
 
       if (creditBal > 0) {
         totalCreditBalance += creditBal;
@@ -917,12 +920,14 @@ export const OrdersListPage = () => {
       if (isPaid) {
         totalPaidGross += orderTotal;
         totalPaidOwn += orderOwn;
+        totalPaidOwnWithoutTip += orderOwnWithoutTip;
         totalPaidThirdParty += orderThirdParty;
         totalTips += tip;
         countPaid++;
       } else {
         totalPendingGross += orderTotal;
         totalPendingOwn += orderOwn;
+        totalPendingOwnWithoutTip += orderOwnWithoutTip;
         totalPendingThirdParty += orderThirdParty;
         countPending++;
       }
@@ -930,9 +935,11 @@ export const OrdersListPage = () => {
 
     return {
       totalPaidOwn,
+      totalPaidOwnWithoutTip,
       totalPaidThirdParty,
       totalPaidGross,
       totalPendingOwn,
+      totalPendingOwnWithoutTip,
       totalPendingThirdParty,
       totalPendingGross,
       totalCreditBalance,
@@ -2415,9 +2422,12 @@ export const OrdersListPage = () => {
             <CheckCircle2 size={22} />
           </div>
           <div>
-            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Facturado & Cobrado (Propio)</div>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: '#10b981' }}>{formatCOP(kpis.totalPaidOwn)}</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Facturado Propio (Sin Propina)</div>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#10b981' }}>{formatCOP(kpis.totalPaidOwnWithoutTip)}</div>
             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+              {kpis.totalTips > 0 && (
+                <span style={{ color: '#059669', fontWeight: 700 }}>{formatCOP(kpis.totalPaidOwn)} con propina · </span>
+              )}
               {kpis.totalPaidThirdParty > 0 ? (
                 <span style={{ color: '#d97706', fontWeight: 700 }}>+{formatCOP(kpis.totalPaidThirdParty)} terceros · {formatCOP(kpis.totalPaidGross)} bruto</span>
               ) : (

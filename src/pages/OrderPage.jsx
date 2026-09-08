@@ -241,7 +241,8 @@ export const OrderPage = () => {
     } else {
       const existingIndex = orderItems.findIndex(i =>
         i.product.id === product.id &&
-        JSON.stringify(i.modifiers || []) === modString
+        JSON.stringify(i.modifiers || []) === modString &&
+        (!i.dbId || i.status === 'pendiente')
       );
 
       if (existingIndex > -1) {
@@ -433,6 +434,13 @@ export const OrderPage = () => {
       addToast('Selecciona al menos un producto para enviar a cocina', 'warning');
       return;
     }
+
+    const hasPending = orderItems.some(i => !i.dbId || i.status === 'pendiente');
+    if (!hasPending) {
+      addToast('Todos los productos de esta mesa ya fueron enviados a cocina', 'info');
+      return;
+    }
+
     setSending(true);
 
     try {
@@ -475,7 +483,7 @@ export const OrderPage = () => {
         await api.put(`/orders/${activeId}`, { items: payloadItems, send_to_kitchen: true, table_id: parseInt(tableId, 10) });
       }
 
-      addToast('Orden enviada a cocina con éxito', 'success');
+      addToast('Nuevos productos enviados a cocina con éxito', 'success');
 
       // Verificación post-envío: forzar reemplazo para recibir los items enviados a cocina
       await new Promise(r => setTimeout(r, 200));
@@ -495,7 +503,7 @@ export const OrderPage = () => {
     }
   };
 
-  const handlePrintKitchenTicket = async (ticketItems, explicitOrderId = null) => {
+  const handlePrintKitchenTicket = async (customItems = null, explicitOrderId = null) => {
     try {
       let effectiveSettings = settings;
       if (!effectiveSettings) {
@@ -503,17 +511,44 @@ export const OrderPage = () => {
         setSettings(effectiveSettings);
       }
       const tableClean = displayTableNumber.replace(/^Mesa\s*/i, '');
+
+      let itemsToPrint = customItems;
+      let isReprint = false;
+
+      if (!itemsToPrint || itemsToPrint === orderItems) {
+        const pending = orderItems.filter(i => !i.dbId || i.status === 'pendiente');
+        if (pending.length > 0) {
+          itemsToPrint = pending;
+        } else {
+          // Todos los ítems ya fueron enviados previamente: permitir reimpresión
+          itemsToPrint = orderItems;
+          isReprint = true;
+        }
+      }
+
+      if (!itemsToPrint || itemsToPrint.length === 0) {
+        addToast('No hay productos en la orden para imprimir comanda', 'warning');
+        return;
+      }
+
       await printKitchenTicket(
         {
           id: explicitOrderId || currentOrder?.id,
           table_number: tableClean,
           order_type: 'mesa',
-          waiter_name: currentOrder?.waiter_name || user?.full_name || 'Personal'
+          waiter_name: currentOrder?.waiter_name || user?.full_name || 'Personal',
+          notes: isReprint ? '[REIMPRESIÓN COMANDA] ' + (currentOrder?.notes || '') : (currentOrder?.notes || '')
         },
-        ticketItems,
+        itemsToPrint,
         effectiveSettings || {},
         effectiveSettings?.default_paper_width || '80mm'
       );
+
+      if (isReprint) {
+        addToast('Reimprimiendo comanda de todos los productos', 'info');
+      } else {
+        addToast('Comanda enviada a impresión con productos nuevos/pendientes', 'success');
+      }
     } catch (e) {
       console.warn('[OrderPage] Excepción en comanda:', e);
     }
@@ -793,20 +828,61 @@ export const OrderPage = () => {
                 No hay productos en la orden
               </div>
             ) : (
-              orderItems.map((item, idx) => (
-                <div key={idx} style={{ background: 'var(--bg-elevated)', padding: '10px 12px', borderRadius: 'var(--radius-sm)', borderLeft: item.dbId ? '4px solid var(--accent-primary)' : '4px solid var(--accent-warning)', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '14px' }}>{item.product.name}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontWeight: 800, fontSize: '14px' }}>{formatCOP(item.product.price * item.qty)}</span>
-                      <button onClick={() => handleOpenEditItemModifiers(idx)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: '2px' }} title="Modificar sabores y toppings">
-                        <Sparkles size={16} />
-                      </button>
-                      <button onClick={() => handleOpenEditPrice(idx)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: '2px' }} title="Modificar precio para esta comanda">
-                        <Edit3 size={16} />
-                      </button>
+              orderItems.map((item, idx) => {
+                const isSent = item.dbId && item.status && item.status !== 'pendiente';
+                return (
+                  <div key={idx} style={{
+                    background: 'var(--bg-elevated)',
+                    padding: '10px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    borderLeft: isSent ? '4px solid #10b981' : '4px solid #f59e0b',
+                    flexShrink: 0
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '14px' }}>{item.product.name}</span>
+                          {isSent ? (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: 800,
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              color: '#10b981',
+                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              padding: '1px 5px',
+                              borderRadius: '3px'
+                            }}>
+                              En Cocina
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: 800,
+                              background: 'rgba(245, 158, 11, 0.15)',
+                              color: '#f59e0b',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              padding: '1px 5px',
+                              borderRadius: '3px'
+                            }}>
+                              Por Enviar
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '14px' }}>{formatCOP(item.product.price * item.qty)}</span>
+                        {!isSent && (
+                          <button onClick={() => handleOpenEditItemModifiers(idx)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: '2px' }} title="Modificar sabores y toppings">
+                            <Sparkles size={16} />
+                          </button>
+                        )}
+                        {!isSent && (
+                          <button onClick={() => handleOpenEditPrice(idx)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', cursor: 'pointer', padding: '2px' }} title="Modificar precio para esta comanda">
+                            <Edit3 size={16} />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
                   {/* Sabores y Toppings seleccionados */}
                   {Array.isArray(item.modifiers) && item.modifiers.length > 0 && (
@@ -849,8 +925,9 @@ export const OrderPage = () => {
                     style={{ width: '100%', marginTop: '6px', background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '6px 10px', color: 'var(--text-primary)', fontSize: '13px' }}
                   />
                 </div>
-              ))
-            )}
+              );
+            })
+          )}
           </div>
 
           {/* Footer de Acciones Estático con Botones aún más Grandes */}

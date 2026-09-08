@@ -540,24 +540,38 @@ export const CashPage = () => {
                       </div>
                     </div>
 
-                    {/* PANEL C: Deducciones y Propinas */}
+                    {/* PANEL C: Deducciones, Terceros y Ventas Propias */}
                     <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
                       <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 800, color: 'var(--accent-warning)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <TrendingUp size={16} /> Panel C: Propinas y Reembolsos
+                        <TrendingUp size={16} /> Panel C: Discriminación y Propinas
                       </h4>
                       <div style={{ fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>Propinas Recaudadas:</span>
-                          <strong style={{ color: 'var(--accent-primary)', fontSize: '16px' }}>{formatCurrency(summaryData.totalTips)}</strong>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>Devoluciones Pagadas:</span>
-                          <strong style={{ color: 'var(--accent-danger)' }}>{formatCurrency(summaryData.cashRefunds)}</strong>
-                        </div>
+                        {parseFloat(summaryData.ownNetRevenue || 0) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#10b981', fontWeight: 700 }}>
+                            <span>Ventas Propias Netas:</span>
+                            <span>{formatCurrency(summaryData.ownNetRevenue)}</span>
+                          </div>
+                        )}
                         {parseFloat(summaryData.thirdPartyRevenue || 0) > 0 && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border-color)', paddingTop: '4px', marginTop: '4px', color: '#d97706' }}>
-                            <span style={{ fontWeight: 700 }}>Ventas de Terceros / Socios:</span>
-                            <strong style={{ fontSize: '15px' }}>{formatCurrency(summaryData.thirdPartyRevenue)}</strong>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#d97706', fontWeight: 700 }}>
+                            <span>Ventas de Terceros / Socios:</span>
+                            <span>{formatCurrency(summaryData.thirdPartyRevenue)}</span>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Propinas Recaudadas (Personal):</span>
+                          <strong style={{ color: '#8b5cf6', fontSize: '15px' }}>{formatCurrency(summaryData.totalTips)}</strong>
+                        </div>
+                        {parseFloat(summaryData.totalDeliveryFees || summaryData.delivery_fee || 0) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Domicilios / Envíos:</span>
+                            <strong>+{formatCurrency(summaryData.totalDeliveryFees || summaryData.delivery_fee)}</strong>
+                          </div>
+                        )}
+                        {parseFloat(summaryData.cashRefunds || 0) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Devoluciones Pagadas:</span>
+                            <strong style={{ color: 'var(--accent-danger)' }}>{formatCurrency(summaryData.cashRefunds)}</strong>
                           </div>
                         )}
                       </div>
