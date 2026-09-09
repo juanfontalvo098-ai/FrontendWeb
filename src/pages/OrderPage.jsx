@@ -479,8 +479,13 @@ export const OrderPage = () => {
           throw new Error('El servidor no confirmó la creación de la orden');
         }
       } else {
-        // Incluir table_id para que el backend asegure que la mesa quede marcada como ocupada
-        await api.put(`/orders/${activeId}`, { items: payloadItems, send_to_kitchen: true, table_id: parseInt(tableId, 10) });
+        // Incluir table_id y order_type para que el backend asegure la mesa y la comanda correctamente
+        await api.put(`/orders/${activeId}`, { 
+          items: payloadItems, 
+          send_to_kitchen: true, 
+          table_id: parseInt(tableId, 10),
+          order_type: 'mesa'
+        });
       }
 
       addToast('Nuevos productos enviados a cocina con éxito', 'success');

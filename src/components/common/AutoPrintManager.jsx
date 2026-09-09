@@ -8,6 +8,7 @@ import {
   printKitchenTicket, 
   printInvoiceReceipt,
   isSilentPrintingActive,
+  getCleanTableOrType,
   DEFAULT_BRIDGE_URL
 } from '../../utils/printUtils';
 
@@ -68,36 +69,58 @@ export const AutoPrintManager = () => {
                                  settings.auto_print_kitchen_tickets !== 'false';
     if (!isAutoKitchenEnabled) return;
 
-    // Obtener ítems del ticket
-    let items = ticketData.items || [];
-    if (typeof ticketData.items_json === 'string') {
+    // Obtener ítems del ticket (compatibilidad con arrays directos o JSON string)
+    let items = [];
+    if (Array.isArray(ticketData.items) && ticketData.items.length > 0) {
+      items = ticketData.items;
+    } else if (Array.isArray(ticketData.items_json) && ticketData.items_json.length > 0) {
+      items = ticketData.items_json;
+    } else if (typeof ticketData.items_json === 'string' && ticketData.items_json.trim()) {
       try {
-        items = JSON.parse(ticketData.items_json);
+        const parsed = JSON.parse(ticketData.items_json);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          items = parsed;
+        }
       } catch (e) {
         items = [];
       }
     }
 
     let orderDetails = null;
-    if ((!items || items.length === 0) && orderId) {
+    // Solo consultar la orden si falta información clave de cabecera o el table_number viene confuso
+    if (orderId && (!ticketData.waiter_name || !ticketData.table_number || ticketData.table_number.toString().toUpperCase().includes('LLEVAR'))) {
       try {
         orderDetails = await api.get(`/orders/${orderId}`);
-        if (orderDetails && orderDetails.items) {
-          items = orderDetails.items;
-        }
       } catch (e) {
-        console.warn('⚠️ [AutoPrintManager] No se pudieron cargar los ítems de la orden:', e.message);
+        console.warn('⚠️ [AutoPrintManager] No se pudieron cargar los detalles de la orden:', e.message);
       }
     }
 
-    if (!items || items.length === 0) return;
+    // NUNCA reemplazar items de comanda con todos los ítems acumulados de la orden.
+    // Solo si el ticket explícitamente no traía items y tampoco es un ticket_id de ronda
+    if (!items || items.length === 0) {
+      if (orderDetails && Array.isArray(orderDetails.items) && !ticketId) {
+        items = orderDetails.items;
+      } else {
+        console.warn('⚠️ [AutoPrintManager] Comanda sin ítems específicos de ronda, omitiendo impresión:', ticketData);
+        return;
+      }
+    }
 
     try {
       isPrintingRef.current = true;
+      const effectiveTableId = ticketData.table_id || orderDetails?.table_id;
+      let resolvedTable = ticketData.table_number || orderDetails?.table_number;
+      if (effectiveTableId && (!resolvedTable || resolvedTable.toString().toUpperCase().includes('LLEVAR'))) {
+        resolvedTable = `Mesa ${effectiveTableId}`;
+      }
+
       const orderObj = {
         id: orderId || 'NUEVA',
-        order_type: ticketData.order_type || orderDetails?.order_type || 'mesa',
-        table_number: ticketData.table_number || orderDetails?.table_number || '',
+        ticket_id: ticketId,
+        order_type: ticketData.order_type || orderDetails?.order_type || (effectiveTableId ? 'mesa' : 'takeaway'),
+        table_id: effectiveTableId,
+        table_number: resolvedTable || '',
         customer_name: ticketData.customer_name || orderDetails?.customer_name || '',
         delivery_address: ticketData.delivery_address || orderDetails?.delivery_address || '',
         delivery_phone: ticketData.delivery_phone || orderDetails?.delivery_phone || '',
@@ -106,9 +129,7 @@ export const AutoPrintManager = () => {
       };
 
       const waiterName = ticketData.waiter_name || orderDetails?.waiter_name || user?.full_name || 'Personal';
-      const tableLabel = orderObj.table_number 
-        ? (orderObj.table_number.toString().toLowerCase().startsWith('mesa') ? orderObj.table_number : `Mesa ${orderObj.table_number}`) 
-        : (orderObj.order_type === 'delivery' ? 'Domicilio' : 'Para Llevar');
+      const tableLabel = getCleanTableOrType(orderObj);
 
       const printRes = await printKitchenTicket(
         orderObj,

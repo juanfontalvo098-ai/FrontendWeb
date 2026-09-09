@@ -275,11 +275,20 @@ const printWithIframe = (htmlContent, title = 'Impresión POS') => {
  * Obtiene y normaliza el identificador de mesa o tipo de orden evitando repeticiones como 'MESA MESA'
  */
 export const getCleanTableOrType = (orderData = {}) => {
-  if (orderData.order_type === 'delivery') return 'DOMICILIO';
-  if (orderData.order_type === 'para_llevar') return 'PARA LLEVAR';
   const raw = (orderData.table_number || orderData.table_name || '').toString().trim();
+  const rawUpper = raw.toUpperCase();
+
+  // Si tiene table_id o dice "Mesa X", SIEMPRE es mesa de salón
+  if (orderData.table_id && (rawUpper === 'PARA LLEVAR' || !raw)) {
+    return `MESA ${orderData.table_id}`;
+  }
+
+  if (orderData.order_type === 'delivery' || rawUpper === 'DOMICILIO') return 'DOMICILIO';
+  if ((orderData.order_type === 'para_llevar' || rawUpper === 'PARA LLEVAR') && !orderData.table_id) return 'PARA LLEVAR';
+
   const clean = raw.replace(/^mesa\s*/i, '').trim();
-  if (clean) return `MESA ${clean}`;
+  if (clean && clean.toUpperCase() !== 'PARA LLEVAR') return `MESA ${clean}`;
+  if (orderData.table_id) return `MESA ${orderData.table_id}`;
   return orderData.id ? `ORDEN #${orderData.id}` : 'SALÓN';
 };
 
